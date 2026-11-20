@@ -314,11 +314,12 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 			}
 			e = s.acces.Environnements(projet)[nom]
 		}
-		if len(e.Serveurs) == 0 || slices.ContainsFunc(serveurs, func(id string) bool { return !slices.Contains(e.Serveurs, id) }) {
+		tous := e.tousServeurs() // its site's servers and its other ones (a database…)
+		if len(e.Serveurs) == 0 || slices.ContainsFunc(serveurs, func(id string) bool { return !slices.Contains(tous, id) }) {
 			return TacheServeurs{}, erreurEntree("Unknown site, or this server is not one of its servers")
 		}
 		// all its servers, the given one first (it holds the task's file)
-		serveurs = append(serveurs[:1:1], slices.DeleteFunc(slices.Clone(e.Serveurs), func(id string) bool { return id == serveurs[0] })...)
+		serveurs = append(serveurs[:1:1], slices.DeleteFunc(slices.Clone(tous), func(id string) bool { return id == serveurs[0] })...)
 		if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
 			hotes = []string{strings.ToLower(u.Hostname())}
 		}

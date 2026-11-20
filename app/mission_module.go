@@ -27,7 +27,7 @@ func (moduleMissions) Resume(s *Serveur) ResumeModule {
 	}
 	n := 0
 	for _, m := range l {
-		if p, ok := s.projetParNom(m.Projet); ok && m.Projet != "" && p.PiloteActif() {
+		if p, ok := s.projetParNom(m.Projet); ok && m.Projet != "" && p.PiloteActif() || m.Projet == "" && tacheEnCoursID(m.Tache) {
 			n++
 		}
 	}

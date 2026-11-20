@@ -75,7 +75,9 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 
 ### Missions
 
-- [ ] **Nouvelle mission à la main.** Accueil → *Nouvelle mission* : texte, nom du projet (proposé depuis le texte), serveur, « A besoin de moi » ou « Autonome avec l'IA », clé API ; *Plus d'options* reste replié. *Lancer* : un clic, aucune autre question, la page *Missions* s'ouvre.
+- [ ] **Nouvelle mission à la main.** Accueil → *Nouvelle mission* : tout est visible, la mission à gauche, les serveurs et clés à droite (une colonne sur téléphone). Texte, nom du projet (proposé depuis le texte), un ou plusieurs serveurs avec leur rôle (le site, ou autre rôle : base de données…), des clés API, « A besoin de moi », « Autonome avec l'IA » ou « Autonomie totale » (le mot de passe d'Athanor est demandé une fois), le plan pour les serveurs (nginx s'il le faut) ; *Améliorer avec Claude* sous chaque plan. *Lancer* : un clic, la page *Missions* s'ouvre.
+- [ ] **Sans projet.** *Nouvelle mission* → « Pas de projet Studio » : plusieurs serveurs, un lien GitHub et « installe ça et relie-les » ; le cadre suit la tâche, *Relancer* la refait.
+- [ ] **nginx.** Un plan pour les serveurs qui dit nginx : la première mise en ligne marche sans Caddy (aucun `/etc/caddy/sites/…` écrit).
 - [ ] **Depuis l'assistant.** Demandez « Fais une boutique et mets-la en ligne sur @serveur avec @clé » : le formulaire *Nouvelle mission* s'ouvre seul, rempli ; corrigez si vous voulez, puis *Lancer*. Dans la conversation, la proposition dit « Mission lancée ».
 - [ ] **Le cadre.** Projet et son état, barre des jalons, serveur et son état (préparation, mise en ligne, en ligne, échec et sa raison), clé API, choix de permission ; *Détails* replie l'historique et le lien vers le journal complet.
 - [ ] **Le serveur depuis le cadre.** *Terminal* ouvre le terminal du serveur ; *Arrêter le travail sur le serveur* coupe une préparation en cours ; *Relancer le travail sur le serveur* refait la mise en ligne.

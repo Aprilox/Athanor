@@ -45,7 +45,13 @@ type Environnement struct {
 	Plan   string   `json:"plan,omitempty"`
 	Moment string   `json:"moment,omitempty"`
 	APIs   []string `json:"apis,omitempty"`
+	// the project's other servers (a database, a worker, a cache…): set up by its tasks as the plan says, never
+	// deployed to; Serveurs are those where the site goes online
+	Autres []string `json:"autres,omitempty"`
 }
+
+// tousServeurs: the servers of e's tasks: where the site goes online, then the others.
+func (e Environnement) tousServeurs() []string { return slices.Concat(e.Serveurs, e.Autres) }
 
 var (
 	protectionsEnv  = []string{"aucune", "access", "auth_proxy"}
@@ -178,6 +184,22 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 		}
 	}
 	e.Serveurs = ids
+	autres := []string{}
+	for _, id := range e.Autres {
+		if !slices.ContainsFunc(inventaire, func(x ServeurInventaire) bool { return x.ID == id }) {
+			return e, erreurEntree(errServeurInconnu.Error())
+		}
+		if !slices.Contains(ids, id) && !slices.Contains(autres, id) {
+			autres = append(autres, id)
+		}
+	}
+	if len(autres) > 0 && len(ids) == 0 {
+		return e, erreurEntree("Choose at least one server where the site goes online.")
+	}
+	e.Autres = nil
+	if len(autres) > 0 {
+		e.Autres = autres
+	}
 	return e, nil
 }
 
@@ -632,6 +654,7 @@ func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 // DeploiementDemande: what the Deployment tab or a card of the home sends for the project's one deployment.
 type DeploiementDemande struct {
 	Serveurs []string `json:"serveurs"`
+	Autres   []string `json:"autres,omitempty"` // nil: kept as they are (the Deployment tab does not show them)
 	URL      string   `json:"url"`
 	Plan     string   `json:"plan"`
 	Moment   string   `json:"moment"`
@@ -657,6 +680,9 @@ func (s *Serveur) deploiementValide(projet string, c DeploiementDemande) (string
 	}
 	apis := slices.Compact(slices.Sorted(slices.Values(c.APIs)))
 	e.Serveurs, e.URL, e.Plan, e.Moment, e.APIs = c.Serveurs, c.URL, s.masquerSecrets(strings.TrimSpace(c.Plan)), c.Moment, apis
+	if c.Autres != nil {
+		e.Autres = c.Autres
+	}
 	e.DeployerAuJalon = e.Moment == "jalon"
 	e, err = validerEnvironnement(nom, e, inventaire)
 	if coffre := s.coffre.Liste(); err == nil && slices.ContainsFunc(apis, func(id string) bool {
@@ -722,7 +748,7 @@ func (s *Serveur) apiDeploiementProjetModifier(w http.ResponseWriter, r *http.Re
 
 // UtilisationsServeurs: server id → the "project/env" that use it, sorted (the Servers page).
 func (a *Acces) UtilisationsServeurs() map[string][]string {
-	return a.utilisations(func(e *Environnement) []string { return e.Serveurs })
+	return a.utilisations(func(e *Environnement) []string { return e.tousServeurs() })
 }
 
 func (a *Acces) utilisations(ids func(*Environnement) []string) map[string][]string {

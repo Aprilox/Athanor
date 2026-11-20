@@ -526,7 +526,7 @@ async function annoncerFins(v) {
 // version is kept and both can be swapped at will. Edits made to either version are kept too.
 const versionsDemande = new WeakMap(); // textarea → { mienne, claude, vue: "mienne" | "claude" }
 function barreAmeliorer(id, genre = "") {
-  const aide = genre === "agent" ? t("Claude rewrites these instructions: clearer, more complete, same intent. You can go back to yours.") : t("Claude rewrites your request: clearer, more complete, same intent. You can go back to yours.");
+  const aide = genre === "agent" ? t("Claude rewrites these instructions: clearer, more complete, same intent. You can go back to yours.") : genre === "serveurs" ? t("Claude rewrites your servers' plan: clearer, more complete, same intent. You can go back to yours.") : t("Claude rewrites your request: clearer, more complete, same intent. You can go back to yours.");
   return `<div class="ameliorer" data-pour="${id}">
     <button type="button" class="btn btn-petit" data-ameliorer="${id}" data-genre="${genre}" title="${h(aide)}">${t("Improve with Claude")}</button>
     <button type="button" class="btn btn-petit" data-version="${id}" hidden></button>
@@ -571,9 +571,9 @@ document.addEventListener("click", async (ev) => {
   try {
     // a sub-agent's name and description: its card in the chat, or the Team page's form
     const carte = bAm.closest("[data-chat-agent-carte]"), champ = (n, id) => (carte ? carte.querySelector(`[data-ca="${n}"]`) : $(id)) || {};
-    const r = await api("ameliorer", "POST", agent ? { texte: mienne, genre: "agent", nom: champ("nom", "#ag-nom").value || "", description: champ("description", "#ag-description").value || "" } : { texte: mienne });
+    const r = await api("ameliorer", "POST", agent ? { texte: mienne, genre: "agent", nom: champ("nom", "#ag-nom").value || "", description: champ("description", "#ag-description").value || "" } : { texte: mienne, genre: bAm.dataset.genre === "serveurs" ? "serveurs" : "" });
     versionsDemande.set(zone, { mienne, claude: r.texte, vue: "claude" });
-    zone.value = r.texte;
+    zone.value = r.texte; zone.dispatchEvent(new Event("input", { bubbles: true })); // a form that keeps what is typed (New mission) keeps it too
     toast(agent ? t("Instructions improved: check them, edit them, or go back to yours.") : t("Request improved: check it, edit it, or go back to yours."), "ok");
   } catch (e) {
     if (e.message !== t("Locked")) toast(e.message, "erreur");
@@ -2216,7 +2216,7 @@ pages.accueil = async () => {
   setTimeout(() => majHubChat(true), 0);
   return `<div class="accueil">${bandeauRaccourci()}${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
     <div class="ligne m0 accueil-actions local-seul"><button type="button" class="btn" data-nm-nouvelle>${t("New mission")}</button>
-      <span class="muet petit">${t("A project, a server and an API key in one form, launched in one click.")}</span></div>
+      <span class="muet petit">${t("A project, its servers and API keys, or servers only, in one form launched in one click.")}</span></div>
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
@@ -2240,28 +2240,6 @@ pages.accueil = async () => {
   </div>`;
 };
 const badgePermission = (mode) => `<span class="badge mis-perm${mode === "ignorer" ? " badge-danger" : ""}" title="${h(t("Permissions"))}">${mode === "ignorer" ? ic("alerte") + " " : ""}${h(titrePermission(mode))}</span>`;
-// M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
-// each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
-const GITHUB_MISSION = { "": "No GitHub for now", lier: "Use one of my repositories", creer: "Create a private repository" };
-// pre "nm" (the New mission form, its own settings in `plus`); p: {nom, dossier, github, depot, sans_pousse, atelier}
-function sectionProjet(pre, p, modes, err, ouvert, plus = "") {
-  const distant = (etat.vue || {}).distant;
-  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; }).catch(() => {}); }
-  const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(modes || {}) };
-  const modesChoisis = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ");
-  // C16: the folder's name only (its full path in the tooltip and in the field below), the mode said only when one is chosen
-  const resume = [(p.dossier || "").split(/[\\/]/).filter(Boolean).pop(), modesChoisis, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
-  return `<details class="mis-projet" id="${pre}-projet"${ouvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit" title="${h(p.dossier || "")}">${h(resume)}</span></summary>
-      <label for="${pre}-dossier" class="petit"><b>${t("Folder")}</b></label>
-      <div class="ligne m0"><input type="text" id="${pre}-dossier" class="croit" value="${h(p.dossier || "")}"${distant ? " readonly" : ""} aria-describedby="${pre}-dossier-aide${err ? ` ${pre}-dossier-err` : ""}"${err ? ' aria-invalid="true"' : ""}>
-        ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="${pre}-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
-      <p class="muet petit m0" id="${pre}-dossier-aide">${t(distant ? "The folder is chosen on the PC." : "An empty folder, or a new one in an existing folder. By default, next to your other projects.")}</p>
-      ${err ? `<p class="attention petit m0" id="${pre}-dossier-err" role="alert">${h(err)}</p>` : ""}
-      <div id="${pre}-mode">${blocMode(md, true)}</div>
-      <fieldset class="mis-github"><legend>${t("GitHub repository")}</legend>
-        ${choixGitHub(pre, nomDepot(p.nom), p)}
-        <p class="muet petit m0">${t("The repository is linked right after the project is created, with this computer's GitHub connection.")}</p></fieldset>${plus}</details>`;
-}
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerHubChat(); } });
 
 // M195: the home conversation (hub_chat.go), the project chat with the hub's scope. Its powers are the
@@ -2309,12 +2287,13 @@ function champsEquipeHub(c, projets) {
       <label class="interrupteur m0"><input type="checkbox" data-cact="windows" ${c.windows ? "checked" : ""}><span>${t("Windows program: runs on Windows, outside the cage, with your rights")}</span></label>`,
   };
 }
-// 3.1: a `projet` proposal is a mission: the New mission form opens filled with it (bulleMission), never a card to fill
+// 3.1: a `projet` proposal (and a `serveur` one, a mission without a project) is a mission: the New mission form opens
+// filled with it (bulleMission), never a card to fill
 function bulleMission(c, i) {
   const m = c.mission || {}, lancee = c.etat === "lancee";
   return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="projet">
     <div class="muet petit">${t(c.etat ? (lancee ? "Mission launched" : "Mission refused") : "Mission prepared: nothing runs before you launch it")}</div>
-    <div><b>${h(m.projet || c.projet || "")}</b></div>${m.texte ? `<div class="petit">${mdChat(m.texte.length > 300 ? m.texte.slice(0, 300) + "…" : m.texte)}</div>` : ""}
+    <div><b>${h(m.projet || c.projet || (c.type === "serveur" ? t("None: servers only") : ""))}</b></div>${m.texte ? `<div class="petit">${mdChat(m.texte.length > 300 ? m.texte.slice(0, 300) + "…" : m.texte)}</div>` : ""}
     ${c.etat ? (lancee ? `<p class="petit m0">${c.resultat && c.resultat !== "Mission launched: follow it in Missions." ? h(t(c.resultat, (c.args || []).map((x) => t(x)))) : `<a href="#missions">${t("Follow it in Missions")}</a>`}</p>` : "") // a project card of 3.0.0 says what it did
       : `<div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-nm-proposee="${i}">${t("Open the mission")}</button>
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`}</div></div>`;
@@ -2323,7 +2302,7 @@ const ouvrirMissionProposee = (i) => { const c = ((etat.hubChat || {}).actions |
 document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-nm-proposee]"); if (b) ouvrirMissionProposee(b.dataset.nmProposee); });
 function carteActionHub(c, i) {
   const v = (x) => h(String(x || "")), ty = c.type;
-  if (ty === "projet") return bulleMission(c, i);
+  if (ty === "projet" || ty === "serveur" && (c.mission || c.resultat === "Mission launched: follow it in Missions.")) return bulleMission(c, i);
   const projets = (etat.mentionsSugg || []).filter((m) => m.type === "projet" && !m.detail).map((m) => m.nom);
   if (c.projet && !projets.includes(c.projet)) projets.unshift(c.projet);
   const choixProjet = `<label class="champ"><span>${t("Project")}</span><select data-cact="projet">${projets.map((n) => `<option ${n === c.projet ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
@@ -2438,7 +2417,7 @@ async function majHubChat(force) {
   if (!force && sig === etat.hubChatSig) return;
   etat.hubChatSig = sig;
   // a mission the assistant just prepared opens in the New mission form, once (a thread read again opens nothing)
-  const props = Object.entries(d.actions || {}).filter(([, c]) => c.type === "projet" && !c.etat && c.mission).map(([i, c]) => i + ":" + c.empreinte);
+  const props = Object.entries(d.actions || {}).filter(([, c]) => (c.type === "projet" || c.type === "serveur") && !c.etat && c.mission).map(([i, c]) => i + ":" + c.empreinte);
   const neuve = etat.missionsVues ? props.find((x) => !etat.missionsVues.has(x)) : null;
   etat.missionsVues = new Set([...(etat.missionsVues || []), ...props]);
   if (neuve && !d.en_cours) return ouvrirMissionProposee(neuve.split(":")[0]);
@@ -2944,9 +2923,9 @@ const lignesReglagesProjet = (l = etat.rp.reglages) => l.map((r) => `<div class=
 async function rendreReglagesProjet() {
   const [r, mod, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), api("modeles").catch(() => ({})), rendreMode()]);
   etat.rp = { reglages: r.reglages || [], modeles: mod.modeles || [] };
-  return `<details class="bloc plus-options" id="rp"${etat.rpOuvert ? " open" : ""}><summary>${t("This project's settings")}</summary>
+  return `<section class="bloc" id="rp" aria-labelledby="rp-titre"><h2 id="rp-titre">${t("This project's settings")}</h2>
     <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
-    ${mode}<div id="rp-liste">${lignesReglagesProjet()}</div></details>`;
+    ${mode}<div id="rp-liste">${lignesReglagesProjet()}</div></section>`;
 }
 async function changerReglageProjet(sel) {
   const cle = sel.id.slice(3), valeur = sel.value, z = $("#rp-liste");
@@ -2963,15 +2942,30 @@ pages.projet = async () => {
   const p = g.projet, dis = p.actif ? "disabled" : "";
   const decoches = Object.entries(g.decoches || {});
   setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: the last state known first, then updated
-  return `<div class="gestion">
-  ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
+  return `<div class="gestion gestion-colonnes">
+  ${p.actif ? `<div class="bloc gestion-large"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
+  <div class="gestion-col">
   ${await rendreReglagesProjet()}
+  <div class="bloc" id="gh-bloc">${blocGitHubInitial()}</div>
+  </div>
+  <div class="gestion-col">
   <div class="bloc"><h2>${t("Name")}</h2>
       <div class="ligne"><input type="text" id="gp-nom" value="${h(p.nom)}"><button class="btn" data-gestion="renommer" ${dis}>${t("Rename")}</button></div>
       <p class="muet petit">${t("Only the name shown in Athanor: the folder keeps its name.")}</p>
     </div>
-  <div class="bloc" id="gh-bloc">${blocGitHubInitial()}</div>
-  <div class="grille grille-2">
+    <div class="bloc"><h2>${t("Folder")}</h2>
+    <p><code>${h(p.dossier)}</code>${g.vide ? ` <span class="muet petit">(${t("empty")})</span>` : ""}</p>
+    <label class="champ"><span>${t("Move or rename the folder, with everything in it (same drive)")}</span>
+      <div class="ligne"><input type="text" id="gp-deplacer" value="${h(p.dossier)}"><button class="btn" data-gestion="deplacer" ${dis}>${t("Move")}</button></div></label>
+    <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
+      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" type="button" data-parcourir="gp-dossier">${t("Browse…")}</button><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
+    </div>
+    <div class="bloc"><h2>${t("Milestones")}</h2>
+      <p class="muet petit">${t("Athanor compares the ticked milestones with what the folder contains: in an empty folder nothing is done, and a milestone whose files are missing is unticked. When the files come back, it is ticked again by itself. Claude checks more thoroughly at the next start.")}</p>
+      ${decoches.length ? `<ul class="petit">${decoches.map(([id, r]) => `<li><b>${h(id)}</b> <span class="muet">${h(t(r.startsWith("missing: ") ? "missing: {0}" : r, [r.slice(9)]))}</span></li>`).join("")}</ul>` : ""}
+      ${g.reverifier ? `<p class="petit ok">${t("Claude checks the milestones at the next start.")}</p>` : ""}
+      <div class="ligne"><button class="btn btn-petit" data-gestion="verifier" ${dis}>${t("Check now")}</button><button class="btn btn-petit" data-gestion="verifier-claude" ${dis}>${t("Have Claude check them at the next start")}</button></div>
+    </div>
     <div class="bloc"><h2>${t("Archive")}</h2>
       <p class="muet petit">${t("An archived project leaves the project list and is never restarted. Bring it back at any time from “Archived projects”, at the bottom of the project list.")}</p>
       <button class="btn" data-gestion="archiver" ${dis}>${t("Archive the project")}</button>
@@ -2980,23 +2974,7 @@ pages.projet = async () => {
       <p class="muet petit">${t("The project leaves Studio, with its deployment, its follow-up and its own settings.")}</p>
       <button class="btn btn-danger" data-gestion="supprimer" data-dossier="${h(p.dossier)}" ${dis}>${t("Delete the project")}</button>
     </div>
-  </div>
-  <details class="bloc plus-options"${decoches.length ? " open" : ""}><summary>${t("More options")}</summary>
-  <div class="grille grille-2">
-    <div class="bloc"><h2>${t("Milestones")}</h2>
-      <p class="muet petit">${t("Athanor compares the ticked milestones with what the folder contains: in an empty folder nothing is done, and a milestone whose files are missing is unticked. When the files come back, it is ticked again by itself. Claude checks more thoroughly at the next start.")}</p>
-      ${decoches.length ? `<ul class="petit">${decoches.map(([id, r]) => `<li><b>${h(id)}</b> <span class="muet">${h(t(r.startsWith("missing: ") ? "missing: {0}" : r, [r.slice(9)]))}</span></li>`).join("")}</ul>` : ""}
-      ${g.reverifier ? `<p class="petit ok">${t("Claude checks the milestones at the next start.")}</p>` : ""}
-      <div class="ligne"><button class="btn btn-petit" data-gestion="verifier" ${dis}>${t("Check now")}</button><button class="btn btn-petit" data-gestion="verifier-claude" ${dis}>${t("Have Claude check them at the next start")}</button></div>
-    </div>
-    <div class="bloc"><h2>${t("Folder")}</h2>
-    <p><code>${h(p.dossier)}</code>${g.vide ? ` <span class="muet petit">(${t("empty")})</span>` : ""}</p>
-    <label class="champ"><span>${t("Move or rename the folder, with everything in it (same drive)")}</span>
-      <div class="ligne"><input type="text" id="gp-deplacer" value="${h(p.dossier)}"><button class="btn" data-gestion="deplacer" ${dis}>${t("Move")}</button></div></label>
-    <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
-      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" type="button" data-parcourir="gp-dossier">${t("Browse…")}</button><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
-  </div>
-  </div></details></div>`;
+  </div></div>`;
 };
 
 pages.archives = async () => {
@@ -3072,7 +3050,7 @@ function choixGitHub(pre, nomPropose, v) {
     ${caseAuto(`id="${pre}-gh-auto"`, !(v && v.sans_pousse))}
     ${caseAtelier(`id="${pre}-gh-atelier"`, !!(v && v.atelier))}
     ${(etat.ghConnexion || {}).connecte ? `<p class="muet petit">${etat.ghConnexion.acces_garde ? t("This computer is connected to GitHub as {0}: one of your repositories is linked at once, and a new one is created at once too (the access is kept).", [h(etat.ghConnexion.login)]) : t("This computer is connected to GitHub as {0}: one of your repositories is linked at once; creating a new one opens a sign-in.", [h(etat.ghConnexion.login)])}</p>`
-      : pre !== "gh" ? `<p class="attention petit" data-avis-connexion>${t("To link a project, connect this computer to GitHub first, once (Settings › Options › GitHub).")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>` : ""}`;
+      : pre !== "gh" && !(pre === "nm" && !mode) ? `<p class="attention petit" data-avis-connexion>${t("To link a project, connect this computer to GitHub first, once (Settings › Options › GitHub).")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>` : ""}`;
 }
 // the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
 const caseAuto = (attribut, coche) => `<label class="interrupteur"><input type="checkbox" ${attribut} ${coche ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>`;
@@ -4839,7 +4817,6 @@ function pcsOuvert() {
 }
 document.addEventListener("toggle", (ev) => {
   if (ev.target && ev.target.id === "conso") etat.ouverts[ev.target.open ? "add" : "delete"]("conso");
-  if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
   if (ev.target && ev.target.id === "np-plus") etat.npPlus = ev.target.open; // S3 (M317): open across the GitHub sign-in's refresh
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
@@ -6134,42 +6111,57 @@ document.addEventListener("click", (ev) => {
 // --- Missions (3.1, mission_nouvelle.go): a mission links a Studio project, at most one server and one API key.
 // #missions: one frame per mission, its project and server read now, managed in place; #nouvelle-mission: the one
 // form that launches a mission (by hand, or filled by the home's assistant) or changes one
-const STATUTS_MISSION = { en_cours: ["ok", "In progress"], arret_jalon: ["", "Stops after this milestone"], pause: ["attention", "Paused"], arretee: ["", "Stopped"], terminee: ["ok", "Finished"], perdue: ["attention", "Its project no longer exists"] };
+const STATUTS_MISSION = { en_cours: ["ok", "In progress"], arret_jalon: ["", "Stops after this milestone"], pause: ["attention", "Paused"], arretee: ["", "Stopped"], terminee: ["ok", "Finished"],
+  perdue: ["attention", "Its project no longer exists"], attente: ["attention", "Waiting for your decision"], echec: ["echec", "Failed"] };
 const ETATS_SRV_MISSION = { aucun: ["muet", "Not used"], attente: ["", "Ready, waits for the project's work"], prepare: ["ok", "Being prepared"], deploie: ["ok", "Going online"], en_ligne: ["ok", "Online"], echec: ["echec", "Failed"], a_preparer: ["attention", "First deployment to make"], arrete: ["", "Stopped"] };
+// the three choices of a mission for its servers (mission_nouvelle.go modesMission): label and what it means
+const MODES_MISSION = [["manuel", "Needs me", "Claude reads the server freely and asks your accord before each change."],
+  ["auto", "Autonomous with the AI", "Claude works on the server without waiting for you; it still asks before a dangerous command (deleting, stopping, firewall…)."],
+  ["ignorer", "Full autonomy", "No human action needed: Claude never asks you anything on the server, dangerous commands and putting it online included. For a server you can rebuild."]];
+const nomModeMission = (m) => t((MODES_MISSION.find(([x]) => x === m) || MODES_MISSION[0])[1]);
 const EVENEMENTS_MISSION = { lancee: "Launched", modifiee: "Changed", pause: "Paused", arretee: "Stopped", reprise: "Resumed", serveur_arrete: "Server work stopped", serveur_relance: "Server work launched again" };
 const dateMission = (x) => new Date(x).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" });
+// a mission's servers: each with its role and its terminal, one click away
+const machinesMission = (m, perdue) => (m.machines || []).map((x) => `<span class="mis-machine"><b>${h(x.nom)}</b> ${m.projet ? `<span class="muet petit">${t(x.site ? "the site" : "another role")}</span>` : ""}${perdue ? "" : ` <a class="btn btn-petit local-seul" href="#terminal/${encodeURIComponent(x.id)}" aria-label="${h(t("Terminal") + " " + x.nom)}">${t("Terminal")}</a>`}</span>`).join("");
 function cadreMission(m) {
   const id = h(m.id);
   if (!m.suivie) return `<section class="bloc mis-cadre mis-ancienne" data-mission="${id}"><div class="ligne m0 tuile-tete"><a class="croit" href="#missions/${encodeURIComponent(m.id)}"><b>${h((m.carte || {}).titre || (m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase))}</b></a>${badgeMission(m)}</div>
     <div class="ligne m0"><span class="muet petit">${h(dateMission(m.cree))}</span><span class="espace"></span><button type="button" class="btn btn-petit" data-mis-suppr="${id}">${t("Delete")}</button></div></section>`;
-  const [cl, lib] = STATUTS_MISSION[m.statut] || ["", m.statut], a = m.avance || {}, pct = a.total ? Math.round(100 * a.fait / a.total) : 0;
-  const actif = ["en_cours", "arret_jalon"].includes(m.statut), perdue = m.statut === "perdue";
+  const taches = !m.projet, [cl, lib] = STATUTS_MISSION[m.statut] || ["", m.statut], a = m.avance || {}, pct = a.total ? Math.round(100 * a.fait / a.total) : 0;
+  const actif = ["en_cours", "arret_jalon", "attente"].includes(m.statut), perdue = m.statut === "perdue";
   const [scl, slib] = ETATS_SRV_MISSION[m.serveur_etat] || ["", m.serveur_etat || ""];
   const srvErr = m.serveur_message ? texteMessage(m.serveur_message) : m.serveur_erreur ? t(m.serveur_erreur) : "";
-  const histo = [...(m.historique || [])].reverse().slice(0, 30);
+  const histo = [...(m.historique || [])].reverse().slice(0, 30), avecServeurs = (m.machines || []).length > 0;
+  const actions = taches ? (actif ? `<button type="button" class="btn btn-petit" data-mis-act="arreter">${t("Stop")}</button>` : `<button type="button" class="btn btn-petit" data-mis-act="reprendre">${t("Launch again")}</button>`)
+    : perdue ? "" : actif ? `<button type="button" class="btn btn-petit" data-mis-act="pause">${t("Pause")}</button><button type="button" class="btn btn-petit" data-mis-act="arreter">${t("Stop")}</button>`
+    : `<button type="button" class="btn btn-petit" data-mis-act="reprendre">${t("Resume")}</button>`;
   return `<section class="bloc mis-cadre" data-mission="${id}" aria-labelledby="mis-t-${id}">
     <div class="ligne m0 tuile-tete"><h3 class="m0 croit" id="mis-t-${id}">${h(m.phrase.split("\n")[0].slice(0, 120))}</h3><span class="badge ${cl}">${t(lib)}</span></div>
-    ${perdue ? "" : `<div class="mis-progres" role="progressbar" aria-label="${h(t("Progress"))}" aria-valuemin="0" aria-valuemax="${a.total || 0}" aria-valuenow="${a.fait || 0}"><span style="width:${pct}%"></span></div>
+    ${taches || perdue ? "" : `<div class="mis-progres" role="progressbar" aria-label="${h(t("Progress"))}" aria-valuemin="0" aria-valuemax="${a.total || 0}" aria-valuenow="${a.fait || 0}"><span style="width:${pct}%"></span></div>
     <p class="petit m0">${a.total ? h(t("{0}: {1}", [t("Milestones"), a.fait + "/" + a.total])) : t("The plan is being written")}${a.titre ? " · " + h(a.titre) : ""}</p>
     ${a.activite && actif ? `<p class="muet petit m0">${h(a.activite)}</p>` : ""}`}
+    ${m.statut === "attente" ? `<p class="petit m0"><a href="#approbations">${t("Accept or refuse its plan on the Approvals page")}</a></p>` : ""}
+    ${taches && m.bilan ? `<p class="petit m0 mis-bilan">${h(m.bilan.length > 280 ? m.bilan.slice(0, 280) + "…" : m.bilan)}</p>` : ""}
     <dl class="mis-liens">
-      <div><dt>${t("Project")}</dt><dd>${perdue ? h(m.projet) : `<a href="#suivi" data-mis-projet="${h(m.projet)}">${h(m.projet)}</a>`}</dd></div>
-      <div><dt>${t("Server")}</dt><dd>${m.serveur_nom ? `<b>${h(m.serveur_nom)}</b> · ` : ""}<span class="${scl}">${t(slib)}</span>${m.url && /^https?:\/\//.test(m.url) ? ` · <a href="${h(m.url)}" target="_blank" rel="noopener">${h(m.url)}</a>` : ""}
+      <div><dt>${t("Project")}</dt><dd>${taches ? `<span class="muet">${t("None: servers only")}</span>` : perdue ? h(m.projet) : `<a href="#suivi" data-mis-projet="${h(m.projet)}">${h(m.projet)}</a>`}</dd></div>
+      <div><dt>${t("Servers")}</dt><dd>${avecServeurs ? `<div class="mis-machines">${machinesMission(m, perdue)}</div>` : ""}
+        ${taches ? "" : `<span class="${scl}">${t(slib)}</span>${m.url && /^https?:\/\//.test(m.url) ? ` · <a href="${h(m.url)}" target="_blank" rel="noopener">${h(m.url)}</a>` : ""}`}
         ${srvErr ? `<p class="petit attention m0">${h(srvErr)}</p>` : ""}
-        ${m.serveur && !perdue ? `<div class="ligne m0 mt-1 local-seul"><a class="btn btn-petit" href="#terminal/${encodeURIComponent(m.serveur)}">${t("Terminal")}</a>
+        ${!taches && avecServeurs && !perdue ? `<div class="ligne m0 mt-1 local-seul">
           <button type="button" class="btn btn-petit" data-mis-act="serveur-arreter"${m.serveur_tache ? "" : " disabled"}>${t("Stop the server's work")}</button>
           <button type="button" class="btn btn-petit" data-mis-act="serveur-relancer">${t("Launch the server's work again")}</button></div>` : ""}</dd></div>
-      <div><dt>${t("API key")}</dt><dd>${m.api_nom ? h(m.api_nom) : `<span class="muet">${t("No API key")}</span>`}</dd></div>
-      ${m.serveur ? `<div><dt>${t("On the server")}</dt><dd>${t(m.autonome ? "Autonomous with the AI" : "Needs me")}</dd></div>` : ""}
+      <div><dt>${t("API keys")}</dt><dd>${(m.api_noms || []).length ? h(m.api_noms.join(", ")) : `<span class="muet">${t("No API key")}</span>`}</dd></div>
+      ${avecServeurs || (m.api_noms || []).length ? `<div><dt>${t("On the servers")}</dt><dd>${h(nomModeMission(m.mode))}</dd></div>` : ""}
     </dl>
-    <div class="ligne m0 local-seul">${perdue ? "" : actif ? `<button type="button" class="btn btn-petit" data-mis-act="pause">${t("Pause")}</button><button type="button" class="btn btn-petit" data-mis-act="arreter">${t("Stop")}</button>`
-      : `<button type="button" class="btn btn-petit" data-mis-act="reprendre">${t("Resume")}</button>`}
+    <div class="ligne m0 local-seul">${actions}
       ${perdue ? "" : `<button type="button" class="btn btn-petit" data-mis-modifier="${id}">${t("Edit")}</button>`}<span class="espace"></span>
       <button type="button" class="btn btn-petit" data-mis-suppr="${id}">${t("Delete")}</button></div>
     <details class="plus-options mis-details"><summary>${t("Details")}</summary>
       <ol class="mis-journal">${histo.map((e) => `<li><time datetime="${h(e.t)}">${h(dateMission(e.t))}</time><span>${h(t(EVENEMENTS_MISSION[e.etat] || e.etat))}</span></li>`).join("")}</ol>
       <p class="petit m0">${h(m.phrase)}</p>
-      ${perdue ? "" : `<p class="petit m0"><a href="#journal" data-mis-projet="${h(m.projet)}" data-page="journal">${t("Full log of the project")}</a></p>`}</details>
+      ${m.plan_serveurs ? `<p class="petit m0"><b>${t("Plan for the servers")}</b><br>${h(m.plan_serveurs)}</p>` : ""}
+      ${taches && m.bilan && m.bilan.length > 280 ? `<p class="petit m0">${h(m.bilan)}</p>` : ""}
+      ${taches || perdue ? "" : `<p class="petit m0"><a href="#journal" data-mis-projet="${h(m.projet)}" data-page="journal">${t("Full log of the project")}</a></p>`}</details>
   </section>`;
 }
 pages.missions = async () => {
@@ -6177,7 +6169,7 @@ pages.missions = async () => {
   etat.missionsSig = JSON.stringify(l);
   return `<div class="missions">
     <div class="ligne cof-tete"><h2 class="m0 croit">${t("Missions")} <span class="muet">${l.length}</span></h2><button type="button" class="btn btn-primaire local-seul" data-nm-nouvelle>${t("New mission")}</button></div>
-    <p class="muet m0">${t("A mission links a Studio project, a server and an API key. Follow and manage each one in its frame.")}</p>
+    <p class="muet m0">${t("A mission links a Studio project, servers and API keys, or servers only. Follow and manage each one in its frame.")}</p>
     ${l.length ? `<div class="mis-cadres">${l.map(cadreMission).join("")}</div>` : `<div class="vide">${t("No mission yet: launch one with New mission, or ask the assistant of the home page.")}</div>`}
   </div>`;
 };
@@ -6194,7 +6186,8 @@ document.addEventListener("click", async (ev) => {
   if (b.dataset.misModifier) {
     const d = await api("missions/" + encodeURIComponent(id)).catch((e) => { toast(e.message, "erreur"); return null; });
     const m = d && d.mission; if (!m) return;
-    return nouvelleMission({ id: m.id, texte: m.phrase, projet: m.projet, serveur: m.serveur || "", api: m.api || "", autonome: !!m.autonome, url: m.url || "" });
+    return nouvelleMission({ id: m.id, texte: m.phrase, plan: m.plan || "", projet: m.projet || "", sans_projet: !m.projet, serveurs: m.serveurs || [], autres: m.autres || [], apis: m.apis || [],
+      plan_deploiement: m.plan_serveurs || "", mode: m.mode || "manuel", modeAvant: m.mode || "manuel", url: m.url || "" });
   }
   b.disabled = true;
   const r = await action(api(`missions/${encodeURIComponent(id)}/${b.dataset.misAct}`, "POST"));
@@ -6202,13 +6195,19 @@ document.addEventListener("click", async (ev) => {
   if (r) rendrePage();
 });
 
-// the New mission form: what to do, the project (a new name, or one of yours), the server and its permission
-// choice, the API key; the plan, the way online and the project's settings folded. nm.f: the form as typed, kept
-// across a refresh until Launch, Save or Cancel; index: the home conversation's proposal it comes from
+// the New mission form, everything in view, no fold: the mission on the left (what to do, its project or none, its
+// plan, the new project's settings), its servers and keys on the right (each server's role, the permission choice,
+// the servers' plan, the address); one column on a phone. nm.f: the form as typed, kept across a refresh until
+// Launch, Save or Cancel; index: the home conversation's proposal it comes from
 const nm = { f: null };
-const MISSION_VIDE = () => ({ texte: "", plan: "", projet: "", dossier: "", serveur: "", api: "", url: "", plan_deploiement: "", moment: "livraison", autonome: false, modes: null, github: "", depot: "", sans_pousse: false, atelier: false, reglages: {} });
+const MISSION_VIDE = () => ({ texte: "", plan: "", projet: "", dossier: "", sans_projet: false, serveurs: [], autres: [], apis: [], url: "", plan_deploiement: "", moment: "livraison", mode: "manuel",
+  modes: null, github: "", depot: "", sans_pousse: false, atelier: false, reglages: {} });
 function nouvelleMission(pre) {
   nm.f = { ...MISSION_VIDE(), ...(pre || {}) };
+  for (const k of ["serveurs", "autres", "apis"]) nm.f[k] = [...(nm.f[k] || [])];
+  if (nm.f.serveur && !nm.f.serveurs.includes(nm.f.serveur)) nm.f.serveurs.unshift(nm.f.serveur); // a proposal of the first 3.1 builds
+  if (nm.f.api && !nm.f.apis.includes(nm.f.api)) nm.f.apis.unshift(nm.f.api);
+  delete nm.f.serveur; delete nm.f.api;
   nm.f.reglages = { ...(nm.f.reglages || {}) };
   if (etat.page === "nouvelle-mission") rendrePage(); else location.hash = "#nouvelle-mission";
 }
@@ -6216,75 +6215,93 @@ function nouvelleMission(pre) {
 const nomMissionPropose = (texte) => String(texte || "").split("\n")[0].replace(/[^\p{L}\p{N} -]+/gu, " ").trim().split(/\s+/).slice(0, 4).join(" ").slice(0, 40);
 pages["nouvelle-mission"] = async () => {
   if (!nm.f) nm.f = MISSION_VIDE();
-  const f = nm.f, edition = !!f.id, distant = !!(etat.vue || {}).distant;
+  lireFormMission(); // drawn again (a choice, an answer): what is typed now, Claude's rewrite included
+  const f = nm.f, edition = !!f.id, distant = !!(etat.vue || {}).distant, sans = !!f.sans_projet;
   const [sv, cof, mis, mod, md] = await Promise.all([api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api("missions").catch(() => ({})),
     etat.cpModeles ? { modeles: etat.cpModeles } : api("modeles").catch(() => ({})), etat.modeDefaut && etat.modeDefaut.cadrage_global !== undefined ? etat.modeDefaut : api("mode?defaut=1").catch(() => ({})), lireCategories(), connexionConnueGH()]);
   etat.cpModeles = mod.modeles || []; etat.modeDefaut = md;
   const serveurs = sv.serveurs || [], cles = serveurs.map((x) => x.cle).filter(Boolean);
   const apis = (cof.entrees || []).filter((e) => !cles.includes(e.id)).sort((a, b) => a.nom.localeCompare(b.nom));
   const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = projets.find((n) => n.toLowerCase() === f.projet.trim().toLowerCase());
-  const cats = etat.categoriesAPI || [], groupe = (c) => apis.filter((e) => (e.categorie || "") === c).map((e) => `<option value="${h(e.id)}"${e.id === f.api ? " selected" : ""}>${h(e.nom)}</option>`).join("");
-  const optionsAPI = groupe("") + cats.map((c) => { const o = groupe(c.id); return o ? `<optgroup label="${h(c.nom)}">${o}</optgroup>` : ""; }).join("");
-  const srvInconnu = f.serveur && !serveurs.some((x) => x.id === f.serveur), apiInconnue = f.api && !apis.some((x) => x.id === f.api);
+  const pris = [...f.serveurs, ...f.autres], inconnus = [...pris.filter((x) => !serveurs.some((s) => s.id === x)), ...f.apis.filter((x) => !apis.some((a) => a.id === x))];
+  const avecServeurs = pris.some((x) => serveurs.some((s) => s.id === x)), avecCles = f.apis.length > 0, site = f.serveurs.some((x) => serveurs.some((s) => s.id === x));
   etat.rp = { modeles: etat.cpModeles, reglages: (mis.reglages || []).filter((r) => r.cle !== "permission").map((r) => ({ ...r, propre: f.reglages[r.cle] || "" })) };
-  const v = (x) => h(String(x || ""));
+  const v = (x) => h(String(x || "")), mdv = { cadrage_global: 25, duree_max_global: 0, ...md, parallele_max: 3, ...(f.modes || {}) };
+  const ligneServeur = (x) => { const coche = pris.includes(x.id), autre = f.autres.includes(x.id);
+    return `<div class="nm-choix"><label class="case m0"><input type="checkbox" name="nm-srv" id="nm-srv-${h(x.id)}" value="${h(x.id)}"${coche ? " checked" : ""}> <span><b>${h(x.nom)}</b> <span class="muet petit">${h(x.hote || "")}</span></span></label>
+      ${coche && !sans ? `<select id="nm-role-${h(x.id)}" aria-label="${h(t("Role of {0}", [x.nom]))}"><option value="site"${autre ? "" : " selected"}>${t("The site goes online here")}</option><option value="autre"${autre ? " selected" : ""}>${t("Another role (database, worker…)")}</option></select>` : ""}</div>`; };
+  const cats = etat.categoriesAPI || [], ligneCle = (e) => `<label class="case m0 nm-choix"><input type="checkbox" name="nm-api" id="nm-api-${h(e.id)}" value="${h(e.id)}"${f.apis.includes(e.id) ? " checked" : ""}> <span>${h(e.nom)}</span></label>`;
+  const groupeCles = (c, nom) => { const l = apis.filter((e) => (e.categorie || "") === c); return l.length ? `${nom ? `<p class="petit muet m0 nm-cat">${h(nom)}</p>` : ""}${l.map(ligneCle).join("")}` : ""; };
+  const projetNeuf = !sans && !edition && !existant;
   return `<div class="missions nm">
     <div class="ligne m0"><a class="btn btn-petit" href="#missions" data-nm-annuler>${ic("gauche")} ${t("Missions")}</a></div>
     <form class="bloc" id="nm-form" novalidate>
       <h2 class="m0">${t(edition ? "Edit the mission" : "New mission")}</h2>
       ${f.index !== undefined ? `<p class="muet petit m0" role="note">${t("Filled by the assistant from your request: check it, change what you want, then launch it.")}</p>` : ""}
-      <label class="champ"><span>${t("What must the mission do?")}</span><textarea id="nm-texte" rows="5" maxlength="20000" required>${v(f.texte)}</textarea>
-        ${edition ? `<span class="muet petit">${t("A changed text is added to the project as a new request.")}</span>` : ""}</label>
-      <div class="reglage"><label for="nm-nom" class="nom-reglage">${t("Project")}</label><div>
-        <input type="text" id="nm-nom" list="nm-projets" value="${v(f.projet)}" maxlength="60" autocomplete="off" spellcheck="false"${edition ? " readonly" : ""} aria-describedby="nm-projet-aide">
-        <datalist id="nm-projets">${projets.map((n) => `<option value="${h(n)}">`).join("")}</datalist>
-        <p class="muet petit m0" id="nm-projet-aide">${edition ? t("The mission's project.") : existant ? t("One of your projects: the mission becomes its next request.") : t("A new project in Studio. Type the name of one of yours to add the mission to it.")}</p></div></div>
-      <div class="reglage"><label for="nm-serveur" class="nom-reglage">${t("Server")}</label><div>
-        <select id="nm-serveur"><option value="">${t("None: the project stays on this computer")}</option>${srvInconnu ? `<option value="${v(f.serveur)}" selected>${v(f.serveur)}</option>` : ""}${serveurs.map((x) => `<option value="${h(x.id)}"${x.id === f.serveur ? " selected" : ""}>${h(x.nom)}</option>`).join("")}</select>
-        ${srvInconnu ? `<p class="attention petit m0" role="alert">${t("Unknown server: choose one of yours, or add it on the Servers page.")}</p>` : ""}
-        <fieldset class="nm-mode m0" id="nm-mode-srv"${f.serveur ? "" : " hidden"}><legend class="petit">${t("On the server")}</legend>
-          <label class="radio"><input type="radio" name="nm-autonome" value=""${f.autonome ? "" : " checked"}> <span><b>${t("Needs me")}</b><br><span class="muet petit">${t("Claude reads the server freely and asks your accord before each change.")}</span></span></label>
-          <label class="radio"><input type="radio" name="nm-autonome" value="1"${f.autonome ? " checked" : ""}> <span><b>${t("Autonomous with the AI")}</b><br><span class="muet petit">${t("Claude works on the server without waiting for you; it still asks before a dangerous command (deleting, stopping, firewall…).")}</span></span></label></fieldset></div></div>
-      <div class="reglage"><label for="nm-api" class="nom-reglage">${t("API key")}</label><div>
-        <select id="nm-api"><option value="">${t("No API key")}</option>${apiInconnue ? `<option value="${v(f.api)}" selected>${v(f.api)}</option>` : ""}${optionsAPI}</select>
-        ${apiInconnue ? `<p class="attention petit m0" role="alert">${t("Unknown API key: choose one of the vault, or add it there.")}</p>` : `<p class="muet petit m0">${t("Its value is never shown to Claude: Athanor's tools use it for the project.")}</p>`}</div></div>
-      <details class="plus-options" id="nm-plus"${f.plusOuvert ? " open" : ""}><summary>${t("More options")}</summary>
-        <label class="champ"><span>${t("Plan (optional)")}</span><textarea id="nm-plan" rows="4" maxlength="8000" placeholder="${h(t("The steps you already have in mind. Without them, the project's architect writes the plan."))}">${v(f.plan)}</textarea></label>
-        <fieldset class="m0" id="nm-en-ligne"${f.serveur ? "" : " hidden"}><legend>${t("Putting it online")}</legend>
-          <div class="reglage"><label for="nm-url" class="nom-reglage">${t("Address")}</label><div><input type="text" inputmode="url" id="nm-url" value="${v(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false">
-            <p class="muet petit m0">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div></div>
-          <div class="reglage"><label for="nm-plan-dep" class="nom-reglage">${t("How")}</label><div><textarea id="nm-plan-dep" rows="3" maxlength="4000">${v(f.plan_deploiement)}</textarea>
-            <p class="muet petit m0">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")}</p></div></div>
-          <div class="reglage" role="radiogroup" aria-labelledby="nm-moment-t"><span class="nom-reglage" id="nm-moment-t">${t("When to deploy")}</span><div>
-            ${[["livraison", "At delivery"], ["jalon", "After each milestone"]].map(([x, l]) => `<label class="radio"><input type="radio" name="nm-moment" value="${x}"${(f.moment || "livraison") === x ? " checked" : ""}> ${t(l)}</label>`).join("")}</div></div></fieldset>
-        ${edition || existant ? (existant && !edition ? `<p class="muet petit">${t("This project keeps its own settings: change them in Studio, under Manage.")}</p>` : "")
-          : sectionProjet("nm", { ...f, nom: f.projet }, f.modes, "", !!f.pOuvert, `<h3>${t("This project's settings")}</h3>
-          <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
-          <div class="nm-reglages">${lignesReglagesProjet()}</div>`)}
-      </details>
+      <div class="nm-colonnes">
+        <section class="nm-col" aria-labelledby="nm-t-mission"><h3 class="m0" id="nm-t-mission">${t("The mission")}</h3>
+          <label class="champ"><span>${t(sans ? "What must be done on the servers?" : "What must the mission do?")}</span><textarea id="nm-texte" rows="5" maxlength="20000" required>${v(f.texte)}</textarea>
+            ${edition && !sans ? `<span class="muet petit">${t("A changed text is added to the project as a new request.")}</span>` : ""}</label>
+          ${edition ? "" : `<label class="case m0"><input type="checkbox" id="nm-sans-projet"${sans ? " checked" : ""}> <span>${t("No Studio project: only set up servers")}<br><span class="muet petit">${t("For example: install a program from GitHub on several servers and link them together. One task on the servers, no development.")}</span></span></label>`}
+          ${sans ? "" : `<div class="champ"><label for="nm-nom">${t("Project")}</label>
+            <input type="text" id="nm-nom" list="nm-projets" value="${v(f.projet)}" maxlength="60" autocomplete="off" spellcheck="false"${edition ? " readonly" : ""} aria-describedby="nm-projet-aide">
+            <datalist id="nm-projets">${projets.map((n) => `<option value="${h(n)}">`).join("")}</datalist>
+            <p class="muet petit m0" id="nm-projet-aide">${edition ? t("The mission's project.") : existant ? t("One of your projects: the mission becomes its next request. Its settings stay in Studio, under Manage.") : t("A new project in Studio. Type the name of one of yours to add the mission to it.")}</p></div>`}
+          <div class="champ"><label for="nm-plan">${t("Plan (optional)")}</label><textarea id="nm-plan" rows="4" maxlength="8000" placeholder="${h(t(sans ? "The steps you already have in mind." : "The steps you already have in mind. Without them, the project's architect writes the plan."))}">${v(f.plan)}</textarea>${barreAmeliorer("nm-plan")}</div>
+          ${projetNeuf ? `<div class="nm-projet-reglages"><h4 class="m0">${t("Project settings")}</h4>
+            <div class="champ"><label for="nm-dossier">${t("Folder")}</label><div class="ligne m0"><input type="text" id="nm-dossier" class="croit" value="${v(f.dossier)}"${distant ? " readonly" : ""} aria-describedby="nm-dossier-aide">
+              ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="nm-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
+              <p class="muet petit m0" id="nm-dossier-aide">${t("An empty folder, or a new one in an existing folder. By default, next to your other projects.")}</p></div>
+            <div id="nm-mode">${blocMode(mdv, true)}</div>
+            <fieldset class="mis-github"><legend>${t("GitHub repository")}</legend>${choixGitHub("nm", nomDepot(f.projet), f)}</fieldset>
+            <h4 class="m0">${t("This project's settings")}</h4>
+            <p class="muet petit m0">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
+            <div class="nm-reglages">${lignesReglagesProjet()}</div></div>` : ""}
+        </section>
+        <section class="nm-col" aria-labelledby="nm-t-serveurs"><h3 class="m0" id="nm-t-serveurs">${t("Servers and API keys")}</h3>
+          <fieldset class="nm-liste"><legend>${t("Servers")}</legend>
+            ${serveurs.length ? serveurs.map(ligneServeur).join("") : `<p class="muet petit m0">${t("No server yet: add one on the Servers page.")}</p>`}
+            ${sans || !avecServeurs ? "" : `<p class="muet petit m0">${t("The site goes online on the servers marked so; the others get the role the servers' plan gives them.")}</p>`}</fieldset>
+          <fieldset class="nm-liste"><legend>${t("API keys")}</legend>
+            ${apis.length ? groupeCles("", "") + cats.map((c) => groupeCles(c.id, c.nom)).join("") : `<p class="muet petit m0">${t("No API key in the vault yet.")}</p>`}
+            ${avecCles ? `<p class="muet petit m0">${t("Their values are never shown to Claude: Athanor's tools use them.")}</p>` : ""}</fieldset>
+          ${inconnus.length ? `<p class="attention petit m0" role="alert">${h(t("Not found here, choose again: {0}", [inconnus.join(", ")]))}</p>` : ""}
+          ${avecServeurs || avecCles ? `<fieldset class="nm-mode m0" id="nm-mode-srv"><legend>${t("On the servers")}</legend>
+            ${MODES_MISSION.map(([x, nom, aide]) => `<label class="radio"><input type="radio" name="nm-perm" value="${x}"${(f.mode || "manuel") === x ? " checked" : ""}> <span><b>${t(nom)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset>` : ""}
+          ${avecServeurs ? `<div class="champ"><label for="nm-plan-dep">${t("Plan for the servers")}</label><textarea id="nm-plan-dep" rows="5" maxlength="4000" placeholder="${h(t("What each server does and how they are linked, for example: nginx on web-1 on port 8080, PostgreSQL on db-1 reachable from web-1 only, web-2 a copy of web-1, an uptime check."))}">${v(f.plan_deploiement)}</textarea>${barreAmeliorer("nm-plan-dep", "serveurs")}</div>` : ""}
+          ${site && !sans ? `<div class="champ"><label for="nm-url">${t("Address")}</label><input type="text" inputmode="url" id="nm-url" value="${v(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false" aria-describedby="nm-url-aide">
+            <p class="muet petit m0" id="nm-url-aide">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div>
+            <fieldset class="m0" role="radiogroup"><legend>${t("When to deploy")}</legend>
+            ${[["livraison", "At delivery"], ["jalon", "After each milestone"]].map(([x, l]) => `<label class="radio"><input type="radio" name="nm-moment" value="${x}"${(f.moment || "livraison") === x ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>` : ""}
+        </section>
+      </div>
       <p class="petit attention m0" id="nm-erreur" role="alert" hidden></p>
       ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer">${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
     </form></div>`;
 };
-// every change is kept in nm.f at once: a refresh of the page (the GitHub connection, a model list) loses nothing
+// every change is kept in nm.f at once: a refresh of the page (a choice, the GitHub connection) loses nothing
 function lireFormMission() {
   const f = nm.f, z = $("#nm-form"); if (!f || !z) return f;
   const val = (id) => ($("#" + id) || {}).value;
-  Object.assign(f, { texte: val("nm-texte") ?? f.texte, projet: (val("nm-nom") ?? f.projet), serveur: val("nm-serveur") ?? f.serveur, api: val("nm-api") ?? f.api,
-    plan: val("nm-plan") ?? f.plan, url: (val("nm-url") ?? f.url).trim(), plan_deploiement: val("nm-plan-dep") ?? f.plan_deploiement,
-    autonome: !!(z.querySelector("[name=nm-autonome]:checked") || {}).value, moment: (z.querySelector("[name=nm-moment]:checked") || {}).value || "livraison", plusOuvert: !!($("#nm-plus") || {}).open });
+  const sans = $("#nm-sans-projet") ? $("#nm-sans-projet").checked : !!f.sans_projet;
+  const coches = [...z.querySelectorAll("[name=nm-srv]")].filter((x) => x.checked).map((x) => x.value), affiches = [...z.querySelectorAll("[name=nm-srv]")].map((x) => x.value);
+  const garde = (l) => l.filter((x) => !affiches.includes(x)); // a proposed server not found here stays (it is said so)
+  const role = (id) => (($("#nm-role-" + CSS.escape(id)) || {}).value || (f.autres.includes(id) ? "autre" : "site"));
+  const autres = sans ? [] : coches.filter((id) => role(id) === "autre");
+  Object.assign(f, { texte: val("nm-texte") ?? f.texte, projet: val("nm-nom") ?? f.projet, sans_projet: sans, plan: val("nm-plan") ?? f.plan, url: (val("nm-url") ?? f.url).trim(),
+    plan_deploiement: val("nm-plan-dep") ?? f.plan_deploiement, serveurs: [...garde(f.serveurs), ...coches.filter((id) => !autres.includes(id))], autres: [...garde(f.autres), ...autres],
+    apis: [...f.apis.filter((x) => !z.querySelector(`[name=nm-api][value="${CSS.escape(x)}"]`)), ...[...z.querySelectorAll("[name=nm-api]:checked")].map((x) => x.value)],
+    mode: (z.querySelector("[name=nm-perm]:checked") || {}).value || f.mode || "manuel", moment: (z.querySelector("[name=nm-moment]:checked") || {}).value || f.moment || "livraison" });
   if ($("#nm-dossier")) f.dossier = val("nm-dossier").trim();
-  if ($("details#nm-projet")) f.pOuvert = $("details#nm-projet").open;
   return f;
 }
 document.addEventListener("input", (ev) => { if (ev.target.closest("#nm-form")) lireFormMission(); });
-document.addEventListener("toggle", (ev) => { if (ev.target.closest && ev.target.closest("#nm-form")) lireFormMission(); }, true);
 document.addEventListener("change", (ev) => {
   const i = ev.target; if (!i.closest("#nm-form")) return;
   const f = lireFormMission();
-  if (i.id === "nm-serveur") { $("#nm-mode-srv").hidden = $("#nm-en-ligne").hidden = !f.serveur; }
-  else if (i.id === "nm-nom") rendrePage(); // a new project or one of yours: its settings shown or not
-  else if (i.name === "nm-gh") Object.assign(f, { github: i.value === "existant" ? "lier" : i.value, depot: "" });
+  // a choice that shows or hides a part of the form: drawn again from nm.f
+  if (i.id === "nm-sans-projet" || i.name === "nm-srv" || i.name === "nm-api" || i.id.startsWith("nm-role-") || i.id === "nm-nom") rendrePage();
+  else if (i.name === "nm-gh") { Object.assign(f, { github: i.value === "existant" ? "lier" : i.value, depot: "" }); rendrePage(); } // the connection's notice only with a repository chosen
   else if (i.id === "nm-gh-auto") f.sans_pousse = !i.checked;
   else if (i.id === "nm-gh-atelier") f.atelier = i.checked;
   else if (i.id === "nm-gh-nom" || i.id === "nm-gh-depot") Object.assign(f, i.id === "nm-gh-depot" ? { github: "lier", depot: depotSaisi(i.value) || i.value.trim() } : { github: "creer", depot: i.value.trim() ? nomDepot(i.value) : "" });
@@ -6299,9 +6316,14 @@ document.addEventListener("submit", async (ev) => {
   if (ev.target.id !== "nm-form") return;
   ev.preventDefault();
   const f = lireFormMission(), err = $("#nm-erreur"), b = $("#nm-lancer");
-  if (!f.projet.trim() && !f.id) { f.projet = nomMissionPropose(f.texte); $("#nm-nom").value = f.projet; }
-  const corps = { ...f, moment: f.serveur ? f.moment : "" };
-  delete corps.plusOuvert; delete corps.pOuvert; delete corps.id;
+  if (!f.sans_projet && !f.projet.trim() && !f.id) { f.projet = nomMissionPropose(f.texte); $("#nm-nom").value = f.projet; }
+  const corps = { ...f, moment: f.serveurs.length ? f.moment : "" };
+  delete corps.id; delete corps.modeAvant;
+  if (f.mode === "ignorer" && f.modeAvant !== "ignorer") { // full autonomy: confirmed once, with Athanor's password, when it is chosen
+    const p = await confirmerIgnorer(t("Full autonomy: Claude will do everything on these servers without asking you, dangerous commands and putting it online included. Choose it only for servers you can rebuild."));
+    if (!p) return;
+    Object.assign(corps, { confirmer: true }, p);
+  }
   if (!corps.reglages || !Object.values(corps.reglages).some(Boolean)) delete corps.reglages;
   b.disabled = true; err.hidden = true;
   const r = await api(f.id ? "missions/" + encodeURIComponent(f.id) : "missions", "POST", corps).catch((e) => { err.textContent = e.message; err.hidden = false; return null; });

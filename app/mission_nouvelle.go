@@ -1,9 +1,12 @@
 package main
 
-// Missions (3.1, note "simplicité d'abord"): a mission links a Studio project, at most one server and one API key
-// of the vault, with one permission choice ("needs me" = manuel, "autonomous" = auto). Launching it is the home's
-// project card launch (create the project, its deployment, its settings, start its pilot), or for an existing
-// project its deployment and a new request. Its state is read from the project and its deployment, never kept.
+// Missions (3.1, note "simplicité d'abord"): a mission links a Studio project, servers and API keys of the vault,
+// with one permission choice ("needs me" = manuel, "autonomous" = auto, "full autonomy" = ignorer, confirmed with
+// Athanor's password once). With a project: its servers where the site goes online, its other servers (a database,
+// a worker…) set up as the servers' plan says; launching it is the home's project card launch (create the project,
+// its deployment, its settings, start its pilot), or for an existing project its deployment and a new request.
+// Without a project: one Servers task on its servers and keys (install, configure, link them). Its state is read
+// from the project, its deployment or its task, never kept.
 
 import (
 	"cmp"
@@ -12,6 +15,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,16 +25,22 @@ import (
 // MissionDemande: what the New mission form (or its edit) sends.
 type MissionDemande struct {
 	Texte   string `json:"texte"`   // what the mission must do
-	Plan    string `json:"plan"`    // optional: added to the project's request
+	Plan    string `json:"plan"`    // optional: the steps, added to the project's request (or to the task's text)
 	Projet  string `json:"projet"`  // a new project's name, or an existing one's
 	Dossier string `json:"dossier"` // a new project's folder ("": next to the other projects)
-	Serveur string `json:"serveur"` // inventory id or name ("": none)
-	API     string `json:"api"`     // vault id or name ("": none)
-	URL     string `json:"url"`
-	// how to put it online, in the owner's words, and when (jalon | livraison, "": livraison)
+	// no Studio project: one Servers task on Serveurs and APIs
+	SansProjet bool     `json:"sans_projet,omitempty"`
+	Serveurs   []string `json:"serveurs"`          // inventory ids or names: where the site goes online (without a project: every server)
+	Autres     []string `json:"autres,omitempty"`  // a project's other servers (a database…), never deployed to
+	APIs       []string `json:"apis"`              // vault ids or names
+	Serveur    string   `json:"serveur,omitempty"` // read: one server, as the first 3.1 forms and proposals sent it
+	API        string   `json:"api,omitempty"`     // read: one key, likewise
+	URL        string   `json:"url"`
+	// the servers' plan, in the owner's words (how to put it online, what each server does), and when (jalon |
+	// livraison, "": livraison)
 	PlanDeploiement string `json:"plan_deploiement"`
 	Moment          string `json:"moment"`
-	Autonome        bool   `json:"autonome"`
+	Mode            string `json:"mode"` // manuel ("": needs me) | auto | ignorer (no human action on the servers)
 	// a new project only, as on Manage: working modes, GitHub repository, own settings
 	Modes      *ModesCarte       `json:"modes,omitempty"`
 	GitHub     string            `json:"github,omitempty"`
@@ -41,20 +51,29 @@ type MissionDemande struct {
 	Index      *int              `json:"index,omitempty"` // the home conversation's message whose proposal this launches
 }
 
-// VueMission: a mission as the Missions page shows it, its project and server read now.
+// MachineVue: a server of a mission as its frame names it; Site: the site goes online there (else another role).
+type MachineVue struct {
+	ID   string `json:"id"`
+	Nom  string `json:"nom"`
+	Site bool   `json:"site"`
+}
+
+// VueMission: a mission as the Missions page shows it, its project, servers and task read now.
 type VueMission struct {
 	Mission
 	Suivie bool `json:"suivie"` // a mission of this version (an old one is read only)
-	// en_cours | arret_jalon | pause | arretee | terminee | perdue (its project is gone)
+	// en_cours | arret_jalon | pause | arretee | terminee | perdue (its project is gone); a servers mission:
+	// en_cours | attente (waits for the owner's accord) | terminee | echec | arretee
 	Statut       string         `json:"statut,omitempty"`
 	Avance       VoieMission    `json:"avance"` // milestones done, the one in progress, what the lead does
-	ServeurNom   string         `json:"serveur_nom,omitempty"`
+	Machines     []MachineVue   `json:"machines"`
 	ServeurEtat  string         `json:"serveur_etat,omitempty"` // aucun | attente | prepare | deploie | en_ligne | echec | a_preparer | arrete
 	ServeurErr   string         `json:"serveur_erreur,omitempty"`
 	ServeurMsg   *MessageMoteur `json:"serveur_message,omitempty"`
 	ServeurTache bool           `json:"serveur_tache,omitempty"` // a Servers task of the mission runs now
 	URL          string         `json:"url,omitempty"`
-	APINom       string         `json:"api_nom,omitempty"`
+	APINoms      []string       `json:"api_noms"`
+	Bilan        string         `json:"bilan,omitempty"` // a servers mission: what its task answered once over
 }
 
 var missionMu sync.Mutex // one change of a mission file at a time
@@ -85,62 +104,127 @@ func texteMission(texte, plan string) string {
 	return texte + "\n\n## Plan\n\n" + plan
 }
 
+// texteTacheMission: what a servers mission's task does: the mission, its plan, its servers' plan.
+func texteTacheMission(texte, plan, planServeurs string) string {
+	t := texteMission(texte, plan)
+	if p := strings.TrimSpace(planServeurs); p != "" {
+		t += "\n\n## Servers plan\n\n" + p
+	}
+	return t
+}
+
+// serveursMission, apisDe: m's servers and keys, an early 3.1 file's single ones read too.
+func serveursMission(m Mission) []string {
+	if len(m.Serveurs) == 0 && m.Serveur != "" {
+		return []string{m.Serveur}
+	}
+	return m.Serveurs
+}
+
+func apisDe(m Mission) []string {
+	if len(m.APIs) == 0 && m.API != "" {
+		return []string{m.API}
+	}
+	return m.APIs
+}
+
 // deploiementMission: the project's deployment as the form asks it (nil: neither server nor API).
 func deploiementMission(d MissionDemande) *DeploiementDemande {
-	if d.Serveur == "" && d.API == "" {
+	if len(d.Serveurs)+len(d.Autres)+len(d.APIs) == 0 {
 		return nil
 	}
-	x := &DeploiementDemande{URL: strings.TrimSpace(d.URL), Plan: d.PlanDeploiement, Moment: d.Moment, Serveurs: []string{}, APIs: []string{}}
-	if d.Serveur != "" {
-		x.Serveurs = []string{d.Serveur}
-	}
-	if d.API != "" {
-		x.APIs = []string{d.API}
-	}
-	if x.Moment == "" {
-		x.Moment = "livraison"
-	}
+	x := &DeploiementDemande{URL: strings.TrimSpace(d.URL), Plan: d.PlanDeploiement, Moment: cmp.Or(d.Moment, "livraison"),
+		Serveurs: slices.Clone(d.Serveurs), Autres: append([]string{}, d.Autres...), APIs: slices.Clone(d.APIs)}
 	return x
 }
 
-func modeMission(autonome bool) string {
-	if autonome {
+// modesMission: the three choices of a mission for its servers; the SSH assistant's "modifications" is not one.
+var modesMission = []string{"manuel", "auto", "ignorer"}
+
+// modeDe: m's permission choice, an early 3.1 file's Autonome read as auto.
+func modeDe(m Mission) string {
+	switch {
+	case m.Mode != "":
+		return m.Mode
+	case m.Autonome:
 		return "auto"
 	}
 	return "manuel"
 }
 
-// nettoyerDemande: d's fields trimmed, its server and API by id (nommerDeploiement), checked; an error is an
-// i18n key.
+// choixMission: Ignore permissions (full autonomy) as everywhere: Athanor's window, confirmed, with the password
+// (choixIgnorer), asked when it is chosen, never again while it stays; a refusal goes to the audit log.
+func (s *Serveur) choixMission(w http.ResponseWriter, r *http.Request, mode, avant string, confirmer bool, mdp, projet string) bool {
+	if mode != "ignorer" || avant == "ignorer" {
+		return true
+	}
+	code, err := s.choixIgnorer(r, mode, confirmer, mdp)
+	if err == nil {
+		return true
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: projet, Action: "mission en autonomie totale", Resultat: "refusée : " + err.Error()})
+	s.erreur(w, code, err.Error())
+	return false
+}
+
+// sansDoublon: l trimmed, each once, in its order, without "".
+func sansDoublon(l []string) []string {
+	r := []string{}
+	for _, x := range l {
+		if x = strings.TrimPrefix(strings.TrimSpace(x), "@"); x != "" && !slices.Contains(r, x) {
+			r = append(r, x)
+		}
+	}
+	return r
+}
+
+// nettoyerDemande: d's fields trimmed, its servers and API keys by id (nommerDeploiement, an unknown one
+// refused), checked; an error is an i18n key.
 func (s *Serveur) nettoyerDemande(d *MissionDemande) error {
 	d.Texte, d.Projet, d.Dossier = strings.TrimSpace(d.Texte), strings.TrimSpace(d.Projet), strings.TrimSpace(d.Dossier)
-	d.Serveur, d.API = strings.TrimSpace(d.Serveur), strings.TrimSpace(d.API)
+	d.Serveurs, d.APIs = sansDoublon(append([]string{d.Serveur}, d.Serveurs...)), sansDoublon(append([]string{d.API}, d.APIs...))
+	d.Autres, d.Serveur, d.API = sansDoublon(d.Autres), "", ""
+	if d.SansProjet { // no site: every server is one of the task's
+		d.Serveurs, d.Autres, d.Projet, d.Dossier = sansDoublon(append(d.Serveurs, d.Autres...)), nil, "", ""
+	}
 	switch {
 	case d.Texte == "":
 		return erreurEntree("Write what it must do.")
 	case utf8.RuneCountInString(texteMission(d.Texte, d.Plan)) > maxTexteAction:
 		return erreurEntree("This text is too long (20,000 characters at most).")
+	case d.SansProjet && len(d.Serveurs)+len(d.APIs) == 0:
+		return erreurEntree("A task needs at least one server or one API")
+	case d.SansProjet && utf8.RuneCountInString(texteTacheMission(d.Texte, d.Plan, d.PlanDeploiement)) > maxTexteTache:
+		return erreurEntree("A servers mission holds 4,000 characters at most (its text and its plans).")
+	case len(d.Autres) > 0 && len(d.Serveurs) == 0:
+		return erreurEntree("Choose at least one server where the site goes online.")
 	case d.Moment != "" && d.Moment != "jalon" && d.Moment != "livraison":
 		return erreurEntree("Invalid request")
+	case d.Mode != "" && !slices.Contains(modesMission, d.Mode):
+		return erreurEntree("Unknown permission mode (manuel, auto, modifications or ignorer)")
 	case s.coffre != nil && s.coffre.Urgence() != "":
 		return erreurEntree("The emergency stop is on: resume Athanor first.")
 	}
-	if x := deploiementMission(*d); x != nil {
-		noms := s.nommerDeploiement(x)
-		if len(x.Serveurs) > 0 {
-			if _, ok := noms[x.Serveurs[0]]; !ok {
-				return errServeurInconnu
-			}
-			d.Serveur = x.Serveurs[0]
-		}
-		if len(x.APIs) > 0 {
-			if _, ok := noms[x.APIs[0]]; !ok {
-				return errCoffreInconnu
-			}
-			d.API = x.APIs[0]
+	x := DeploiementDemande{Serveurs: slices.Concat(d.Serveurs, d.Autres), APIs: d.APIs}
+	noms := s.nommerDeploiement(&x)
+	for _, id := range x.Serveurs {
+		if _, ok := noms[id]; !ok {
+			return errServeurInconnu
 		}
 	}
+	for _, id := range x.APIs {
+		if _, ok := noms[id]; !ok {
+			return errCoffreInconnu
+		}
+	}
+	d.Serveurs, d.Autres, d.APIs = x.Serveurs[:len(d.Serveurs)], slices.DeleteFunc(slices.Clone(x.Serveurs[len(d.Serveurs):]), func(id string) bool { return slices.Contains(x.Serveurs[:len(d.Serveurs)], id) }), x.APIs
+	d.Mode = cmp.Or(d.Mode, "manuel")
 	return nil
+}
+
+// lancerTacheMission: a servers mission's task (native Windows mode: only once its reminders are off, as a card).
+func (s *Serveur) lancerTacheMission(m Mission) (TacheServeurs, error) {
+	return s.lancerTacheDans(texteTacheMission(m.Phrase, m.Plan, m.PlanServeurs), serveursMission(m), modeNatif.Load() && s.sansRappelsNatif(), "", "", false, "", apisDe(m), modeDe(m))
 }
 
 // lancerMission: the mission launched as d says; the mission and what its launch said (an i18n key and its args).
@@ -149,10 +233,19 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 		return Mission{}, "", nil, err
 	}
 	m := Mission{ID: aleatoire(8), Phrase: s.masquerSecrets(d.Texte), Etat: "lancee", Cree: time.Now().UTC().Format(time.RFC3339),
-		Serveur: d.Serveur, API: d.API, Autonome: d.Autonome, Mentions: Mentions{}, Questions: []QuestionMission{}}
+		Serveurs: d.Serveurs, Autres: d.Autres, APIs: d.APIs, Mode: d.Mode, Plan: s.masquerSecrets(strings.TrimSpace(d.Plan)),
+		PlanServeurs: s.masquerSecrets(strings.TrimSpace(d.PlanDeploiement)), Mentions: Mentions{}, Questions: []QuestionMission{}}
 	var cle string
 	var args []string
-	if p, ok := s.projetLocalChat(d.Projet); ok {
+	if d.SansProjet {
+		t, err := s.lancerTacheMission(m)
+		if err != nil {
+			return Mission{}, "", nil, err
+		}
+		m.Tache = t.ID
+		cle, args = "Task started on {0}.", []string{strings.Join(nomsServeurs(m.Serveurs), ", "), t.ID}
+		evenement(&m, "lancee", "servers task: "+t.ID)
+	} else if p, ok := s.projetLocalChat(d.Projet); ok {
 		// an existing project: its deployment and permission when the mission links a server or a key, the
 		// mission as a new request, its pilot started
 		if x := deploiementMission(d); x != nil {
@@ -165,7 +258,7 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 			if err := s.definirDeploiementProjet(p.Nom, *x, qui); err != nil {
 				return Mission{}, "", nil, err
 			}
-			if _, err := definirReglageProjet(p.Nom, "permission", modeMission(d.Autonome)); err != nil {
+			if _, err := definirReglageProjet(p.Nom, "permission", m.Mode); err != nil {
 				return Mission{}, "", nil, err
 			}
 		}
@@ -190,7 +283,7 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 		a := ActionChat{Type: "projet", Projet: d.Projet, Dossier: d.Dossier, Texte: texteMission(d.Texte, d.Plan), Deploiement: deploiementMission(d),
 			Modes: d.Modes, GitHub: d.GitHub, Depot: d.Depot, SansPousse: d.SansPousse, Atelier: d.Atelier, Reglages: d.Reglages}
 		if a.Deploiement != nil {
-			a.Permission = modeMission(d.Autonome)
+			a.Permission = m.Mode
 		}
 		if a.Projet == "" {
 			return Mission{}, "", nil, erreurEntree("Give the project a name.")
@@ -210,7 +303,9 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 		m.Projet = p.Nom
 		evenement(&m, "lancee", "project created: "+p.Dossier) // what faitMission reads: its deletion may take the folder
 	}
-	m.Voies = []VoieMission{{Module: "dev", Ref: m.Projet, Etat: "lancee"}}
+	if m.Projet != "" {
+		m.Voies = []VoieMission{{Module: "dev", Ref: m.Projet, Etat: "lancee"}}
+	}
 	missionMu.Lock()
 	err := ecrireMission(m)
 	missionMu.Unlock()
@@ -224,9 +319,17 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 
 // apiLancerMission: POST /api/missions, the New mission form's Launch (the computer only: refuseHubDistance).
 func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
-	var d MissionDemande
-	if lireCorps(r, &d) != nil {
+	var c struct {
+		MissionDemande
+		Confirmer  bool   `json:"confirmer"`
+		MotDePasse string `json:"mot_de_passe"`
+	}
+	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	d := c.MissionDemande
+	if !s.choixMission(w, r, d.Mode, "", c.Confirmer, c.MotDePasse, d.Projet) {
 		return
 	}
 	verrouActionsChat.Lock() // a double click, or the home's card launched at once: one mission
@@ -239,7 +342,7 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusBadRequest, "Unknown message")
 			return
 		}
-		if a, ok := lireActionChat(conv.Messages[*i].Texte); !ok || a.Type != "projet" {
+		if a, ok := lireActionChat(conv.Messages[*i].Texte); !ok || a.Type != "projet" && a.Type != "serveur" {
 			s.erreur(w, http.StatusBadRequest, "This message proposes no action")
 			return
 		}
@@ -250,6 +353,10 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	}
 	m, cle, args, err := s.lancerMission(d, deQui(r))
 	if err != nil {
+		if errors.Is(err, errServeursNatif) {
+			s.erreur(w, http.StatusConflict, err.Error())
+			return
+		}
 		s.erreurMissionHTTP(w, err)
 		return
 	}
@@ -264,13 +371,16 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"mission": s.vueMission(m), "message_key": cle, "args": args})
 }
 
-// missionSuivie: mission id of this version, its project (409 when it is gone).
+// missionSuivie: mission id of this version, its project (409 when it is gone); a servers mission has none.
 func (s *Serveur) missionSuivie(id string) (Mission, Projet, error) {
 	m, err := lireMission(id)
 	if err != nil {
 		return m, Projet{}, err
 	}
-	if m.Projet == "" {
+	switch {
+	case m.Projet == "" && m.Tache != "":
+		return m, Projet{}, nil
+	case m.Projet == "":
 		return m, Projet{}, erreurMission{http.StatusConflict, "An old mission is read only: delete it, or launch a new one."}
 	}
 	p, ok := s.projetLocalChat(m.Projet)
@@ -280,60 +390,72 @@ func (s *Serveur) missionSuivie(id string) (Mission, Projet, error) {
 	return m, p, nil
 }
 
-// apiModifierMission: POST /api/missions/{id}, in any state: its server, its API key, its permission choice, how
-// and when it goes online; a changed text becomes a new request of the project (its pilot takes it after the
-// current one, or at Resume).
+// apiModifierMission: POST /api/missions/{id}, in any state: its servers, its API keys, its permission choice, its
+// plans, how and when it goes online; a changed text becomes a new request of the project (its pilot takes it
+// after the current one, or at Resume). A servers mission keeps the change for its next launch.
 func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
-	var d MissionDemande
-	if lireCorps(r, &d) != nil {
+	var c struct {
+		MissionDemande
+		Confirmer  bool   `json:"confirmer"`
+		MotDePasse string `json:"mot_de_passe"`
+	}
+	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
+	d := c.MissionDemande
 	missionMu.Lock()
 	defer missionMu.Unlock()
 	m, p, err := s.missionSuivie(r.PathValue("id"))
 	if err == nil {
+		d.SansProjet = m.Projet == ""
 		err = s.nettoyerDemande(&d)
 	}
 	if err != nil {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
+	if !s.choixMission(w, r, d.Mode, modeDe(m), c.Confirmer, c.MotDePasse, m.Projet) {
+		return
+	}
 	qui := deQui(r)
-	if d.Serveur != m.Serveur || d.API != m.API || d.Serveur+d.API != "" {
-		x := deploiementMission(d)
-		if x == nil { // both unlinked: the project keeps its address and plan, without server nor key
-			e := s.acces.Environnements(p.Nom)[s.deploiementProjet(p.Nom)]
-			x = &DeploiementDemande{URL: e.URL, Plan: e.Plan, Moment: cmp.Or(e.Moment, "livraison"), Serveurs: []string{}, APIs: []string{}}
-		}
-		if _, err := s.accesPretErr(p.Nom); err == nil {
-			err = s.definirDeploiementProjet(p.Nom, *x, qui)
-		}
-		if err != nil {
-			s.erreurMissionHTTP(w, err)
-			return
-		}
-		if d.Serveur+d.API != "" {
-			if _, err := definirReglageProjet(p.Nom, "permission", modeMission(d.Autonome)); err != nil {
+	changes := []string{}
+	if !slices.Equal(d.Serveurs, serveursMission(m)) || !slices.Equal(d.Autres, m.Autres) || !slices.Equal(d.APIs, apisDe(m)) || d.Mode != modeDe(m) || strings.TrimSpace(d.PlanDeploiement) != m.PlanServeurs {
+		changes = append(changes, "servers, keys, plan or permission")
+	}
+	if m.Projet != "" {
+		if x := deploiementMission(d); x != nil || len(serveursMission(m))+len(m.Autres)+len(apisDe(m)) > 0 {
+			if x == nil { // all unlinked: the project keeps its address and plan, without server nor key
+				e := s.acces.Environnements(p.Nom)[s.deploiementProjet(p.Nom)]
+				x = &DeploiementDemande{URL: e.URL, Plan: e.Plan, Moment: cmp.Or(e.Moment, "livraison"), Serveurs: []string{}, Autres: []string{}, APIs: []string{}}
+			}
+			if _, err := s.accesPretErr(p.Nom); err == nil {
+				err = s.definirDeploiementProjet(p.Nom, *x, qui)
+			}
+			if err != nil {
 				s.erreurMissionHTTP(w, err)
 				return
 			}
+			if len(d.Serveurs)+len(d.APIs) > 0 {
+				if _, err := definirReglageProjet(p.Nom, "permission", d.Mode); err != nil {
+					s.erreurMissionHTTP(w, err)
+					return
+				}
+			}
 		}
-	}
-	changes := []string{}
-	if d.Serveur != m.Serveur || d.API != m.API || d.Autonome != m.Autonome {
-		changes = append(changes, "server, key or permission")
-	}
-	if t := s.masquerSecrets(d.Texte); t != m.Phrase || strings.TrimSpace(d.Plan) != "" {
-		titre, _, _ := strings.Cut(d.Texte, "\n")
-		if _, _, err := s.ajouterDemande(p, couper(titre, 60), texteMission(d.Texte, d.Plan)); err != nil {
-			s.erreurMissionHTTP(w, err)
-			return
+		if t := s.masquerSecrets(d.Texte); t != m.Phrase || strings.TrimSpace(d.Plan) != m.Plan {
+			titre, _, _ := strings.Cut(d.Texte, "\n")
+			if _, _, err := s.ajouterDemande(p, couper(titre, 60), texteMission(d.Texte, d.Plan)); err != nil {
+				s.erreurMissionHTTP(w, err)
+				return
+			}
+			changes = append(changes, "request added")
 		}
-		m.Phrase = t
-		changes = append(changes, "request added")
+	} else if s.masquerSecrets(d.Texte) != m.Phrase || strings.TrimSpace(d.Plan) != m.Plan {
+		changes = append(changes, "text")
 	}
-	m.Serveur, m.API, m.Autonome = d.Serveur, d.API, d.Autonome
+	m.Phrase, m.Plan, m.PlanServeurs = s.masquerSecrets(d.Texte), s.masquerSecrets(strings.TrimSpace(d.Plan)), s.masquerSecrets(strings.TrimSpace(d.PlanDeploiement))
+	m.Serveurs, m.Autres, m.APIs, m.Mode, m.Serveur, m.API, m.Autonome = d.Serveurs, d.Autres, d.APIs, d.Mode, "", "", false
 	evenement(&m, "modifiee", strings.Join(changes, ", "))
 	if err := ecrireMission(m); err != nil {
 		s.erreurMissionHTTP(w, err)
@@ -394,8 +516,30 @@ func (s *Serveur) relancerServeurMission(p Projet) (string, error) {
 	return "Deployment launched again.", nil
 }
 
+// agirTacheMission: a servers mission's actions: stop its task (pause and stop are one), or launch it again (its
+// text, plans, servers and keys as they are now; never while it runs).
+func (s *Serveur) agirTacheMission(m *Mission, action string) (string, string, error) {
+	switch action {
+	case "pause", "arreter", "serveur-arreter":
+		s.arreterTache(m.Tache)
+		return "The server's work of this mission is stopped.", "arretee", nil
+	case "reprendre", "serveur-relancer":
+		if tacheEnCoursID(m.Tache) {
+			return "", "", erreurEntree("Its task still works: stop it first.")
+		}
+		t, err := s.lancerTacheMission(*m)
+		if err != nil {
+			return "", "", err
+		}
+		m.Tache = t.ID
+		return "Task started on {0}.", "reprise", nil
+	}
+	return "", "", erreurMission{http.StatusNotFound, "Unknown action"}
+}
+
 // apiAgirMission: POST /api/missions/{id}/{action}: pause, arreter, reprendre (its project's pilot, in any
-// state), serveur-arreter (its Servers tasks cancelled), serveur-relancer (relancerServeurMission).
+// state), serveur-arreter (its Servers tasks cancelled), serveur-relancer (relancerServeurMission); a servers
+// mission: its task stopped or launched again.
 func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 	m, p, err := s.missionSuivie(r.PathValue("id"))
 	if err != nil {
@@ -403,12 +547,14 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	action, cle := r.PathValue("action"), ""
-	switch action {
-	case "pause", "arreter":
+	switch {
+	case m.Projet == "":
+		cle, action, err = s.agirTacheMission(&m, action)
+	case action == "pause" || action == "arreter":
 		err = s.arreterProjet(p, action)
 		cle = map[string]string{"pause": "The pilot is paused: Start picks it up where it stopped.", "arreter": "The pilot is stopped."}[action]
 		action = map[string]string{"pause": "pause", "arreter": "arretee"}[action]
-	case "reprendre":
+	case action == "reprendre":
 		pauserProjet(p.Nom, false)
 		noterArret(p.Nom, "")
 		marqueAuto(p, true) // restarted with the application, as Start does (demarrerPiloteAuto)
@@ -416,10 +562,10 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 			marqueAuto(p, false)
 		}
 		action = "reprise"
-	case "serveur-arreter":
+	case action == "serveur-arreter":
 		s.arreterTachesProjet(p.Nom)
 		cle, action = "The server's work of this mission is stopped.", "serveur_arrete"
-	case "serveur-relancer":
+	case action == "serveur-relancer":
 		cle, err = s.relancerServeurMission(p)
 		action = "serveur_relance"
 	default:
@@ -427,34 +573,87 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		if errors.Is(err, errServeursNatif) {
-			s.erreur(w, http.StatusConflict, err.Error())
-			return
-		}
 		var em erreurEntree
-		if errors.As(err, &em) || err.Error() == texteSansClaude || err.Error() == texteLivreRienDeNeuf {
+		var mi erreurMission
+		switch {
+		case errors.As(err, &mi):
+			s.erreur(w, mi.code, mi.msg)
+		case errors.Is(err, errServeursNatif), errors.As(err, &em), err.Error() == texteSansClaude, err.Error() == texteLivreRienDeNeuf:
 			s.erreur(w, http.StatusConflict, err.Error())
-			return
+		default:
+			s.erreur(w, http.StatusInternalServerError, err.Error())
 		}
-		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	missionMu.Lock() // the pilot's start or stop may take a while: the file is read again and written alone
 	if lu, err := lireMission(m.ID); err == nil {
+		lu.Tache = m.Tache // a servers mission launched again: its new task
 		m = lu
 	}
 	evenement(&m, action, "")
 	_ = ecrireMission(m)
 	missionMu.Unlock()
+	args := []string{}
+	if cle == "Task started on {0}." {
+		args = []string{strings.Join(nomsServeurs(serveursMission(m)), ", ")}
+	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: m.Projet, Mission: m.ID, Action: "mission: " + action, Resultat: cle})
-	s.ecrireJSON(w, map[string]any{"mission": s.vueMission(m), "message_key": cle, "args": []string{}})
+	s.ecrireJSON(w, map[string]any{"mission": s.vueMission(m), "message_key": cle, "args": args})
 }
 
-// vueMission: m as the page shows it, its project and server read now.
+// machines: the frame's servers: where the site goes online, then the others.
+func machines(site, autres []string) []MachineVue {
+	l := []MachineVue{}
+	for i, n := range nomsServeurs(site) {
+		l = append(l, MachineVue{ID: site[i], Nom: n, Site: true})
+	}
+	for i, n := range nomsServeurs(autres) {
+		l = append(l, MachineVue{ID: autres[i], Nom: n})
+	}
+	return l
+}
+
+// nomsAPIs: the vault names of ids (a removed entry is left out).
+func (s *Serveur) nomsAPIs(ids []string) []string {
+	noms := []string{}
+	if s.coffre == nil {
+		return noms
+	}
+	for _, x := range s.coffre.Liste() {
+		if slices.Contains(ids, x.ID) {
+			noms = append(noms, x.Nom)
+		}
+	}
+	return noms
+}
+
+// vueMission: m as the page shows it, its project, servers and task read now.
 func (s *Serveur) vueMission(m Mission) VueMission {
-	v := VueMission{Mission: m, Suivie: m.Projet != ""}
+	v := VueMission{Mission: m, Suivie: m.Projet != "" || m.Tache != "", Machines: []MachineVue{}, APINoms: []string{}}
 	if !v.Suivie {
 		v.Mission = s.voiesEnDirect(m)
+		return v
+	}
+	v.Mode, v.Autonome, v.Serveurs, v.APIs, v.Serveur, v.API = modeDe(m), false, serveursMission(m), apisDe(m), "", ""
+	v.APINoms = s.nomsAPIs(v.APIs)
+	if m.Projet == "" { // a servers mission: its task
+		v.Machines = machines(nil, v.Serveurs)
+		t, ok := tacheMission(m.Tache)
+		switch {
+		case !ok:
+			v.Statut = "arretee"
+		case t.Etat == "finie":
+			v.Statut = "terminee"
+		case t.Etat == "echec" || t.Etat == "arretee":
+			v.Statut = t.Etat
+		case t.Etat == "attente_accord":
+			v.Statut, v.ServeurTache = "attente", true
+		default:
+			v.Statut, v.ServeurTache = "en_cours", true
+		}
+		if ok && tacheFinieEtat(t.Etat) {
+			v.Bilan = couper(s.masquerSecrets(t.Resultat), 1200)
+		}
 		return v
 	}
 	p, ok := s.projetParNom(m.Projet)
@@ -478,29 +677,18 @@ func (s *Serveur) vueMission(m Mission) VueMission {
 		v.Statut = "arretee"
 	}
 	s.avancementVoie(&v.Avance, p, e.JalonEnCours)
-	if s.coffre != nil && m.API != "" {
-		for _, x := range s.coffre.Liste() {
-			if x.ID == m.API {
-				v.APINom = x.Nom
-			}
-		}
-	}
 	if s.acces == nil {
 		return v
 	}
+	// the project's deployment is the truth: changed on its tab, it shows here too
 	dep := s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)]
-	v.URL = dep.URL
+	v.URL, v.Serveurs, v.Autres, v.Machines, v.PlanServeurs = dep.URL, dep.Serveurs, dep.Autres, machines(dep.Serveurs, dep.Autres), dep.Plan
+	if len(dep.APIs) > 0 {
+		v.APIs, v.APINoms = dep.APIs, s.nomsAPIs(dep.APIs)
+	}
 	if len(dep.Serveurs) == 0 {
 		v.ServeurEtat = "aucun"
 		return v
-	}
-	v.Serveur = dep.Serveurs[0] // the project's deployment is the truth: changed on its tab, it shows here too
-	if l, err := lireServeurs(); err == nil {
-		for _, x := range l {
-			if x.ID == v.Serveur {
-				v.ServeurNom = x.Nom
-			}
-		}
 	}
 	v.ServeurTache = r.Preparation != nil && tacheEnCoursID(r.Preparation.Tache) || tacheEnCoursID(r.Premier)
 	rel := s.etatRelais(p.Nom)
@@ -529,4 +717,9 @@ func (s *Serveur) vueMission(m Mission) VueMission {
 		}
 	}
 	return v
+}
+
+// tacheFinieEtat: a Servers task's state that no longer changes.
+func tacheFinieEtat(etat string) bool {
+	return slices.Contains([]string{"finie", "echec", "arretee"}, etat)
 }

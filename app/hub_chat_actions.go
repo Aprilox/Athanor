@@ -47,7 +47,8 @@ type ActionChat struct {
 	// own permission mode ("": the one of Settings). With the name of an existing project: only that deployment.
 	Deploiement *DeploiementDemande `json:"deploiement,omitempty"`
 	Permission  string              `json:"permission,omitempty"`
-	// 3.1, projet: a mission's plan and its permission choice (true: auto), read to fill the New mission form
+	// 3.1, projet: a mission's plan, read to fill the New mission form (its permission choice: Permission; Autonome,
+	// true = auto, as the first 3.1 proposals wrote it)
 	Plan     string `json:"plan,omitempty"`
 	Autonome bool   `json:"autonome,omitempty"`
 	// M295b, projet (a new one): what the owner chose under Edit, never the assistant (lireActionChat drops them):
@@ -101,7 +102,7 @@ of your answer, between <action> and </action>, as JSON, and say in one sentence
 action is a mission: Athanor opens its New mission form filled with what you wrote, the user checks it, changes
 it if they want and launches it. The other actions are a card the user launches or refuses. Nothing runs before
 the user launches it:
-- {"type": "projet", "projet": "the new project's name (letters, digits, spaces, dashes), or the exact name of an existing project", "texte": "what the mission must do, complete, in the user's words", "plan": "the steps the user gave, or empty", "dossier": "its full folder path, or empty: Athanor picks one next to the other projects", "deploiement": {"serveurs": ["the one server the user named, by its name"], "apis": ["the one API key of the vault the user named, by its name"], "url": "the site's address, or empty", "plan": "how to put it online, in the user's words, or empty", "moment": "jalon" (after each milestone) or "livraison" (at delivery, the default)}, "autonome": true only when the user wants its server handled without being asked}: a mission: a project built by its pilot, with at most one server and one API key. "deploiement" only when the request names a server, an API key or an address (a project built on this PC only has none), and never a server or a key the user did not name. With an existing project, the mission becomes its next request;
+- {"type": "projet", "projet": "the new project's name (letters, digits, spaces, dashes), or the exact name of an existing project", "texte": "what the mission must do, complete, in the user's words", "plan": "the steps the user gave, or empty", "dossier": "its full folder path, or empty: Athanor picks one next to the other projects", "deploiement": {"serveurs": ["the servers where the site goes online, by their name"], "autres": ["the project's other servers the user named (a database, a worker…), by their name"], "apis": ["the API keys of the vault the user named, by their name"], "url": "the site's address, or empty", "plan": "how to put it online, in the user's words, or empty", "moment": "jalon" (after each milestone) or "livraison" (at delivery, the default)}, "permission": "auto" when the user wants its server handled without being asked for each change, or "ignorer" only when they ask for full autonomy with no human action at all (they confirm it with Athanor's password), else left out}: a mission: a project built by its pilot, with its servers and API keys; "plan" of "deploiement" says what each server does when there are several. "deploiement" only when the request names a server, an API key or an address (a project built on this PC only has none), and never a server or a key the user did not name. With an existing project, the mission becomes its next request;
 - {"type": "pilote", "projet": "an existing project"}: start the pilot of a project;
 - {"type": "demande", "projet": "an existing project", "titre": "a short title", "texte": "the request or the task, self-contained"}: add a request (a task) to a project's queue, its pilot takes it after the current one;
 - {"type": "remarque", "projet": "an existing project", "texte": "the remark, short and self-contained"}: leave a remark its pilot reads at its next cycle;
@@ -637,7 +638,7 @@ func (s *Serveur) cartesConversation(conv conversationChat) map[string]CarteActi
 			continue
 		}
 		c := s.carteActionChat(a)
-		if c.Type == "projet" && m.Action == nil {
+		if (c.Type == "projet" || c.Type == "serveur") && m.Action == nil {
 			c.Mission = s.missionProposee(a)
 		}
 		if m.Action != nil { // decided: the card as it was launched or refused
@@ -873,17 +874,23 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 // missionProposee: the New mission form filled with a `projet` proposal of the assistant: its server and key by id
 // when they are known (an unknown name stays as written: the form says so), an existing project by its name.
 func (s *Serveur) missionProposee(a ActionChat) *MissionDemande {
-	d := &MissionDemande{Texte: strings.TrimSpace(a.Texte), Plan: strings.TrimSpace(a.Plan), Projet: strings.TrimSpace(a.Projet), Dossier: strings.TrimSpace(a.Dossier),
-		Autonome: a.Autonome || slices.Contains([]string{"auto", "modifications", "ignorer"}, a.Permission)}
+	d := &MissionDemande{Texte: strings.TrimSpace(a.Texte), Plan: strings.TrimSpace(a.Plan), Projet: strings.TrimSpace(a.Projet), Dossier: strings.TrimSpace(a.Dossier), Mode: "manuel",
+		Serveurs: []string{}, APIs: []string{}}
+	if a.Type == "serveur" { // a task on servers or keys: a mission without a project
+		x := DeploiementDemande{Serveurs: a.Serveurs, APIs: a.APIs}
+		s.nommerDeploiement(&x)
+		d.SansProjet, d.Projet, d.Dossier, d.Serveurs, d.APIs = true, "", "", x.Serveurs, x.APIs
+	}
+	switch {
+	case a.Permission == "ignorer": // full autonomy: the form still asks the owner to confirm it with the password
+		d.Mode = "ignorer"
+	case a.Autonome || a.Permission == "auto" || a.Permission == "modifications":
+		d.Mode = "auto"
+	}
 	if x := a.Deploiement; x != nil {
-		c := *x
+		c := DeploiementDemande{Serveurs: slices.Concat(x.Serveurs, x.Autres), APIs: x.APIs}
 		s.nommerDeploiement(&c)
-		if len(c.Serveurs) > 0 {
-			d.Serveur = c.Serveurs[0]
-		}
-		if len(c.APIs) > 0 {
-			d.API = c.APIs[0]
-		}
+		d.Serveurs, d.Autres, d.APIs = c.Serveurs[:len(x.Serveurs)], c.Serveurs[len(x.Serveurs):], c.APIs
 		d.URL, d.PlanDeploiement, d.Moment = strings.TrimSpace(x.URL), strings.TrimSpace(x.Plan), x.Moment
 	}
 	if p, ok := s.projetLocalChat(d.Projet); ok {

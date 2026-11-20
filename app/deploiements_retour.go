@@ -224,7 +224,7 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 			}
 		}
 		bloc := ""
-		if amont != "" {
+		if amont != "" && (e.Deploiement == nil || !e.Deploiement.sansProxy()) { // another web server serves current: no Caddy site
 			var err error
 			if bloc, err = s.blocCaddyEnv(projet, env, x.id, amont); err != nil {
 				return err

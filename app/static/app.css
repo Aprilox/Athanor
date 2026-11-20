@@ -1744,7 +1744,29 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .mis-cadre .badge.attention { color: var(--attention, inherit); border-color: currentColor; }
 .accueil-actions { gap: 10px; flex-wrap: wrap; }
 .nm form { display: flex; flex-direction: column; gap: 12px; }
+/* the form uses the width: the mission on the left, its servers and keys on the right; one column below 1000 px */
+.nm-colonnes { display: grid; grid-template-columns: 1fr; gap: 16px 28px; align-items: start; }
+@media (min-width: 1000px) { .nm-colonnes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.nm-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.nm-col textarea { width: 100%; }
+.nm-liste { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.nm-choix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.nm-choix > label { flex: 1 1 14em; min-width: 0; }
+.nm-cat { margin-top: 4px; }
+.nm-projet-reglages { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.mis-machines { display: flex; flex-direction: column; gap: 4px; }
+.mis-machine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mis-bilan { white-space: pre-line; }
+.nm fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0; min-width: 0; }
 .nm .nm-mode { border: 0; padding: 0; margin-top: 8px; }
+.nm fieldset label.radio { display: flex; gap: 8px; align-items: flex-start; margin: 3px 0; }
 .nm .nm-mode label.radio { display: flex; gap: 8px; align-items: flex-start; }
 .nm #nm-en-ligne { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 @media (max-width: 600px) { .mis-liens { grid-template-columns: 1fr; } .mis-liens dt { margin-top: 4px; } }
+
+/* Manage: everything in view, the settings and GitHub on the left, the rest on the right; one column below 1000 px */
+.gestion-colonnes { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@media (min-width: 1000px) { .gestion-colonnes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.gestion-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.gestion-col > .bloc { margin: 0; }
+.gestion-large { grid-column: 1 / -1; margin: 0; }

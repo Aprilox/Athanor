@@ -29,6 +29,7 @@ type donneesPreparation struct {
 	URL, Protection string   // the site's address and its protection
 	DNS             string   // the provider holding the host's zone, its token given ("" none)
 	APIs, ARemplir  []string // names of the vault entries given, and of those the owner has still to fill
+	Site, Autres    []string // names of the servers where the site goes online, and of the project's other servers
 	Plan            string   // the deployment's plan, in the owner's words
 	Demande         string   // the project's request
 	Accord          bool     // a production is submitted to the owner before it first goes online
@@ -41,10 +42,14 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 	b.WriteString(d.Entete + ": " + d.URL + ", protection " + d.Protection + ".\n" +
 		"Prepare these servers now, while the Studio builds the project, so that each delivery then only deploys it. " +
 		"Standard list, adapted to the project's plan below (skip what it does not need): the system packages and runtime it needs; " +
-		"nginx or an equivalent web server as reverse proxy; a dedicated system user; the site's folder; the TLS certificate of " +
+		"the web server the deployment plan names (nginx, Apache…), else Caddy, which Athanor's engine writes the sites of (never both on the same ports); a dedicated system user; the site's folder; the TLS certificate of " +
 		"the host; the firewall (SSH, HTTP and HTTPS only). Do not deploy the application itself.\n")
 	if d.Accord {
 		b.WriteString(phraseAccordProduction)
+	}
+	if len(d.Autres) > 0 {
+		b.WriteString("Servers: the site goes online on " + strings.Join(d.Site, ", ") + "; the project's other servers (" + strings.Join(d.Autres, ", ") +
+			") are never deployed to: give each the role the plan below says (a database, a worker…) and link them to the site's servers.\n")
 	}
 	if d.DNS != "" {
 		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given.\n")
@@ -98,7 +103,7 @@ func fournisseurDeploiement(e Environnement, l []Fournisseur) (Fournisseur, bool
 // briefPreparationProjet: the preparation brief of p's deployment e.
 func (s *Serveur) briefPreparationProjet(p Projet, e Environnement) string {
 	d := donneesPreparation{Entete: "Project \"" + p.Nom + "\"", URL: e.URL, Protection: e.Protection, Plan: e.Plan,
-		Accord: modeProjet(p.Nom) != "ignorer"}
+		Accord: modeProjet(p.Nom) != "ignorer", Site: nomsServeurs(e.Serveurs), Autres: nomsServeurs(e.Autres)}
 	if s.coffre != nil {
 		for _, x := range s.coffre.Liste() {
 			if slices.Contains(e.APIs, x.ID) {
@@ -127,7 +132,7 @@ func (s *Serveur) preparerProjet(p Projet) {
 	if len(e.Serveurs) == 0 || e.Moment == "" || !planPret(p) || projetBloque("dev", p.Nom) != "" {
 		return
 	}
-	serveurs := slices.Sorted(slices.Values(e.Serveurs))
+	serveurs := slices.Sorted(slices.Values(e.tousServeurs())) // a server added to the others is prepared too
 	h := sha256.Sum256([]byte(strings.Join(serveurs, ",") + "\x00" + e.URL + "\x00" + e.Plan))
 	r, prep := lireRelais()[p.Nom], PreparationRelais{Empreinte: hex.EncodeToString(h[:12])}
 	if r.Preparation != nil && r.Preparation.Empreinte == prep.Empreinte {
@@ -160,7 +165,10 @@ func briefPremierDeploiement(url, pour string, p Projet, head string) string {
 		"its work is ready to go online and its site has no deployment method yet. Propose one plan whose step is deployer " +
 		"(commit " + head + ", source artefact; the method and the published folder from the project's files: " +
 		"statique for a static site, compose when it has a compose file), then apply it once accepted. Athanor then deploys " +
-		"each later milestone or delivery itself with that method.\n"
+		"each later milestone or delivery itself with that method. Web server: Athanor's engine writes a Caddy site by default; when " +
+		"the deployment plan names another web server (nginx, Apache…), set it up on the servers yourself to serve the site's folder " +
+		"current release (statique, its published folder inside) or to proxy to the published port (compose), and give deployer proxy aucun: never install Caddy " +
+		"against the owner's plan.\n"
 }
 
 // tacheEnCoursID: the Servers task id exists and has not ended.
@@ -199,7 +207,7 @@ func (s *Serveur) premierDeploiementProjet(p Projet, forcee bool) (TacheServeurs
 	if err != nil || !reCommitComplet.MatchString(head) {
 		return TacheServeurs{}, erreurEntree("the project has no commit to deploy")
 	}
-	brief := briefPremierDeploiement(e.URL, "", p, head)
+	brief := briefPremierDeploiement(e.URL, "", p, head) + "The site's folder on the servers: " + baseDeploiement(p.Nom, env) + " (its current release: " + baseDeploiement(p.Nom, env) + "/current).\n"
 	if modeProjet(p.Nom) != "ignorer" { // M310d: the first deployment is what puts a production online: the agent judges it here too
 		b, _ := os.ReadFile(p.Demande())
 		brief += phraseAccordProduction + "Deployment plan (the owner's words):\n" + couper(strings.TrimSpace(e.Plan), 1500) + "\n" +
@@ -280,4 +288,18 @@ func (s *Serveur) apiPreparerDeploiement(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.ecrireJSON(w, map[string]any{"tache": t, "relais": s.etatRelais(projet)})
+}
+
+// nomsServeurs: the inventory names of ids (an id the inventory no longer knows stays as it is).
+func nomsServeurs(ids []string) []string {
+	l, _ := lireServeurs()
+	noms := []string{}
+	for _, id := range ids {
+		n := id
+		if i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id }); i >= 0 {
+			n = l[i].Nom
+		}
+		noms = append(noms, n)
+	}
+	return noms
 }

@@ -48,6 +48,20 @@ The instructions:
 %s
 >>>`
 
+const consigneAmeliorerServeurs = `You improve a plan for servers, written by a user for an autonomous AI operator (Claude, driven by a tool called Athanor) that sets up and links servers over SSH.
+Rewrite the plan so that it is clear, complete and actionable, WITHOUT changing what the user wants:
+- Keep every server, role, software, version, port, domain, link and constraint the user gave. Never contradict or drop them; never invent an address, a password or a key.
+- Structure it: one short section per server or role (what it runs, what it opens to whom), then how they are linked (which one reaches which, on which port), then the checks that say it works.
+- Make the implicit explicit (the web server, the firewall, the users, backups, monitoring) only as "(suggestion)" so the user can spot it. Do not add scope the plan does not call for.
+- Plain Markdown with short headings and bullet lists, about 400 words at most.
+- Write in the same language as the plan.
+- Output ONLY the improved plan: no preamble, no comment, no code fence around it.
+
+The plan:
+<<<
+%s
+>>>`
+
 // one rewrite at a time: each one is a Claude session on the user's quota
 var ameliorationEnCours sync.Mutex
 
@@ -82,6 +96,9 @@ func (s *Serveur) apiAmeliorerDemande(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	consigne := strings.Replace(consigneAmeliorer, "%s", strings.TrimSpace(c.Texte), 1)
+	if c.Genre == "serveurs" {
+		consigne = strings.NewReplacer("%s", strings.TrimSpace(c.Texte)).Replace(consigneAmeliorerServeurs)
+	}
 	if c.Genre == "agent" {
 		// one pass over the template: a "%s" typed by the user is never taken for a placeholder
 		consigne = strings.NewReplacer("%n", court(strings.TrimSpace(c.Nom), 40), "%d", court(strings.TrimSpace(c.Description), 400),

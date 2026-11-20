@@ -21,6 +21,7 @@ type argsDeploiementOutil struct {
 	Source     string `json:"source,omitempty"`
 	Dossier    string `json:"dossier,omitempty"`
 	Construire string `json:"construire,omitempty"`
+	Proxy      string `json:"proxy,omitempty"`
 	Commit     string `json:"commit,omitempty"`
 }
 
@@ -36,6 +37,7 @@ func init() {
 			"source":     parmi("artefact: the commit archived on this PC and sent; git: each server fetches it with the deployment key", "artefact", "git"),
 			"dossier":    map[string]any{"type": "string", "maxLength": maxDossierPublie, "description": "The published folder (statique), the compose file's folder or the manifests' folder (k3s), relative to the repository; empty: its root"},
 			"construire": schemaTexte("A build command run on this PC in a checkout of the commit before the archive (artefact source only)"),
+			"proxy":      parmi("caddy (the default): Athanor writes and reloads the site's Caddy block; aucun: the deployment plan names another web server (nginx, Apache…): you set it up once to serve the site's folder current release (statique) or to proxy to the published port (compose), Athanor only switches the versions", "caddy", "aucun"),
 			"commit":     schemaTexte("The full commit hash"), "classe": classe}, "methode", "source", "commit"),
 		Faire: faireOutilDeploiement("deployer")}
 	outilsHub["revenir_version"] = OutilHub{Description: "Switch your task's site back to the version served before the last deployment, then check it. A step of an accepted plan only.",
@@ -59,7 +61,7 @@ func classerDeploiement(outil string, brut json.RawMessage) (Classe, string, arg
 	if !reCommitComplet.MatchString(a.Commit) {
 		return 0, "", a, errors.New("commit must be the full commit hash (40 hexadecimal characters, git rev-parse HEAD)")
 	}
-	if err := validerConfigDeploiement(ConfigDeploiement{a.Methode, a.Source, a.Dossier, a.Construire}); err != nil {
+	if err := validerConfigDeploiement(ConfigDeploiement{a.Methode, a.Source, a.Dossier, a.Construire, a.Proxy}); err != nil {
 		return 0, "", a, err
 	}
 	c, raison := ClasseChangement, "deploys commit "+a.Commit[:12]+" to the site"
@@ -117,7 +119,7 @@ func faireOutilDeploiement(nom string) func(*Serveur, SessionHub, json.RawMessag
 		ctx := s.contexteSession(x.Hache)
 		var d Deploiement
 		if nom == "deployer" {
-			d, err = s.deployer(ctx, projet, c.Env, c.Commit, OptionsDeploiement{Config: &ConfigDeploiement{c.Methode, c.Source, c.Dossier, c.Construire}, Auteur: "agent", Accorde: true})
+			d, err = s.deployer(ctx, projet, c.Env, c.Commit, OptionsDeploiement{Config: &ConfigDeploiement{c.Methode, c.Source, c.Dossier, c.Construire, c.Proxy}, Auteur: "agent", Accorde: true})
 		} else {
 			d, err = s.revenir(ctx, projet, c.Env, "agent", "")
 		}

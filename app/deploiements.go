@@ -43,7 +43,13 @@ type ConfigDeploiement struct {
 	Source     string `json:"source"`               // artefact (sent by SFTP) | git (fetched by the server, M132)
 	Dossier    string `json:"dossier,omitempty"`    // the published folder, relative to the repository ("" = its root)
 	Construire string `json:"construire,omitempty"` // a build command run on this PC before the archive (M135)
+	// the site's web server: "" Caddy (Athanor writes its site block); "aucun": another one the deployment plan names
+	// (nginx, Apache…), set up by the agent to serve the folder's current release; Athanor only switches versions
+	Proxy string `json:"proxy,omitempty"`
 }
+
+// sansProxy: Athanor writes no Caddy site for this deployment (another web server serves it).
+func (c ConfigDeploiement) sansProxy() bool { return c.Proxy == "aucun" }
 
 // Deploiement: one entry of an environment's history.
 type Deploiement struct {
@@ -95,6 +101,10 @@ func validerConfigDeploiement(c ConfigDeploiement) error {
 		return errors.New("construire needs the artefact source: the build runs on this PC and its output is sent")
 	case len([]rune(c.Construire)) > maxCommande || strings.ContainsFunc(c.Construire, func(r rune) bool { return r < ' ' }):
 		return fmt.Errorf("construire: one line of %d characters at most", maxCommande)
+	case c.Proxy != "" && c.Proxy != "caddy" && c.Proxy != "aucun":
+		return errors.New("proxy: caddy (Athanor writes the site's Caddy block) or aucun (another web server, set up by you, serves the release)")
+	case c.Proxy == "aucun" && c.Methode == "k3s":
+		return errors.New("proxy: aucun is for statique and compose")
 	}
 	return nil
 }
@@ -243,6 +253,11 @@ t=$(mktemp "$b/.site.XXXXXX") && cat > "$t" && chmod 644 "$t" && mv -f -- "$t" "
 grep -qxF 'import /etc/caddy/sites/*' ` + caddyfileServeur + ` || printf '\nimport /etc/caddy/sites/*\n' >> ` + caddyfileServeur + ` || { annuler; exit 1; }
 o=$(caddy validate --config ` + caddyfileServeur + ` --adapter caddyfile 2>&1) || { annuler; echo "caddy validate refused the configuration:"; printf '%s\n' "$o" | tail -n 4; exit 4; }
 echo ready`
+
+// scriptPreparerSansProxy (same arguments as scriptPreparer): the release only; the web server the deployment plan
+// names (nginx…) serves $3/current, set up once by the agent: nothing of Caddy is checked nor written.
+const scriptPreparerSansProxy = `a=$1 b=$3 r=$3/releases/$4
+` + extraireVersion + `echo ready`
 
 // scriptAnnulerVersion ($1 folder, $2 version, $3 host): a release prepared on this server while another server failed.
 const scriptAnnulerVersion = `b=$1 r=$1/releases/$2 site=/etc/caddy/sites/$3.caddy
@@ -495,6 +510,9 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	annulerTout := func() {
 		for _, x := range prets {
 			annuler := commeRoot(scriptAnnulerVersion, base, d.Version, hote)
+			if cfg.sansProxy() && cfg.Methode == "statique" {
+				annuler = commeRoot(`rm -rf -- "$1/releases/$2"`, base, d.Version)
+			}
 			switch cfg.Methode {
 			case "compose":
 				annuler = commeRoot(scriptAnnulerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), hote)
@@ -506,7 +524,9 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	}
 	for _, id := range d.Serveurs {
 		script, args, entree := scriptPreparerCompose, []string{somme, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), genere, hote}, envCompose
-		if cfg.Methode == "statique" {
+		if cfg.Methode == "statique" && cfg.sansProxy() {
+			script, args, entree = scriptPreparerSansProxy, []string{somme, base, d.Version, cfg.Dossier, hote}, ""
+		} else if cfg.Methode == "statique" {
 			bloc, err := s.blocCaddyEnv(d.Projet, d.Env, id, racine)
 			if err != nil {
 				annulerTout()
@@ -529,8 +549,8 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			annulerTout()
 			return errMoteur("{0}: {1}", nomServeur(id), refus(r))
 		}
-		bloc := "" // C70: Caddy in front of the first port published on 127.0.0.1, with the protection; none: no site
-		if d.Amont = amontCompose(sortie); d.Amont != "" {
+		bloc := ""                                                             // C70: Caddy in front of the first port published on 127.0.0.1, with the protection; none: no site
+		if d.Amont = amontCompose(sortie); d.Amont != "" && !cfg.sansProxy() { // another web server proxies to it: no Caddy site
 			if bloc, err = s.blocCaddyEnv(d.Projet, d.Env, id, d.Amont); err != nil {
 				annulerTout()
 				return errMoteur("{0}: {1}; nothing was switched", nomServeur(id), err)
@@ -551,7 +571,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	}
 	d.Bascule = true
 	recharger := scriptRecharger
-	if cfg.Methode == "k3s" { // the pods already run the release
+	if cfg.Methode == "k3s" || cfg.sansProxy() { // the pods already run the release; another web server follows current
 		recharger = scriptNettoyer
 	}
 	for _, x := range prets {

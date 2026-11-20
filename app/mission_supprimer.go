@@ -78,6 +78,7 @@ func (s *Serveur) apercuSuppression(m Mission) ApercuSuppression {
 	}
 	p, non := s.projetSupprimable(m)
 	a.Projet, a.Dossier, a.DossierNon, a.DossierOK = p.Nom, p.Dossier, non, non == ""
+	a.Arrete = m.Projet == "" && tacheEnCoursID(m.Tache)
 	if m.Projet != "" {
 		e := s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)]
 		a.Arrete = p.PiloteActif()
@@ -113,6 +114,10 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 		return nil, err
 	}
 	retire := []string{"mission " + id}
+	if m.Projet == "" && tacheEnCoursID(m.Tache) { // a servers mission still working: its task stopped first
+		s.arreterTache(m.Tache)
+		retire = append(retire, "task "+m.Tache+" stopped")
+	}
 	if p, ok := s.projetLocalChat(m.Projet); ok && m.Projet != "" && (p.PiloteActif() || tacheEnCoursID(lireRelais()[p.Nom].Premier)) {
 		// a mission of 3.1 still working: deleted cleanly, its pilot and its server tasks stopped first
 		if err := s.arreterProjet(p, "arreter"); err != nil {
