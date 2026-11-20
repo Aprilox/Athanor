@@ -50,6 +50,8 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "The version that was online before the last one stays on the server: it comes back in a few seconds, then is checked again.": "La version qui était en ligne avant la dernière reste sur le serveur : elle revient en quelques secondes, puis est revérifiée.",
+  "Put the previous version back online": "Remettre en ligne la version précédente",
   "Servers: the deployment of {0} needs you on {1}: {2}": "Serveurs : le déploiement de {0} a besoin de vous sur {1} : {2}",
   "Servers: the agent needs you on {0}: {1}": "Serveurs : l'agent a besoin de vous sur {0} : {1}",
   "What the AI types on this server": "Ce que l'IA tape sur ce serveur",
@@ -1096,6 +1098,8 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "The version that was online before the last one stays on the server: it comes back in a few seconds, then is checked again.": "La versión que estaba en línea antes de la última sigue en el servidor: vuelve en unos segundos y luego se comprueba de nuevo.",
+  "Put the previous version back online": "Volver a publicar la versión anterior",
   "Servers: the deployment of {0} needs you on {1}: {2}": "Servidores: el despliegue de {0} le necesita en {1}: {2}",
   "Servers: the agent needs you on {0}: {1}": "Servidores: el agente le necesita en {0}: {1}",
   "What the AI types on this server": "Lo que la IA escribe en este servidor",
@@ -2110,6 +2114,8 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "The version that was online before the last one stays on the server: it comes back in a few seconds, then is checked again.": "Die Version, die vor der letzten online war, bleibt auf dem Server: Sie ist in wenigen Sekunden zurück und wird dann erneut geprüft.",
+  "Put the previous version back online": "Die vorherige Version wieder online stellen",
   "Servers: the deployment of {0} needs you on {1}: {2}": "Server: Die Bereitstellung von {0} braucht Sie auf {1}: {2}",
   "Servers: the agent needs you on {0}: {1}": "Server: Der Agent braucht Sie auf {0}: {1}",
   "What the AI types on this server": "Was die KI auf diesem Server eingibt",
@@ -3118,6 +3124,8 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "The version that was online before the last one stays on the server: it comes back in a few seconds, then is checked again.": "La versione che era online prima dell'ultima resta sul server: torna in pochi secondi, poi viene ricontrollata.",
+  "Put the previous version back online": "Rimetti online la versione precedente",
   "Servers: the deployment of {0} needs you on {1}: {2}": "Server: la distribuzione di {0} ha bisogno di te su {1}: {2}",
   "Servers: the agent needs you on {0}: {1}": "Server: l'agente ha bisogno di te su {0}: {1}",
   "What the AI types on this server": "Cosa digita l'IA su questo server",
@@ -4126,6 +4134,8 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "The version that was online before the last one stays on the server: it comes back in a few seconds, then is checked again.": "A versão que estava online antes da última fica no servidor: volta em poucos segundos e depois é verificada de novo.",
+  "Put the previous version back online": "Voltar a pôr online a versão anterior",
   "Servers: the deployment of {0} needs you on {1}: {2}": "Servidores: a implementação de {0} precisa de si em {1}: {2}",
   "Servers: the agent needs you on {0}: {1}": "Servidores: o agente precisa de si em {0}: {1}",
   "What the AI types on this server": "O que a IA escreve neste servidor",

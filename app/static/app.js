@@ -5508,7 +5508,9 @@ function blocDeploiements(nom, e, liste, distant) {
   };
   return `<div class="env-deploi" data-env-deploi><h4>${t("Deployments")}</h4>
     ${liste.length ? `<ul class="env-deploi-liste">${liste.map(ligne).join("")}</ul>` : `<p class="muet petit">${t("Nothing deployed yet.")}</p>`}
-    ${!distant && e.deploiement && liste.length > 1 && !avantBascule(liste[0]) ? `<button type="button" class="btn btn-petit" data-env-revenir>${t("Go back to the previous version")}</button>` : ""}</div>`;
+    ${!distant && e.deploiement && liste.filter((d) => d.bascule || d.etat === "ok").length > 1 && !avantBascule(liste[0]) // two versions put online at least: one to go back to
+      ? `<div class="env-revenir"><button type="button" class="btn btn-petit" data-env-revenir>${t("Put the previous version back online")}</button>
+        <p class="petit muet m0">${t("The version that was online before the last one stays on the server: it comes back in a few seconds, then is checked again.")}</p></div>` : ""}</div>`;
 }
 // M137: an environment's health (checked every 15 minutes by default) and its incident, if any
 const ETATS_SANTE = { ok: ["ok", "Healthy"], alerte: ["alerte", "Warning"], incident: ["croix", "Incident"] };
@@ -5575,7 +5577,7 @@ $("#page").addEventListener("click", async (ev) => {
     c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
     const d = r.deploiement || {};
     toast(d.etat === "ok" ? t("{0} serves its previous version again.", [nom]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
-  } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Go back to the previous version"); }
+  } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Put the previous version back online"); }
 });
 // the project's GitHub deployment key, made on demand (M119)
 function blocCleDeploiement(sites, distant) {
