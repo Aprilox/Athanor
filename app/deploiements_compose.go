@@ -93,7 +93,7 @@ func composeGenere(depot, commit, dossier string) (string, error) {
 	return base64.StdEncoding.EncodeToString([]byte(y)), nil
 }
 
-// fichierEnvCompose: the .env of the environment, NAME='value' for each code entry granted to it (Compose
+// fichierEnvCompose: the .env of the deployment, NAME='value' for each code entry granted to it (Compose
 // reads a single-quoted value as is). A value with a quote or a line break is refused, never cut.
 func (s *Serveur) fichierEnvCompose(projet, env string) (string, error) {
 	if s.acces == nil || s.coffre == nil {
@@ -104,9 +104,17 @@ func (s *Serveur) fichierEnvCompose(projet, env string) (string, error) {
 		entrees[e.ID] = e
 	}
 	lignes := map[string]string{}
-	for _, a := range s.acces.Projet(projet).Acces {
+	pa := s.acces.Projet(projet)
+	// a project's one deployment (internal name "site", not one of the three older environments) also receives
+	// the keys given to the project, stored under the project's own environment; its own key wins
+	herite := !slices.Contains(envsProjet, env)
+	for _, a := range pa.Acces {
 		e, ok := entrees[a.Entree]
-		if !ok || a.Env != env || e.Portee != "code" {
+		propre := a.Env == env
+		if !ok || e.Portee != "code" || !propre && (!herite || a.Env != pa.Env) {
+			continue
+		}
+		if _, deja := lignes[a.Variable]; deja && !propre {
 			continue
 		}
 		v, err := s.coffre.ValeurPour(e.ID, env)

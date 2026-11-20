@@ -109,6 +109,21 @@ func TestFichierEnvCompose(t *testing.T) {
 	if v, err := s.fichierEnvCompose("m134-env", "dev"); err != nil || v != "API_KEY='cle-api'\nDB_PASSWORD='p@ss $HOME `x`'\n" {
 		t.Errorf(".env of dev: %q %v", v, err)
 	}
+	// a project's one deployment has the internal name "site": it receives the keys given to the project,
+	// which are stored under the project's own environment; a key given to that deployment itself wins
+	if v, err := s.fichierEnvCompose("m134-env", "site"); err != nil || v != "API_KEY='cle-api'\nDB_PASSWORD='p@ss $HOME `x`'\n" {
+		t.Errorf(".env of the project's one deployment: %q %v", v, err)
+	}
+	if err := s.acces.DefinirEnvironnement("m134-env", "site", Environnement{}); err != nil {
+		t.Fatal(err)
+	}
+	accorder("api-site", "cle-du-site", "code", "site", "API_KEY")
+	if v, err := s.fichierEnvCompose("m134-env", "site"); err != nil || v != "API_KEY='cle-du-site'\nDB_PASSWORD='p@ss $HOME `x`'\n" {
+		t.Errorf(".env of the deployment with its own key: %q %v", v, err)
+	}
+	if v, err := s.fichierEnvCompose("m134-env", "staging"); v != "" || err != nil {
+		t.Errorf("an older environment keeps its own keys only: %q %v", v, err)
+	}
 	accorder("quote", "l'apostrophe", "code", "dev", "QUOTE")
 	if v, err := s.fichierEnvCompose("m134-env", "dev"); err == nil || v != "" || !strings.Contains(err.Error(), "QUOTE") || strings.Contains(err.Error(), "apostrophe") {
 		t.Errorf("value with a quote: %q %v", v, err)
