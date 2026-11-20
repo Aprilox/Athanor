@@ -123,6 +123,18 @@ function toast(msg, genre = "", duree = 6000) {
   el.textContent = msg; el.className = "toast " + genre; el.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => (el.hidden = true), duree);
 }
+// a folder Windows will not move: the refusal names the programs holding its files (a preview server Claude left
+// running, an editor), and the stoppable ones are stopped on the owner's yes, then the deletion is tried again
+async function supprimerAvecBloquants(corps) {
+  try { const r = await api("projets/gestion", "POST", corps); const m = messageDe(r); if (m) toast(m, "ok"); return r; }
+  catch (e) {
+    if (e.message === t("Locked")) return null;
+    const l = ((e.data && e.data.bloquants) || []).filter((b) => b.arretable);
+    if (!l.length) { toast(e.message, "erreur"); return null; }
+    if (!(await confirmer(e.message, { titre: t("Programs are using the project's files"), ok: t("Stop them and delete"), danger: true }))) return null;
+    return action(api("projets/gestion", "POST", { ...corps, arreter: l.map((b) => b.pid) }));
+  }
+}
 async function action(promesse, genreOk = "ok") {
   try { const r = await promesse; const m = messageDe(r); if (m) toast(m, genreOk); return r; }
   catch (e) { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; }
@@ -3047,7 +3059,7 @@ async function gererProjet(act, nom, bouton) {
     if (!corps.mode) return;
   }
   if (bouton) bouton.disabled = true;
-  const r = await action(api("projets/gestion", "POST", corps));
+  const r = act === "supprimer" ? await supprimerAvecBloquants(corps) : await action(api("projets/gestion", "POST", corps));
   if (bouton) bouton.disabled = false;
   if (!r) return;
   if (corps.action === "verifier") {
@@ -5741,7 +5753,7 @@ function ficheCoffre(x) {
 function carteCoffre(x) {
   const secret = x.famille === "secret", infra = x.portee === "infra";
   return `<div class="bloc carte-coffre" data-coffre-id="${h(x.id)}">
-    <div class="cp-tete"><b class="cp-nom" title="${h(x.nom)}">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Server key: opens only with your password") : t("Project key: reopens alone on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
+    <div class="cp-tete"><b class="cp-nom" title="${h(x.nom)}">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Used only by Athanor, never shown to Claude nor to your app; opens only with your password") : t("Read by Claude and your app when a project is given it; reopens on its own on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
       <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">${ic("actions")}</summary><div class="menu-coffre-liste">
         ${secret && TESTABLES_COFFRE.has(x.type) && !aFiche(x) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
@@ -5752,6 +5764,10 @@ function carteCoffre(x) {
     <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t(x.type === "mot_de_passe" ? "Password kept for a server" : "Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
 }
+// the scope in detail: who sees the value (both scopes can be named with @)
+const aidePortee = () => `<p class="m0">${t("{0}: {1}", [`<b>${t("code — read by Claude and your app")}</b>`, t("the keys your project uses in its own code (Stripe, OpenAI, SMTP…). Given to a project, the value goes into its secrets while Claude builds it, and to the app once deployed. It reopens on its own when Athanor starts.")])}</p>
+  <p class="m0">${t("{0}: {1}", [`<b>${t("infra — used only by Athanor, never shown")}</b>`, t("the keys that manage your servers and accounts (a server's SSH key, a Cloudflare token, a GitHub deployment key). Neither Claude nor your app ever receives the value: when Claude needs to act (connect to a server, change a DNS record), it asks Athanor, which does it with the key and writes it in the audit log. It opens only with Athanor's password.")])}</p>
+  <p class="m0 muet">${t("Either way you can name the key with @: the scope only decides who sees its value. Does your app need it in its code? Then code. Is it to manage a server or an account? Then infra. The type you choose proposes the right one.")}</p>`;
 // the add/edit form: a secret's field stays empty ("•••• saved"), typing in it replaces the value
 function formulaireCoffre() {
   const x = cof.form.id && entreeCoffre(cof.form.id);
@@ -5764,8 +5780,10 @@ function formulaireCoffre() {
     ${(etat.categoriesAPI || []).length ? `<label class="champ"><span>${t("Category")}</span><select id="cof-categorie">${optionsCategories(x ? x.categorie : cof.cat, "No category")}</select></label>` : ""}
     ${secret ? `<div class="cof-choix">
       <label class="champ"><span>${t("Type")}</span><select id="cof-type">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select></label>
-      <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — your projects' keys")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — your servers and accounts")}</option></select></label>
-    </div>${mdp ? "" : `<p class="muet petit">${t("The infra scope needs a password for Athanor.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}` : ""}
+      <div class="champ-bloc"><div class="champ-titre"><span id="cof-portee-nom">${t("Scope")}</span><button type="button" class="btn-info" data-cof-portee-info aria-expanded="false" aria-controls="cof-portee-aide" aria-label="${h(t("What does the scope change?"))}" title="${h(t("What does the scope change?"))}">i</button></div>
+        <select id="cof-portee" aria-labelledby="cof-portee-nom" aria-describedby="cof-portee-aide"><option value="code">${t("code — read by Claude and your app")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — used only by Athanor, never shown")}</option></select></div>
+    </div>
+    <div class="cof-portee-aide petit" id="cof-portee-aide" hidden>${aidePortee()}</div>${mdp ? "" : `<p class="muet petit">${t("The infra scope needs a password for Athanor.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}` : ""}
     ${secret ? `<div id="cof-champs-zone">${champsCoffre(type, x)}</div>` : ""}
     <label class="champ"><span>${t("Note for Claude")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
     <label class="champ"><span>${t("Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
@@ -5787,7 +5805,7 @@ function formulaireColle() {
     <label class="ligne m0"><input type="checkbox" class="cof-garder" checked aria-label="${h(t("Keep"))}"><b>${h(p.famille === "secret" ? t("Secret") : t("Variable"))}</b></label>
     <input type="text" class="cof-p-nom" maxlength="100" spellcheck="false" value="${h(p.nom)}" aria-label="${h(t("Name"))}">
     ${p.famille === "secret" ? `<select class="cof-p-type" aria-label="${h(t("Type"))}">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === p.type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select>
-    <select class="cof-p-portee" aria-label="${h(t("Scope"))}"><option value="code">code</option><option value="infra"${p.portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>infra</option></select>` : ""}
+    <select class="cof-p-portee" aria-label="${h(t("Scope"))}"><option value="code">${t("code — read by Claude and your app")}</option><option value="infra"${p.portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — used only by Athanor, never shown")}</option></select>` : ""}
     <code class="petit">${h(p.indice)}</code>
     <input type="text" class="cof-p-note" maxlength="2000" placeholder="${h(t("Note for Claude"))}" aria-label="${h(t("Note for Claude"))}">
     ${p.famille === "secret" ? `<button type="button" class="btn btn-petit" data-cof-p-tester>${t("Test")}</button><div class="petit cof-resultat" aria-live="polite" hidden></div>` : ""}
@@ -5851,9 +5869,10 @@ pages.coffre = async () => {
 const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "coffre") return;
-  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-env], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-fiche], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer], [data-cof-categories], [data-cof-cat-supprimer], [data-cof-cat-sugg]");
+  const b = ev.target.closest("[data-cof-portee-info], [data-cof-onglet], [data-cof-ajouter], [data-cof-env], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-fiche], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer], [data-cof-categories], [data-cof-cat-supprimer], [data-cof-cat-sugg]");
   if (!b) return;
   const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
+  if (d.cofPorteeInfo !== undefined) { const z = $("#cof-portee-aide"); z.hidden = !z.hidden; b.setAttribute("aria-expanded", String(!z.hidden)); return; }
   if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = cof.colle = null; return rendrePage(); }
   if (d.cofCategories !== undefined) { cof.cats = !cof.cats; cof.form = cof.colle = null; return rendreCoffre(cof.cats ? "cof-cat-nouvelle" : ""); }
   if (d.cofCatSugg) { if (await action(api("coffre/categories", "POST", { nom: d.cofCatSugg }))) rendreCoffre("cof-cat-nouvelle"); return; }
@@ -6883,7 +6902,8 @@ function ongletsConnexion() {
     <span class="espace"></span>
     <button type="button" role="tab" class="term-onglet-ia" aria-selected="${vue === "ia"}" data-term-onglet="ia">${t("Assistant")}</button></div>`;
 }
-function majOnglets() { const z = $(".term-tabs"); if (z) z.outerHTML = ongletsConnexion(); }
+// a tab's name being typed is never drawn over by a refresh (the assistant's tasks): its end draws the tabs (force)
+function majOnglets(force) { const z = $(".term-tabs"); if (z && (force || !(document.activeElement && document.activeElement.matches(".term-tab-champ")))) z.outerHTML = ongletsConnexion(); }
 // the terminal shown changes: the one left keeps its session and its reader, only its screen leaves the page
 function montrerSsh(cle) {
   const avant = ong.liste.find((o) => o.cle === ong.ssh), cible = ong.liste.find((o) => o.cle === cle);
@@ -6968,7 +6988,7 @@ function renommerOnglet(o) { // in place: Enter keeps, Escape leaves
   b.outerHTML = `<input type="text" class="term-tab-champ" maxlength="40" value="${h(nomOnglet(o))}" aria-label="${h(t("Name of this tab"))}">`;
   const c = $(".term-tab-champ"); c.focus(); c.select();
   let fait = false; // Enter draws the tabs again, which blurs the field: once only
-  const fin = (garder) => { if (fait) return; fait = true; if (garder && c.value.trim()) o.nom = c.value.trim(); majOnglets(); };
+  const fin = (garder) => { if (fait) return; fait = true; if (garder && c.value.trim()) o.nom = c.value.trim(); majOnglets(true); };
   c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fin(true); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); } });
   c.addEventListener("blur", () => fin(true), { once: true });
 }
@@ -7411,7 +7431,7 @@ function majIA() {
 function ongletTerminal(o) {
   sf.onglet = o; const pg = $(".terminal-page"); if (pg) pg.dataset.onglet = o;
   document.querySelectorAll(".term-onglets [data-term-onglet]").forEach((b) => { b.classList.toggle("actif", b.dataset.termOnglet === o); b.setAttribute("aria-selected", b.dataset.termOnglet === o); b.tabIndex = b.dataset.termOnglet === o ? 0 : -1; });
-  if (o === "terminal" && term.x) requestAnimationFrame(() => { term.fit.fit(); term.x.focus(); });
+  if (o === "terminal" && term.x) requestAnimationFrame(() => { term.fit.fit(); focusTerminal(); }); // a field just opened (a tab being renamed) keeps the keyboard
   if (o === "sftp") rendreSftp();
 }
 function basculerCachesSftp() {

@@ -673,7 +673,7 @@ func (s *Serveur) apiRetirerProjet(w http.ResponseWriter, r *http.Request) {
 	if c.Dossier {
 		mode = "dossier"
 	}
-	s.supprimerProjet(w, p, mode)
+	s.supprimerProjet(w, p, mode, nil)
 }
 
 // Small folder browser to pick a project's folder.

@@ -428,6 +428,8 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		Action string `json:"action"`
 		Valeur string `json:"valeur"`
 		Mode   string `json:"mode"`
+		// a deletion's programs to stop first, from the refusal that named them
+		Arreter []int `json:"arreter"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -598,7 +600,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "supprimer":
-		s.supprimerProjet(w, p, c.Mode)
+		s.supprimerProjet(w, p, c.Mode, c.Arreter)
 
 	default:
 		s.erreur(w, http.StatusBadRequest, "Unknown action")

@@ -36,7 +36,7 @@ func mettreALaCorbeille(chemin string) error {
 		fFlags: 0x40 | 0x10 | 0x4 | 0x400 | 0x4000,
 	}
 	if r, _, _ := pSHFileOperationW.Call(uintptr(unsafe.Pointer(&op))); r != 0 {
-		return errors.New("Windows refused (a file in use?)")
+		return errCorbeilleRefus
 	}
 	if op.fAnyOperationsAborted != 0 {
 		return errors.New("cancelled")

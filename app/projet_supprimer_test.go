@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // M299: a project deleted with or without its folder; its deployment, its relay and its settings go with it.
@@ -133,5 +134,50 @@ func TestSupprimerProjetDossier(t *testing.T) {
 	}
 	if _, err := os.Stat(actif.Dossier); err != nil || len(corbeille) != 1 {
 		t.Fatalf("active pilot: the folder went: %v %v", err, corbeille)
+	}
+
+	// a preview server left running holds the folder: the refusal names it (and Explorer, not stoppable); once the
+	// owner confirms, only what holds the folder and may be stopped is, then the folder goes
+	tenu := projet("tenu", filepath.Join(base, "tenu"))
+	vivants := map[int]bool{4242: true, 77: true}
+	ancienBloquants, ancienTuer := programmesBloquants, tuerProgramme
+	t.Cleanup(func() { programmesBloquants, tuerProgramme = ancienBloquants, ancienTuer })
+	programmesBloquants = func(d string) (l []ProgrammeBloquant) {
+		if d == tenu.Dossier && vivants[4242] {
+			l = append(l, ProgrammeBloquant{4242, "Node.js JavaScript Runtime", true})
+		}
+		if d == tenu.Dossier && vivants[77] {
+			l = append(l, ProgrammeBloquant{77, "Windows Explorer", false})
+		}
+		return l
+	}
+	var tues []int
+	tuerProgramme = func(pid int) error { tues = append(tues, pid); vivants[pid] = false; return nil }
+	normale := corbeilleProjet
+	corbeilleProjet = func(d string) error {
+		if d == tenu.Dossier && vivants[4242] {
+			return errCorbeilleRefus
+		}
+		return normale(d)
+	}
+	c, v := appel("POST", "/api/projets/gestion", `{"nom":"tenu","action":"supprimer","mode":"dossier"}`)
+	if bl, _ := v["bloquants"].([]any); c != http.StatusConflict || len(bl) != 2 || reste("tenu") == "" || len(tues) != 0 ||
+		!strings.Contains(strings.Join(func() (l []string) {
+			for _, a := range v["args"].([]any) {
+				l = append(l, a.(string))
+			}
+			return
+		}(), ""), "Node.js JavaScript Runtime (4242)") {
+		t.Fatalf("a held folder: %d %v, stopped %v", c, v, tues)
+	}
+	ancienPause := pauseCorbeille
+	pauseCorbeille = time.Millisecond
+	t.Cleanup(func() { pauseCorbeille = ancienPause })
+	c, v = appel("POST", "/api/projets/gestion", `{"nom":"tenu","action":"supprimer","mode":"dossier","arreter":[4242,77,9999]}`)
+	if c != 200 || !slices.Equal(tues, []int{4242}) || reste("tenu") != "" {
+		t.Fatalf("stop then delete: %d %v, stopped %v, left %s", c, v, tues, reste("tenu"))
+	}
+	if _, err := os.Stat(tenu.Dossier); !os.IsNotExist(err) {
+		t.Errorf("the folder stayed: %v", err)
 	}
 }

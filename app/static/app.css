@@ -1808,3 +1808,10 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .cof-champs legend { padding: 0 4px; font-weight: 600; }
 .cof-champs > p { grid-column: 1 / -1; }
 .cof-champs-vue { overflow-wrap: anywhere; }
+.champ-bloc { margin: 8px 0; }
+.champ-titre { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+.btn-info { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: none; color: var(--muted); font: italic 700 11px/16px Georgia, serif; cursor: pointer; flex: none; }
+.btn-info:hover, .btn-info[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+.cof-portee-aide { display: grid; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 0 6px 6px 0; }
+.champ-bloc select { width: 100%; }
+.cof-p-portee { max-width: 100%; }
