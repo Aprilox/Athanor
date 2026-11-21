@@ -1,6 +1,6 @@
-# Guide de test — Athanor Hub (branche `hub`)
+# Guide de test — Athanor Hub
 
-Ce guide sert à essayer à la main ce que la branche `hub` ajoute à Athanor : le hub (accueil, *Projets*, cloche, Guide), le coffre et les accès, Serveurs, le déploiement des projets et les approbations, E-mail, MCP et Athanor distants. La version est 3.0.0 : elle est prête, mais rien n'est poussé ni publié avant la relecture du propriétaire.
+Ce guide sert à essayer à la main ce qu'Athanor Hub (3.x) ajoute à Athanor : le hub (accueil, *Projets*, cloche, Guide), le coffre et les accès, Serveurs, le déploiement des projets et les approbations, E-mail, MCP et Athanor distants. La version est 3.0.0 : elle est prête, mais rien n'est poussé ni publié avant la relecture du propriétaire.
 
 ## 1. Lancer
 
@@ -65,7 +65,7 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 ### En premier (dix minutes)
 
 - [ ] **Accueil.** L'accueil du hub s'affiche, avec la tuile Studio et vos projets ; la visite d'une ligne montre où ils sont.
-- [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (« v3.1.0 », en haut du menu) est 3.1.0.
+- [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (« v3.1.1 », en haut du menu) est 3.1.1.
 - [ ] **Projets.** Les filtres changent la liste ; un projet en cours dit son jalon ; le lien mène au bon endroit.
 - [ ] **Cloche.** Une alerte (par exemple un serveur injoignable) y apparaît une seule fois et disparaît quand c'est réglé.
 - [ ] **Accès.** *Studio › Accès* d'un projet : cocher une clé puis *Enregistrer les modifications* fait apparaître le badge « N accès » à côté de *Démarrer* ; la phrase du badge dit ce qui est donné.

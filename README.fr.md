@@ -24,7 +24,7 @@
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#la-sécurité-en-bref"><b>Sécurité</b></a> ·
   <a href="docs/FAQ.fr.md"><b>FAQ</b></a> ·
-  <a href="docs/releases/3.1.0.md"><b>Nouveautés</b></a> ·
+  <a href="docs/releases/3.1.1.md"><b>Nouveautés</b></a> ·
   <a href="README.md"><b>English</b></a>
 </p>
 
