@@ -2494,6 +2494,7 @@ function capacitesHub(pv) {
   return [t("Reads your messages and the attached files, and answers."),
     n ? tn(n, "Reads 1 folder of your computer.", "Reads {0} folders of your computer.", [n]) : t("Sees no file of your computer."),
     pv.internet ? t("Searches the web.") : "", ecrit ? t("Changes files in the folders set to “read and write”.") : "",
+    pv.ecriture && !ecrit ? t("Writing is on, but no folder is set to “read and write”: it changes nothing.") : "",
     t("To act, it proposes a card you launch.")].filter(Boolean).join(" ");
 }
 // M196: the folders pointed (checked by the server, hub_chat_dossiers.go), each read only or read and write
@@ -2837,7 +2838,7 @@ const GUIDE = [
   { id: "assistant", titre: "Talk to the home assistant", intro: "The home page is a conversation with an assistant that knows Athanor: ask a question, or say what you want done, in your words. It reads, answers and proposes; you decide.",
     etapes: [
       ["Ask", "Write in the big field of the home page: *Enter* sends, *Shift+Enter* adds a line. The answer comes above, after the earlier messages. *New conversation* starts again: the assistant forgets this one and its powers are switched off.", "#accueil", "Home"],
-      ["What it reads", "Only what you give it: your messages, the files you attach (or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
+      ["What it reads", "Only what you give it: your messages, the files you attach (or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you add with *Folders* under the field, each read only or read and write; without one, it sees no file of your computer. *@* names a project, a server or a vault key."],
       ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
       ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
       ["Missions and cards", "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log."],
@@ -6447,7 +6448,7 @@ pages["nouvelle-mission"] = async () => {
   const serveurs = sv.serveurs || [], cles = serveurs.map((x) => x.cle).filter(Boolean);
   const apis = (cof.entrees || []).filter((e) => !cles.includes(e.id)).sort((a, b) => a.nom.localeCompare(b.nom));
   const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = projets.find((n) => n.toLowerCase() === f.projet.trim().toLowerCase());
-  const pris = [...f.serveurs, ...f.autres], inconnus = [...(gestion ? pris.filter((x) => !serveurs.some((s) => s.id === x)) : []), ...f.apis.filter((x) => !apis.some((a) => a.id === x))];
+  const pris = [...f.serveurs, ...f.autres], srvInconnus = gestion ? pris.filter((x) => !serveurs.some((s) => s.id === x)) : [], clesInconnues = f.apis.filter((x) => !apis.some((a) => a.id === x));
   const avecServeurs = gestion && pris.some((x) => serveurs.some((s) => s.id === x)), recoit = studio && gestion && f.serveurs.some((x) => serveurs.some((s) => s.id === x));
   etat.rp = { reglages: (mis.reglages || []).filter((r) => r.cle !== "permission").map((r) => ({ ...r, propre: f.reglages[r.cle] || "" })) };
   const v = (x) => h(String(x || "")), mdv = { cadrage_global: 25, duree_max_global: 0, ...md, parallele_max: 3, ...(f.modes || {}) };
@@ -6505,7 +6506,9 @@ pages["nouvelle-mission"] = async () => {
         ${apis.length ? `<div class="ligne m0 mis-res-puces" id="nm-cles-choisies" role="group" aria-labelledby="nm-t-coffre">${pucesClesMission()}</div>
         ${distant ? "" : choixAPI("nm-api-q", "Find an API")}`
         : `<p class="muet petit m0">${t("No API key in the vault yet.")}</p>`}</section>
-      ${inconnus.length ? `<p class="attention petit m0" role="alert">${h(t("Not found here, choose again: {0}", [inconnus.join(", ")]))}</p>` : ""}
+      ${srvInconnus.length || clesInconnues.length ? `<p class="attention petit m0" role="alert">${h([srvInconnus.length ? tn(srvInconnus.length, "1 proposed server is not among your servers any more.", "{0} proposed servers are not among your servers any more.", [srvInconnus.length]) : "",
+        clesInconnues.length ? tn(clesInconnues.length, "1 proposed API key is no longer in the vault.", "{0} proposed API keys are no longer in the vault.", [clesInconnues.length]) : ""].filter(Boolean).join(" "))}
+        <button type="button" class="btn btn-petit" data-nm-retirer-inconnus>${t("Remove them")}</button></p>` : ""}
       <p class="petit attention m0" id="nm-erreur" role="alert"${studio || gestion ? " hidden" : ""}>${studio || gestion ? "" : t("Tick Studio project, Server management, or both.")}</p>
       ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer"${studio || gestion ? "" : " disabled"}>${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
     </form></div>`;
@@ -6549,6 +6552,13 @@ document.addEventListener("click", (ev) => {
   nm.f.apis = nm.f.apis.filter((x) => x !== b.dataset.nmRetirerApi); changerClesMission(); $("#nm-api-q")?.focus();
 });
 document.addEventListener("input", (ev) => { if (ev.target.closest("#nm-form")) lireFormMission(); });
+// what the assistant proposed and is gone (a removed server or vault key): out of the mission in one click (the Go refuses them)
+document.addEventListener("click", (ev) => {
+  if (!ev.target.closest("[data-nm-retirer-inconnus]")) return;
+  const f = lireFormMission(), srv = [...document.querySelectorAll("#nm-form [name=nm-srv]")].map((x) => x.value), cles = Object.keys(nm.nomsCles || {});
+  if ($("#nm-gestion")?.checked) { f.serveurs = f.serveurs.filter((x) => srv.includes(x)); f.autres = f.autres.filter((x) => srv.includes(x)); }
+  f.apis = f.apis.filter((x) => cles.includes(x)); rendrePage();
+});
 document.addEventListener("change", (ev) => {
   const i = ev.target; if (!i.closest("#nm-form")) return;
   const f = lireFormMission();

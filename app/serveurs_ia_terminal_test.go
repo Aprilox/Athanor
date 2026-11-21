@@ -202,8 +202,10 @@ func TestIATerminalDirect(t *testing.T) {
 	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusOK {
 		t.Errorf("typing after Take over: %d", c)
 	}
-	if d := time.Since(debut); d > time.Second {
-		t.Errorf("Take over gave the keyboard back in %v, want < 1 s", d)
+	// the assistant's command holds the terminal until the end: 3 s still tells a Take over that does not wait for
+	// it, and a loaded computer (1.97 s once in a full check) passes
+	if d := time.Since(debut); d > 3*time.Second {
+		t.Errorf("Take over gave the keyboard back in %v, want < 3 s", d)
 	}
 	l.attendre(t, "echo moi")
 	close(libere)
