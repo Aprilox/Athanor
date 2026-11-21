@@ -45,6 +45,21 @@ func sousChemin(c, r string) bool {
 	return strings.HasPrefix(c, strings.TrimRight(r, `\/`)+string(filepath.Separator))
 }
 
+// aliasMac: on macOS /var, /tmp and /etc are the system's own links to /private/…, never one the owner made.
+func aliasMac(d string) bool {
+	return runtime.GOOS == "darwin" && (d == "/var" || d == "/tmp" || d == "/etc")
+}
+
+// sansAliasMac: c as macOS opens it once those links are followed ("/var/x" → "/private/var/x").
+func sansAliasMac(c string) string {
+	for _, a := range []string{"/var", "/tmp", "/etc"} {
+		if aliasMac(a) && (c == a || strings.HasPrefix(c, a+"/")) {
+			return "/private" + c
+		}
+	}
+	return c
+}
+
 // verifierDossierChat: the folder, cleaned, or why it cannot be given to the assistant.
 func verifierDossierChat(k Kit, brut string) (string, error) {
 	brut = strings.TrimSpace(brut)
@@ -64,7 +79,7 @@ func verifierDossierChat(k Kit, brut string) (string, error) {
 		if err != nil {
 			return "", errDossierAbsent
 		}
-		if fi.Mode()&os.ModeSymlink != 0 {
+		if fi.Mode()&os.ModeSymlink != 0 && !aliasMac(d) {
 			return "", errDossierLien
 		}
 		if fi.Mode()&os.ModeIrregular != 0 {

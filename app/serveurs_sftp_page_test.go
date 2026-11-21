@@ -273,7 +273,11 @@ func TestSFTPLocal(t *testing.T) {
 	}
 	agir(map[string]any{"supprimer": filepath.Join(athanor, "coffre.json")}, http.StatusForbidden)
 	agir(map[string]any{"renommer": athanor, "nom": "autre"}, http.StatusForbidden)
-	agir(map[string]any{"supprimer": filepath.Dir(athanor)}, http.StatusForbidden)
+	parent := http.StatusForbidden
+	if maison, _ := os.UserHomeDir(); strings.EqualFold(filepath.Dir(athanor), filepath.Clean(maison)) {
+		parent = http.StatusBadRequest // Linux here: XDG_DATA_HOME is HOME, its parent is the personal folder (errLocalRacine)
+	}
+	agir(map[string]any{"supprimer": filepath.Dir(athanor)}, parent)
 	agir(map[string]any{"dossier": athanor, "nom": "x"}, http.StatusForbidden)
 	agir(map[string]any{"dossier": filepath.Dir(athanor), "nom": "a-cote"}, http.StatusOK) // beside it is fine
 	if _, l := lister(filepath.Dir(athanor)); !strings.Contains(string(mustJSON(l)), `"protege":true`) {

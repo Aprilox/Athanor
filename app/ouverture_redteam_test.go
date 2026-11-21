@@ -71,6 +71,10 @@ func verifierI7Executable(t *testing.T) {
 				return
 			}
 			local, config := filepath.Join(d, "local"), filepath.Join(d, "config")
+			annonces := config
+			if runtime.GOOS == "darwin" { // os.UserConfigDir there: HOME/Library/Application Support, never XDG
+				annonces = filepath.Join(d, "home", "Library", "Application Support")
+			}
 			c := exec.Command(copie, m.args...)
 			c.Dir = d
 			c.Env = append(os.Environ(), "ATHANOR_TEST=1", "ATHANOR_SANS_FENETRE=1", "LocalAppData="+local, "LOCALAPPDATA="+local,
@@ -82,7 +86,7 @@ func verifierI7Executable(t *testing.T) {
 			defer func() { _ = c.Process.Kill(); _ = c.Wait() }()
 			var a Annonce
 			for i := 0; i < 300 && a.Port == 0; i++ {
-				if f, _ := filepath.Glob(filepath.Join(config, "athanor-instances", "*.json")); len(f) == 1 {
+				if f, _ := filepath.Glob(filepath.Join(annonces, "athanor-instances", "*.json")); len(f) == 1 {
 					if x, err := os.ReadFile(f[0]); err == nil {
 						_ = json.Unmarshal(x, &a)
 					}

@@ -59,6 +59,7 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 	}
 	s, _, id, _, sur := serveurConteneurTest(t)
 	construireEssai(t, nil)
+	_ = os.MkdirAll(filepath.Join(s.kitCourant().Racine, "tools"), 0o755) // the build's cage keeps its caches there, as in every kit
 	var err error
 	if s.approbations, err = ouvrirApprobations(t.TempDir()); err != nil {
 		t.Fatal(err)

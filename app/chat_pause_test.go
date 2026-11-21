@@ -200,7 +200,8 @@ demarrer) for a in "$@"; do d="$a"; done; rm -f "$d/.athanor/STOP"; touch "$d/.a
 esac
 `)
 	_ = os.Chmod(filepath.Join(kit, "athanor"), 0o755)
-	t.Setenv("CLAUDE_BIN", "/bin/true") // demarrerPilote, as root in a container
+	ecrire(t, filepath.Join(kit, ".env"), "# connected\n") // Start refuses a kit without one (texteSansClaude)
+	t.Setenv("CLAUDE_BIN", "/bin/true")                    // demarrerPilote, as root in a container
 	attenteCycleChat = 20 * time.Millisecond
 	defer func() { attenteCycleChat = 2 * time.Second }()
 	pid := filepath.Join(p.Atelier(), "pilot.pid")

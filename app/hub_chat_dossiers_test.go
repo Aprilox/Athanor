@@ -244,3 +244,17 @@ func TestHubChatPieces(t *testing.T) {
 		t.Fatalf("named in the message: %v %v", l, err)
 	}
 }
+
+// TestAliasMac: macOS's own /var, /tmp and /etc links are followed as the system does; nothing else is.
+func TestAliasMac(t *testing.T) {
+	for c, mac := range map[string]string{"/var/folders/x": "/private/var/folders/x", "/tmp": "/private/tmp", "/etc/hosts": "/private/etc/hosts",
+		"/variable/x": "/variable/x", "/Users/a/var": "/Users/a/var"} {
+		want := c
+		if runtime.GOOS == "darwin" {
+			want = mac
+		}
+		if g := sansAliasMac(c); g != want {
+			t.Errorf("%s: %s, want %s", c, g, want)
+		}
+	}
+}

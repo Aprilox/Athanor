@@ -47,6 +47,10 @@ func TestModuleSansFenetre(t *testing.T) {
 	b, _ := json.Marshal(Config{PasVerifierMaj: true})
 	ecrireFichier(t, filepath.Join(kit, nomConfig()), string(b), 0o600)
 	local, config := filepath.Join(kit, "local"), filepath.Join(kit, "config")
+	annonces := config
+	if runtime.GOOS == "darwin" { // os.UserConfigDir there: HOME/Library/Application Support, never XDG
+		annonces = filepath.Join(kit, "home", "Library", "Application Support")
+	}
 	// a prod server in the module's inventory (both places Athanor's folder can be, next to the exe or local)
 	inv, _ := json.Marshal(fichierServeurs{Version: 1, Serveurs: []ServeurInventaire{{ID: "abc123", Nom: "vps-prod", Hote: "192.0.2.10", Port: 22,
 		Utilisateur: "deploy", Roles: []string{"prod"}, Etat: "ok", Cree: time.Now()}}})
@@ -66,7 +70,7 @@ func TestModuleSansFenetre(t *testing.T) {
 	// its announcement: its name, its port, the Servers module and no Dev
 	var a Annonce
 	for i := 0; i < 300 && a.Port == 0; i++ {
-		f, _ := filepath.Glob(filepath.Join(config, "athanor-instances", "*.json"))
+		f, _ := filepath.Glob(filepath.Join(annonces, "athanor-instances", "*.json"))
 		if len(f) == 1 {
 			if c, err := os.ReadFile(f[0]); err == nil {
 				_ = json.Unmarshal(c, &a)

@@ -335,6 +335,7 @@ func TestMissionsSansProjet(t *testing.T) {
 	lente := make(chan struct{})
 	var operateurMu sync.Mutex
 	echecs := map[string]int{"Relier la base": 1}                                          // the second milestone fails once: the plan is made again
+	plans := 0                                                                             // planning runs: the first proposes, a later one another way
 	sessionTacheServeurs = func(srv *Serveur, ctx context.Context, dossier string) error { // the fake operator: works until stopped or released
 		select {
 		case <-lente:
@@ -348,7 +349,7 @@ func TestMissionsSansProjet(t *testing.T) {
 		switch {
 		case strings.HasPrefix(x.Texte, "Plan the milestones"): // planning: the milestones of the mission
 			jalons := `{"jalons":[{"titre":"Installer nginx","but":"nginx sur vps","criteres":["nginx répond sur 80"],"serveurs":["vps"]},{"titre":"Relier la base","but":"vps joint la base"}]}`
-			if slices.ContainsFunc(lireMissions(), func(m Mission) bool { return m.Replans > 0 }) {
+			if plans++; plans > 1 { // (never the mission file: it is written once this task's launch returns)
 				jalons = `{"jalons":[{"titre":"Relier la base autrement","but":"un tunnel WireGuard"}]}`
 			}
 			if _, err := outilProposerJalons(srv, SessionHub{Mission: id, Agent: agentServeurs}, json.RawMessage(jalons)); err != nil {
