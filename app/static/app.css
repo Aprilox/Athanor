@@ -1787,14 +1787,11 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .nm-colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px 28px; align-items: start; }
 .nm-bloc { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .nm-coffre { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-.nm-cles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 6px 24px; align-items: start; }
-.nm-cles-groupe { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .nm-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .nm-col textarea { width: 100%; }
 .nm-liste { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .nm-choix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .nm-choix > label { flex: 1 1 14em; min-width: 0; }
-.nm-cat { margin-top: 4px; }
 .nm-choix .nm-fait { flex: 1 1 100%; } /* what a server does, under its name */
 .nm-projet-reglages { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .mis-machines { display: flex; flex-direction: column; gap: 4px; }

@@ -2172,6 +2172,7 @@ const LISTES_MENTIONS = {
   "dep-srv-q": { liste: "dep-srv-liste", opt: "dep-srv-opt", cle: "depSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M292: the Deployment tab
   "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api-deploiement", choisir: choisirDeploiement },
   "cof-q": { filtrer: (q, cat) => filtrerCoffre(q, cat) }, // the vault page: its own cards are the list (every entry, the servers' keys too)
+  "nm-api-q": { liste: "nm-api-liste", opt: "nm-api-opt", cle: "nmApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => ((nm.f || {}).apis || []).map((ref) => ({ type: "api", ref })), type: () => "api", choisir: choisirCleMission }, // the New mission form
 };
 // M288: the owner's categories of API (GET /api/coffre/categories), read when a screen that filters by them opens
 const lireCategories = async () => etat.categoriesAPI = ((await api("coffre/categories").catch(() => ({}))).categories || []).sort((a, b) => a.nom.localeCompare(b.nom));
@@ -6453,8 +6454,7 @@ pages["nouvelle-mission"] = async () => {
     return `<div class="nm-choix"><label class="case m0"><input type="checkbox" name="nm-srv" id="nm-srv-${h(x.id)}" value="${h(x.id)}"${coche ? " checked" : ""}> <span><b>${h(x.nom)}</b> <span class="muet petit">${h(x.hote || "")}</span></span></label>
       ${coche && studio ? `<select id="nm-role-${h(x.id)}" aria-label="${h(t("Role of {0}", [x.nom]))}"><option value="site"${autre ? "" : " selected"}>${t("The project is deployed here")}</option><option value="autre"${autre ? " selected" : ""}>${t("Another role (database, worker…)")}</option></select>` : ""}
       ${coche && (!studio || autre) ? `<input type="text" class="nm-fait" id="nm-fait-${h(x.id)}" data-srv="${h(x.id)}" maxlength="200" value="${v((f.roles || {})[x.id])}" autocomplete="off" placeholder="${h(t(studio ? "What it does: PostgreSQL database, worker…" : "Its role (optional): web server, database…"))}" aria-label="${h(t("What {0} does", [x.nom]))}"${studio ? ' aria-required="true"' : ""}>` : ""}</div>`; };
-  const cats = etat.categoriesAPI || [], ligneCle = (e) => `<label class="case m0 nm-choix"><input type="checkbox" name="nm-api" id="nm-api-${h(e.id)}" value="${h(e.id)}"${f.apis.includes(e.id) ? " checked" : ""}> <span>${h(e.nom)}</span></label>`;
-  const groupeCles = (c, nom) => { const l = apis.filter((e) => (e.categorie || "") === c); return l.length ? `<div class="nm-cles-groupe">${nom ? `<p class="petit muet m0 nm-cat">${h(nom)}</p>` : ""}${l.map(ligneCle).join("")}</div>` : ""; };
+  nm.nomsCles = Object.fromEntries(apis.map((e) => [e.id, e.nom])); // the chips' names, drawn again in place
   const projetNeuf = studio && !edition && !existant;
   const bloc = (id, coche, titre, aide, desactive) => `<label class="nm-bloc-choix${coche ? " actif" : ""}"><input type="checkbox" id="${id}"${coche ? " checked" : ""}${desactive ? " disabled" : ""}> <span><b>${t(titre)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`;
   return `<div class="missions nm">
@@ -6499,9 +6499,11 @@ pages["nouvelle-mission"] = async () => {
             ${[["livraison", "At delivery"], ["jalon", "After each milestone"]].map(([x, l]) => `<label class="radio"><input type="radio" name="nm-moment" value="${x}"${(f.moment || "livraison") === x ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>` : ""}
         </section>` : ""}
       </div>
-      <section class="nm-coffre" aria-labelledby="nm-t-coffre"><h3 class="m0" id="nm-t-coffre">${t("Vault: API keys")}</h3>
+      <section class="nm-coffre" aria-labelledby="nm-t-coffre"><div class="ligne m0"><h3 class="m0 croit" id="nm-t-coffre">${t("API keys for this mission")}</h3>${apis.length ? `<span class="muet petit">${h(tn(apis.length, "1 key in the vault", "{0} keys in the vault", [apis.length]))}</span>` : ""}</div>
         <p class="muet petit m0">${t("The keys this mission may use. Their values are never shown to Claude: Athanor's tools use them.")}</p>
-        <div class="nm-cles">${apis.length ? groupeCles("", "") + cats.map((c) => groupeCles(c.id, c.nom)).join("") : `<p class="muet petit m0">${t("No API key in the vault yet.")}</p>`}</div></section>
+        ${apis.length ? `<div class="ligne m0 mis-res-puces" id="nm-cles-choisies" role="group" aria-labelledby="nm-t-coffre">${pucesClesMission()}</div>
+        ${distant ? "" : choixAPI("nm-api-q", "Find an API")}`
+        : `<p class="muet petit m0">${t("No API key in the vault yet.")}</p>`}</section>
       ${inconnus.length ? `<p class="attention petit m0" role="alert">${h(t("Not found here, choose again: {0}", [inconnus.join(", ")]))}</p>` : ""}
       <p class="petit attention m0" id="nm-erreur" role="alert"${studio || gestion ? " hidden" : ""}>${studio || gestion ? "" : t("Tick Studio project, Server management, or both.")}</p>
       ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer"${studio || gestion ? "" : " disabled"}>${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
@@ -6524,12 +6526,33 @@ function lireFormMission() {
   if ($("#nm-dossier")) f.dossier = val("nm-dossier").trim();
   return f;
 }
+// the mission's API keys: chips (as the Deployment tab's) and the one API picker (choixAPI) to add one
+const pucesClesMission = () => ((nm.f || {}).apis || []).filter((id) => (nm.nomsCles || {})[id]).map((id) => `<span class="puce-mention puce-api">${typeMention({ type: "api" })}${h(nm.nomsCles[id])}${(etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-nm-retirer-api="${h(id)}" aria-label="${h(t("Remove {0}", [nm.nomsCles[id]]))}">×</button>`}</span>`).join("")
+  || `<span class="muet petit">${t("No API chosen yet.")}</span>`;
+// a key added or removed: its chips in place; the form is drawn again only when "On the servers" comes or goes with it
+function changerClesMission() {
+  const f = lireFormMission(), voulu = !!$("#nm-gestion")?.checked && (!!document.querySelector("#nm-form [name=nm-srv]:checked") || f.apis.length > 0);
+  if (voulu !== !!$("#nm-mode-srv")) return rendrePage();
+  const z = $("#nm-cles-choisies"); if (z) garderFocus(z, () => { z.innerHTML = pucesClesMission(); });
+}
+function choisirCleMission(m, champ) {
+  if (!nm.f.apis.includes(m.ref)) nm.f.apis.push(m.ref);
+  (nm.nomsCles ||= {})[m.ref] = m.nom; champ.value = "";
+  fermerListeMentions(champ.id); changerClesMission(); champ.focus();
+}
+document.addEventListener("focusin", (ev) => { if (ev.target.id === "nm-api-q") chercherMentions(ev.target); }); // the whole list at once, the field narrows it
+document.addEventListener("change", (ev) => { if (ev.target.id === "nm-api-q-cat") $("#nm-api-q")?.focus(); }); // the filtered list opens under its field
+document.addEventListener("focusout", (ev) => { if (ev.target.id === "nm-api-q") setTimeout(() => { if (document.activeElement !== ev.target) fermerListeMentions(ev.target.id); }, 150); });
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-nm-retirer-api]"); if (!b) return;
+  nm.f.apis = nm.f.apis.filter((x) => x !== b.dataset.nmRetirerApi); changerClesMission(); $("#nm-api-q")?.focus();
+});
 document.addEventListener("input", (ev) => { if (ev.target.closest("#nm-form")) lireFormMission(); });
 document.addEventListener("change", (ev) => {
   const i = ev.target; if (!i.closest("#nm-form")) return;
   const f = lireFormMission();
   // a choice that shows or hides a part of the form: drawn again from nm.f
-  if (i.id === "nm-studio" || i.id === "nm-gestion" || i.name === "nm-srv" || i.name === "nm-api" || i.id.startsWith("nm-role-") || i.id === "nm-nom") rendrePage();
+  if (i.id === "nm-studio" || i.id === "nm-gestion" || i.name === "nm-srv" || i.id.startsWith("nm-role-") || i.id === "nm-nom") rendrePage();
   else if (i.name === "nm-gh") { Object.assign(f, { github: i.value === "existant" ? "lier" : i.value, depot: "" }); rendrePage(); } // the connection's notice only with a repository chosen
   else if (i.id === "nm-gh-auto") f.sans_pousse = !i.checked;
   else if (i.id === "nm-gh-atelier") f.atelier = i.checked;
@@ -6550,7 +6573,7 @@ async function choisirMentionMission(m, champ, ml) {
   champ.value = avant + v.slice(champ.selectionStart).replace(/^\s*/, "");
   fermerListeMentions(id);
   const f = lireFormMission(), deja = m.type === "serveur" ? [...f.serveurs, ...f.autres].includes(m.ref) : f.apis.includes(m.ref);
-  if (!deja) { // its box ticked (the page is drawn again from the boxes); a server of a hidden block is added to the form
+  if (!deja) { // a server: its box ticked (a server of a hidden block is added to the form); a key: added, drawn as a chip
     const sorte = m.type === "serveur" ? "srv" : "api", b = $(`#nm-${sorte}-${CSS.escape(m.ref)}`), g = $("#nm-gestion");
     if (b) b.checked = true; else f[m.type === "serveur" ? "serveurs" : "apis"].push(m.ref);
     if (m.type === "serveur" && g) g.checked = true;
