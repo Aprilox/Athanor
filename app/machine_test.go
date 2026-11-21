@@ -67,6 +67,12 @@ func TestMachineReelle(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	b := lireMachine()
 	v := vueMachine(&a, &b)
+	// macOS's processor ticks may not move in 300 ms (a CI virtual machine): read again, as the tile does every 2 s
+	for i := 0; i < 10 && v.CPU < 0; i++ {
+		time.Sleep(300 * time.Millisecond)
+		b = lireMachine()
+		v = vueMachine(&a, &b)
+	}
 	if v.Coeurs < 1 {
 		t.Fatalf("no processor: %+v", v)
 	}
