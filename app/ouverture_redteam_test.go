@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -75,11 +77,18 @@ func verifierI7Executable(t *testing.T) {
 			if runtime.GOOS == "darwin" { // os.UserConfigDir there: HOME/Library/Application Support, never XDG
 				annonces = filepath.Join(d, "home", "Library", "Application Support")
 			}
-			c := exec.Command(copie, m.args...)
-			c.Dir = d
-			c.Env = append(os.Environ(), "ATHANOR_TEST=1", "ATHANOR_SANS_FENETRE=1", "LocalAppData="+local, "LOCALAPPDATA="+local,
+			env := append(os.Environ(), "ATHANOR_TEST=1", "ATHANOR_SANS_FENETRE=1", "LocalAppData="+local, "LOCALAPPDATA="+local,
 				"APPDATA="+config, "HOME="+filepath.Join(d, "home"), "XDG_CACHE_HOME="+filepath.Join(d, "cache"), "XDG_CONFIG_HOME="+config)
-			if err := c.Start(); err != nil {
+			var c *exec.Cmd
+			var err error
+			// a fork of another goroutine holds this copy open for writing a moment: text file busy (go.dev/issue/22315)
+			for i := 0; i == 0 || errors.Is(err, syscall.ETXTBSY) && i < 20; i++ {
+				time.Sleep(time.Duration(i) * 50 * time.Millisecond)
+				c = exec.Command(copie, m.args...)
+				c.Dir, c.Env = d, env
+				err = c.Start()
+			}
+			if err != nil {
 				t.Error(m.nom, err)
 				return
 			}
