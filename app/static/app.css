@@ -1496,8 +1496,9 @@ html[data-scene] .verrou-nom { display: block; animation: none; }
 html[data-scene] #verrou-titre { font-size: 15px; font-weight: 500; color: var(--muted); margin: 0; }
 html[data-scene] .verrou-carte { animation: vs-carte .5s .15s cubic-bezier(.2, .7, .2, 1) both; }
 .vs-lueur { fill: var(--accent); opacity: .16; filter: blur(14px); transform-origin: 128px 128px; animation: vs-souffle 3.6s ease-in-out infinite; }
-.vs-anneau { fill: none; stroke: var(--accent); stroke-width: 18; stroke-linecap: round; opacity: .55; }
-.vs-fleche { fill: var(--accent); opacity: .55; }
+.vs-cycle { opacity: .55; } /* the ring and its arrow faded as one: the ring's end never shows through the arrow */
+.vs-anneau { fill: none; stroke: var(--accent); stroke-width: 18; stroke-linecap: round; }
+.vs-fleche { fill: var(--accent); }
 .vs-anse, .vs-corps, .vs-trou { fill: none; stroke: var(--ink); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100; animation: splash-trait .8s .2s ease-out both; }
 .vs-corps { animation-delay: .45s; }
 .vs-trou { stroke-width: 8; animation-delay: .9s; }
