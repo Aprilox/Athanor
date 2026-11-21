@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="#what-it-can-do-for-you"><b>What it can do</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#security-in-short"><b>Security</b></a> ·
@@ -46,6 +47,19 @@ Athanor answers with a **card**: the project Studio will build, with its folder,
 
 > [!NOTE]
 > Athanor is an independent, source-available project. It is not affiliated with or endorsed by Anthropic. It drives the official Claude Code CLI with your own subscription. The program, its download files and its data folder keep the name *Athanor*, so every older Athanor updates to Athanor Hub by itself.
+
+---
+
+## What it can do for you
+
+- **Build a whole project while you do something else.** Describe a game, a website, an app or a tool in your own words. Claude Code works cycle after cycle, one milestone each time, tests and commits, for hours or days, until it is delivered: usage limits, errors, restarts and nights included.
+- **Go faster, or spend less.** Parallel mode puts up to 10 workers on independent milestones at once, eco mode spares the quota, fast mode keeps the full check for the end; several computers can even build one project together through its GitHub repository.
+- **A real team, real tools.** A project lead with scouts, an architect, developers, a tester and a critic; skills and MCP servers from a verified catalog; your PC's software (Unreal Engine, Blender, the Android SDK, Docker) through a controlled bridge.
+- **Put it online on your own servers.** Add a VPS: Athanor reads it, prepares it, sets its DNS and HTTPS through Cloudflare, deploys after each milestone or at delivery, checks the site every 15 minutes and goes back to the previous version in one click.
+- **Run your servers by asking.** A mission on servers alone (*install nginx on web-1 and PostgreSQL on db-1, and link them*): a servers pilot cuts it into milestones, proposes each change and asks you before anything risky, or works on its own if you allow it.
+- **Keep every key out of the AI's reach.** API keys, tokens and SSH keys live in an encrypted vault; each project gets exactly the keys you tick; the AI asks, Athanor acts with the key, and every action goes into an audit log.
+- **Follow everything from anywhere.** One home page and one bell for all of it; your phone, paired by a code, shows the same Athanor and tells you when Claude needs you or a project is delivered; Claude Desktop can drive Athanor through its MCP.
+- **What Claude cannot do, it asks you.** Creating an account, paying, a code received by SMS become tasks with exact steps on *For you*, while Claude carries on with the rest.
 
 ---
 

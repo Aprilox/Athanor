@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="#ce-quil-permet-de-faire"><b>Ce qu'il permet</b></a> ·
   <a href="#démarrage-rapide"><b>Démarrage rapide</b></a> ·
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#la-sécurité-en-bref"><b>Sécurité</b></a> ·
@@ -46,6 +47,19 @@ Athanor répond par une **carte** : le projet que Studio va construire, avec son
 
 > [!NOTE]
 > Athanor est un projet indépendant à source disponible. Il n'est ni affilié à Anthropic ni approuvé par Anthropic. Il pilote la commande officielle Claude Code avec votre propre abonnement. Le programme, ses fichiers de téléchargement et son dossier de données gardent le nom *Athanor* : chaque ancien Athanor se met à jour vers Athanor Hub tout seul.
+
+---
+
+## Ce qu'il permet de faire
+
+- **Construire un projet entier pendant que vous faites autre chose.** Décrivez un jeu, un site, une app ou un outil avec vos mots. Claude Code travaille cycle après cycle, un jalon à chaque fois, teste et committe, des heures ou des jours, jusqu'à la livraison : limites d'usage, erreurs, redémarrages et nuits compris.
+- **Aller plus vite, ou dépenser moins.** Le mode parallèle met jusqu'à 10 ouvriers sur des jalons indépendants à la fois, le mode éco ménage le quota, le mode fast garde la vérification complète pour la fin ; plusieurs ordinateurs peuvent même construire un projet ensemble, par son dépôt GitHub.
+- **Une vraie équipe, de vrais outils.** Un chef de projet avec des éclaireurs, un architecte, des développeurs, un testeur et un critique ; des skills et des serveurs MCP d'un catalogue vérifié ; les logiciels de votre PC (Unreal Engine, Blender, le SDK Android, Docker) par une passerelle contrôlée.
+- **Le mettre en ligne sur vos propres serveurs.** Ajoutez un VPS : Athanor le lit, le prépare, règle son DNS et son HTTPS par Cloudflare, déploie après chaque jalon ou à la livraison, vérifie le site toutes les 15 minutes et revient à la version précédente en un clic.
+- **Gérer vos serveurs en le demandant.** Une mission sur des serveurs seuls (*installe nginx sur web-1 et PostgreSQL sur db-1, et relie-les*) : un pilote des serveurs la découpe en jalons, propose chaque changement et vous demande avant tout ce qui est risqué, ou travaille seul si vous l'y autorisez.
+- **Garder chaque clé hors de portée de l'IA.** Clés d'API, jetons et clés SSH vivent dans un coffre chiffré ; chaque projet reçoit exactement les clés que vous cochez ; l'IA demande, Athanor agit avec la clé, et chaque action va dans un journal d'audit.
+- **Tout suivre, de partout.** Une page d'accueil et une cloche pour tout ; votre téléphone, appairé par un code, montre le même Athanor et vous prévient quand Claude a besoin de vous ou qu'un projet est livré ; Claude Desktop peut piloter Athanor par son MCP.
+- **Ce que Claude ne peut pas faire, il vous le demande.** Créer un compte, payer, un code reçu par SMS deviennent des tâches aux étapes précises dans *Pour vous*, pendant que Claude continue le reste.
 
 ---
 
