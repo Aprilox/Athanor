@@ -208,6 +208,9 @@ func TestReglagesContenu(t *testing.T) {
 	attendus := []string{`"enableAllProjectMcpServers": true`, `"mcp__unreal"`, `"includeCoAuthoredBy": false`}
 	if runtime.GOOS != "windows" { // native Windows: no sandbox, and the paths written Windows' way
 		attendus = append(attendus, `hook fichiers `+p, `"failIfUnavailable": true`)
+		if runtime.GOOS == "darwin" { // TLS checks inside Seatbelt (curl, git): the trust agent only
+			attendus = append(attendus, `"allowMachLookup"`, `"com.apple.TrustEvaluationAgent"`)
+		}
 	} else { // and no PowerShell tool (a window of its own at each command, outside the Bash hooks)
 		attendus = append(attendus, `"CLAUDE_CODE_USE_POWERSHELL_TOOL": "0"`)
 	}

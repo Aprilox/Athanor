@@ -224,7 +224,11 @@ func construireReglages(kitArg, sortie string) error {
 		}
 	}
 	sandbox.mettre("filesystem", filesystemBarriere(kit, tools, append(append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...), joinOS(kit, "athanor")), autres...))
-	sandbox.mettre("network", map[string]any{"allowedDomains": []string{"*"}})
+	reseau := map[string]any{"allowedDomains": []string{"*"}}
+	if runtime.GOOS == "darwin" { // Seatbelt: without it curl and git cannot check a TLS certificate (curl exit 60)
+		reseau["allowMachLookup"] = []string{"com.apple.TrustEvaluationAgent"}
+	}
+	sandbox.mettre("network", reseau)
 	var creds []map[string]string
 	for _, v := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"} {
 		creds = append(creds, map[string]string{"mode": "deny", "name": v})
