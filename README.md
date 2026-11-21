@@ -33,7 +33,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hub.png" alt="Athanor Hub's home page: the assistant's conversation box with its New project chip and its @ mentions, then the projects waiting for your answer and those in progress, each with its milestones" width="100%">
+  <img src="docs/images/hub.png" alt="Athanor Hub's home page: a large conversation with the assistant on the left, Athanor's mark and ways to start while it is empty, its options always in sight under the field; on the right, the projects waiting for your answer and those in progress, each with its milestones" width="100%">
 </p>
 
 Athanor Hub is a **hub**: one program, one window, from which you drive **modules** that work together, without ever reaching each other's data or secrets. **Studio** runs [Claude Code](https://claude.com/claude-code) cycle after cycle on your own PC, with your own Claude subscription, until a game, a website, an app or a tool is delivered. **Servers** prepares your VPS, its DNS and its certificates, and puts online what Studio builds. The **vault** keeps every key encrypted, and gives each project only what you grant it. One sentence on the home page can set them all to work:

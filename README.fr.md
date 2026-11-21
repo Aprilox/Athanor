@@ -33,7 +33,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hub.png" alt="La page d'accueil d'Athanor Hub : la conversation avec l'assistant, avec sa puce Nouveau projet et ses mentions @, puis les projets qui attendent votre réponse et ceux qui sont en cours, chacun avec ses jalons" width="100%">
+  <img src="docs/images/hub.png" alt="La page d'accueil d'Athanor Hub : une grande conversation avec l'assistant à gauche, la marque d'Athanor et des façons de commencer tant qu'elle est vide, ses options toujours visibles sous le champ ; à droite, les projets qui attendent votre réponse et ceux qui sont en cours, chacun avec ses jalons" width="100%">
 </p>
 
 Athanor Hub est un **hub** : un seul programme, une seule fenêtre, d'où vous pilotez des **modules** qui travaillent ensemble, sans jamais accéder aux données ni aux secrets les uns des autres. **Studio** lance [Claude Code](https://claude.com/claude-code) cycle après cycle sur votre propre PC, avec votre propre abonnement Claude, jusqu'à la livraison d'un jeu, d'un site, d'une application ou d'un outil. **Serveurs** prépare votre VPS, son DNS et ses certificats, et met en ligne ce que Studio construit. Le **coffre** garde chaque clé chiffrée et ne donne à chaque projet que ce que vous lui accordez. Une seule phrase sur la page d'accueil peut tous les mettre au travail :
