@@ -23,3 +23,6 @@ func restreindreFichier(string) error { return nil }
 
 // cheminFinal: the path the system really opens, links resolved; an error if it does not exist.
 func cheminFinal(chemin string) (string, error) { return filepath.EvalSymlinks(chemin) }
+
+// cheminLong: Windows' long names in place of the 8.3 short ones; nothing to do elsewhere.
+func cheminLong(chemin string) string { return chemin }

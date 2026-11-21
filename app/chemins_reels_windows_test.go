@@ -91,3 +91,28 @@ func TestCheminsReelsWindows(t *testing.T) {
 		t.Errorf("chat, good folder: %q %v", c, err)
 	}
 }
+
+// TestDossierCourtSupprimable: a project folder written with an 8.3 short name (a Windows runner's TEMP is
+// C:\Users\RUNNER~1\...) may go to the recycle bin like its long name; a junction to it still may not.
+func TestDossierCourtSupprimable(t *testing.T) {
+	long := filepath.Join(cheminReel(t.TempDir()), "Un projet assez long")
+	if err := os.MkdirAll(long, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	court := courtWindows(long)
+	if court == long {
+		t.Skip("this volume makes no 8.3 short names")
+	}
+	if !strings.EqualFold(cheminLong(court), long) {
+		t.Fatalf("cheminLong(%q) = %q, want %q", court, cheminLong(court), long)
+	}
+	if cle := controlerDossierSupprime(court, ""); cle != "" {
+		t.Errorf("%q refused: %s", court, cle)
+	}
+	jonction := filepath.Join(filepath.Dir(long), "jonction")
+	if exec.Command("cmd", "/c", "mklink", "/J", jonction, long).Run() == nil {
+		if cle := controlerDossierSupprime(filepath.Join(jonction), ""); cle == "" {
+			t.Error("a junction accepted")
+		}
+	}
+}

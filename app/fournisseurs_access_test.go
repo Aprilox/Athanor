@@ -338,8 +338,8 @@ func TestBlocCaddy(t *testing.T) {
 	// caddy validate, in a caddy:2 container, when Docker answers
 	ctx, fin := context.WithTimeout(context.Background(), 10*time.Second)
 	defer fin()
-	if exec.CommandContext(ctx, "docker", "info").Run() != nil {
-		t.Skip("Docker does not answer: caddy validate skipped")
+	if typ, err := exec.CommandContext(ctx, "docker", "info", "--format", "{{.OSType}}").Output(); err != nil || strings.TrimSpace(string(typ)) != "linux" {
+		t.Skip("Docker does not answer or runs no Linux containers (Windows runners): caddy validate skipped")
 	}
 	d := t.TempDir()
 	tls := filepath.Join(d, "tls")

@@ -78,7 +78,7 @@ func controlerDossierSupprime(d, kit string) string {
 		return "The project's folder is a link or not a folder: it is never deleted"
 	}
 	reel := cheminReel(d)
-	if runtime.GOOS == "windows" && !strings.EqualFold(reel, filepath.Clean(d)) || runtime.GOOS != "windows" && reel != sansAliasMac(filepath.Clean(d)) {
+	if runtime.GOOS == "windows" && !strings.EqualFold(reel, cheminLong(filepath.Clean(d))) || runtime.GOOS != "windows" && reel != sansAliasMac(filepath.Clean(d)) {
 		return "The project's folder leads elsewhere (a link or a junction): it is never deleted"
 	}
 	return ""

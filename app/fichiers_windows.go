@@ -26,6 +26,21 @@ func verrouillerFd(f *os.File) error {
 
 func runtimeWindows() bool { return true }
 
+// cheminLong: the path with each 8.3 short name replaced by its long one (C:\Users\RUNNER~1 → C:\Users\runneradmin);
+// links and junctions are not followed. The path as given when it cannot be read.
+func cheminLong(chemin string) string {
+	p, err := windows.UTF16PtrFromString(chemin)
+	if err != nil {
+		return chemin
+	}
+	buf := make([]uint16, windows.MAX_LONG_PATH)
+	n, err := windows.GetLongPathName(p, &buf[0], uint32(len(buf)))
+	if err != nil || n == 0 || int(n) > len(buf) {
+		return chemin
+	}
+	return windows.UTF16ToString(buf[:n])
+}
+
 // cheminFinal: the path the system really opens (junctions, links and 8.3 short names resolved), with its drive
 // letter, or \\server\share for a network one; an error if it does not exist. (filepath.EvalSymlinks no longer
 // follows junctions and keeps the short names.)
