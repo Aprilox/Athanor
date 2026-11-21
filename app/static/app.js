@@ -1260,7 +1260,7 @@ function naviguer() {
   if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
   if (page === "claude") { etat.ongletReglages = etat.ongletDemande = "claude"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
   // joining a project: the second tab of the new project page
-  if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = etat.npPlus = false;
+  if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
@@ -3385,7 +3385,8 @@ pages.nouveau = async () => {
 // S2 (M317): the folder proposed for a new project, next to the most recent one; it follows the name until the
 // folder field is edited
 const dossierNeuf = (nom) => { const p = (etat.npParent || "").replace(/[\\/]+$/, ""); return p && nom.trim() ? p + (p.includes("\\") ? "\\" : "/") + nom.trim() : ""; };
-const pageNouveau = () => `${ongletsNouveau()}<div class="page-etroite">
+// as in 2.x: the form, and this project's settings in their own column beside it (under it on a narrow window)
+const pageNouveau = () => `${ongletsNouveau()}<div class="${etat.npRejoindre || !etat.npMode ? "page-etroite" : "np-colonnes"}">
     ${etat.npRejoindre ? formulaireRejoindre() : `<div class="bloc"><h2>${t("New project")}</h2>
       <p class="intro petit">${t("A project = a development folder, anywhere on the PC (existing or new). The tool only adds a .athanor subfolder (request, plan, log, checks): delete it at the end and the project is clean.")}</p>
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("e.g. watch-store"))}"></label>
@@ -3393,12 +3394,10 @@ const pageNouveau = () => `${ongletsNouveau()}<div class="page-etroite">
       <label class="champ"><span>${t("What you want (you can complete it later)")}</span><textarea id="np-demande" rows="7" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
       ${barreAmeliorer("np-demande")}
       ${zonePieces("np")}
-      <details class="plus-options" id="np-plus"${etat.npPlus ? " open" : ""}><summary>${t("More options")}</summary>
-        <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
-        ${etat.npMode ? `<div class="np-reglages"><p class="muet petit m0">${t("This project's settings: you can change them later in Manage.")}</p><div id="np-mode">${blocMode(etat.npMode)}</div></div>` : ""}
-      </details>
+      <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
-    </div>`}
+    </div>${etat.npMode ? `<section class="bloc np-reglages" aria-labelledby="np-t-reglages"><h2 class="m0" id="np-t-reglages">${t("Project settings")}</h2>
+      <p class="muet petit m0">${t("This project's settings: you can change them later in Manage.")}</p><div id="np-mode">${blocMode(etat.npMode)}</div></section>` : ""}`}
   </div>`;
 
 // champDossier: a folder field with its Browse… button (the system's dialog, or Athanor's picker)
@@ -4981,7 +4980,6 @@ function pcsOuvert() {
 }
 document.addEventListener("toggle", (ev) => {
   if (ev.target && ev.target.id === "conso") etat.ouverts[ev.target.open ? "add" : "delete"]("conso");
-  if (ev.target && ev.target.id === "np-plus") etat.npPlus = ev.target.open; // S3 (M317): open across the GitHub sign-in's refresh
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
   try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }

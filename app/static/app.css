@@ -1129,6 +1129,10 @@ ol.guide-access li { margin: 5px 0; }
 /* the folder fields (champDossier) and Athanor's own folder picker (selecteurDossier) */
 .page-etroite { max-width: 820px; }
 /* New project: the form, and this project's settings beside it (under it on a narrow window) */
+/* New project (as in 2.x): the form, and this project's settings beside it (under it on a narrow window) */
+.np-colonnes { display: grid; grid-template-columns: minmax(0, 820px) minmax(300px, 520px); gap: 16px; align-items: start; }
+.np-colonnes > .bloc + .bloc { margin-top: 0; }
+@media (max-width: 1180px) { .np-colonnes { grid-template-columns: minmax(0, 820px); } }
 .np-reglages { display: grid; gap: 8px; }
 .np-reglages .mode-grille { grid-template-columns: 1fr; gap: 12px; }
 .np-reglages .mode-grille .mode-suite { grid-column: 1; }
