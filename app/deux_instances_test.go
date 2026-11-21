@@ -25,7 +25,17 @@ func TestDeuxInstances(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the executable")
 	}
-	racine := t.TempDir()
+	// not t.TempDir: on a loaded Windows, an instance's folder stays held after it is stopped (the pilot it
+	// started ends on its own) longer than the 2 s testing retries; it failed a CI run (3.1.1) though it checks nothing of it
+	racine, errTemp := os.MkdirTemp("", "TestDeuxInstances")
+	if errTemp != nil {
+		t.Fatal(errTemp)
+	}
+	t.Cleanup(func() {
+		for i := 0; i < 100 && os.RemoveAll(racine) != nil; i++ {
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
 	exe := filepath.Join(racine, "athanor")
 	if runtime.GOOS == "windows" {
 		exe += ".exe"
