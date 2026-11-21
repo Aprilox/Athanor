@@ -174,6 +174,17 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .hub-dossiers-liste { list-style: none; margin: 6px 0 0; padding: 0; }
 .hub-dossiers-liste li { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-width: 0; }
 .hub-dossiers-liste code { overflow-wrap: anywhere; font-size: 13px; }
+/* a project's chat (Studio): the project and the folder Claude reads in its title, its field as the home's (3.1.2) */
+.chat-titre { min-width: 0; }
+.chat-dossier { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.chat-projet-icone { display: grid; place-items: center; width: 88px; height: 88px; border-radius: 24px; background: var(--panel-2); border: 1px solid var(--line); color: var(--accent); font-size: 40px; box-shadow: 0 12px 40px var(--accent-halo); margin-bottom: 4px; }
+.chat .composeur { margin-top: 8px; }
+.chat .hub-capacites { margin-top: 6px; }
+.chat-vide-actions { flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.option-modele select { border: 0; background: transparent; color: inherit; font: inherit; padding: 0 2px; cursor: pointer; min-width: 0; }
+.option-modele select:focus-visible { outline: none; }
+.option-modele:has(select:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) { .chat-projet .chat-tete .chat-titre { order: 0; flex: 1 1 100%; } .chat-projet-icone { width: 56px; height: 56px; font-size: 26px; border-radius: 16px; } }
 .accueil-chat.survol { border-color: var(--accent); background: var(--panel-3); }
 /* The Home (3.1): the conversation fills the content area on the left and stays while the right column scrolls */
 .accueil-grille { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
@@ -208,7 +219,6 @@ html.scene-pause .ma-cycle, html.scene-pause .chat-marque::before { animation-pl
 @keyframes ma-souffle { 50% { opacity: 1; transform: scale(1.08); } }
 .chat-accueil-vide h2 { font-size: 26px; font-weight: 650; }
 .chat-accueil-vide p { max-width: 36em; }
-.accueil-barre .chat-vide-actions { flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
 .chat-vide-actions .puces-suggestions { display: contents; }
 /* the field: one rounded box, its options inside, under the text */
 .composeur { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); }
@@ -948,8 +958,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .chat-tete .croit { flex: 1; min-width: 240px; }
 .chat-info { width: 24px; height: 24px; margin-left: 4px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font: italic 600 13px/1 Georgia, serif; cursor: pointer; vertical-align: middle; }
 .chat-info:hover { color: var(--ink); border-color: var(--accent); }
-.chat-options { gap: 8px 18px; }
-.chat-options .interrupteur span { white-space: nowrap; }
 .chat-fil { flex: 1; overflow: auto; margin: 12px 0; padding: 4px 2px; display: flex; flex-direction: column; gap: 12px; }
 .chat-msg { display: flex; flex-direction: column; max-width: 82%; }
 .chat-vous { align-self: flex-end; align-items: flex-end; }
@@ -1046,8 +1054,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .btn-menu span { display: block; width: 18px; height: 2px; border-radius: 1px; background: var(--ink); }
 .distant [data-bureau] { display: none !important; }
 /* M230: the chat's model choice is set once: folded behind "Options" on every screen, unless a model was chosen */
-.btn.chat-options-bureau { display: inline-flex; }
-.chat:not(.ouvert) .chat-modele-repli { display: none; }
 @media (max-width: 700px) {
   .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
   html.cadre .app { height: 100%; } /* a narrow Athanor window: under the bar, like a wide one */
@@ -1090,7 +1096,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .accueil-chat { max-height: var(--h-page, 80dvh); }
   .accueil .hub-chat-fil { flex: 0 1 auto; max-height: none; min-height: 96px; }
   .tel-seul { display: inline-flex; }
-  .chat:not(.ouvert) .chat-replie, .accueil-chat:not(.ouvert) .chat-replie, .chat:not(.ouvert) .pieces:not(:has(li)) { display: none; }
   .principal:has(#page > .chat) .bandeau { display: none; } /* the bar above names the project, its tabs stay */
   .chat-claude { align-self: stretch; }
   .chat-fil { overscroll-behavior: contain; }
@@ -1101,13 +1106,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .chat-fil { flex: 1 1 auto; min-height: 0; margin: 10px 0 6px; }
   .chat-msg { max-width: 100%; }
   .chat-bulle { font-size: 15.5px; padding: 10px 13px; }
-  .chat-saisie { margin: 0 -14px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) var(--rayon); }
-  .chat-saisie .ligne { flex-wrap: nowrap; gap: 8px; }
-  .chat-saisie .chat-options { flex-wrap: wrap; gap: 6px 14px; }
-  .chat-saisie .ligne > .petit.muet { display: none; }
-  .chat-saisie .choix { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .chat-saisie .choix button { flex: none; }
-  .chat-saisie .espace { display: none; }
 }
 /* the 6 digits of the pairing: hidden until the mouse is over them (a tap on a touch screen) */
 .code-pc { position: relative; display: inline-grid; grid-template-columns: auto auto; align-items: center; column-gap: 14px; padding: 10px 18px; border: 1px dashed var(--line); border-radius: 10px; background: var(--panel-2); cursor: default; user-select: none; -webkit-user-select: none; }

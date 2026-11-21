@@ -1680,9 +1680,20 @@ async function ajouterAgentChat(b) {
   if (r) majChat(true);
 }
 
+// an empty project chat: the project (not Athanor's mark, which is the home assistant's), and ways to start
+const EXEMPLES_CHAT = ["Where does the project stand?", "How is the project organised?", "Why did the last milestone fail?"];
+function videChat() {
+  const nom = ((etat.vue || {}).projet || {}).nom || "";
+  return `<div class="chat-accueil-vide">
+    <div class="chat-projet-icone" aria-hidden="true">${ic("projet")}</div>
+    <h2 class="m0">${h(t("Chat about {0}", [nom]))}</h2>
+    <p class="muet m0">${t("Ask anything about the project: how a part works, where something is, what the pilot did, why a milestone failed. A change you ask for becomes a note for the pilot; tick “Change the files” for Claude to make it itself. The i at the top shows everything the chat can do.")}</p>
+    <div class="ligne m0 chat-vide-actions">${EXEMPLES_CHAT.map((x) => `<button type="button" class="btn btn-petit puce-sugg" data-exemple="${h(t(x))}">${h(t(x))}</button>`).join("")}</div>
+  </div>`;
+}
 function filChat(d) {
   const msgs = d.messages || [];
-  let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about the project: how a part works, where something is, what the pilot did, why a milestone failed. A change you ask for becomes a note for the pilot; tick “Change the files” for Claude to make it itself. The i at the top shows everything the chat can do.")}</div>`;
+  let html = msgs.length ? msgs.map(messageChat).join("") : d.en_cours ? "" : videChat();
   if (d.en_cours && (d.partiel || {}).mode === "attente") {
     html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente"><div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${t("Waiting for the end of the pilot's cycle: Claude then changes the files, and the pilot starts again. Stop cancels it (the pilot goes on).")}</div></div></div>`;
   } else if (d.en_cours) {
@@ -1706,14 +1717,18 @@ async function majChat(force) {
   fil.innerHTML = filChat(d);
   if (enBas || force) fil.scrollTop = fil.scrollHeight;
   majBoutonBas(fil);
-  const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode");
+  const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode"), nv = $("#chat-nouveau");
   if (b) b.hidden = d.en_cours;
+  if (nv) nv.hidden = !d.messages.length;
   if (s) s.hidden = !d.en_cours;
   if (m) m.innerHTML = modeChat();
 }
 
 // what Claude may do with the next message: the pilot's state, and the "change the files" switch (at the bottom)
-function modeChat() {
+function modeChat() { // and the web, when Internet is on
+  return modeChatFichiers() + (chat.internet ? " " + t("Searches the web.") : "");
+}
+function modeChatFichiers() {
   const point = chat.piloteActif ? `<span class="attention">${ic("point")}</span>` : `<span class="ok">${ic("point")}</span>`;
   if (!chat.modif) return `${point} ${t("Claude reads and answers: a change you ask for becomes a note for the pilot, sent with one click.")}`;
   if (chat.piloteActif) return `${point} ${t("The pilot stops at the end of its current cycle, Claude changes the files, Athanor commits them, then the pilot starts again on its own with a note of the change.")}`;
@@ -1741,12 +1756,9 @@ document.addEventListener("focusout", (ev) => { const f = ev.target.classList &&
 const boutonBas = (id) => `<button type="button" class="btn btn-petit chat-bas" id="${id}-bas" hidden>${t("Go to the latest message")}</button>`;
 document.addEventListener("scroll", (ev) => { if (ev.target.classList && ev.target.classList.contains("chat-fil")) majBoutonBas(ev.target); }, true);
 document.addEventListener("click", (ev) => {
-  const b = ev.target.closest(".chat-bas"), o = ev.target.closest("[data-chat-options]");
+  const b = ev.target.closest(".chat-bas");
   if (b) { const f = document.getElementById(b.id.slice(0, -4)); if (f) { f.scrollTop = f.scrollHeight; b.hidden = true; } }
-  // on a phone the chat's secondary bars stay folded behind "Options" (app.css)
-  if (o) { const c = o.closest(".chat, .accueil-chat"); o.setAttribute("aria-expanded", String(c.classList.toggle("ouvert"))); }
 });
-const boutonOptions = (classe = "") => `<button type="button" class="btn tel-seul ${classe}" data-chat-options aria-expanded="false">${t("Options")}</button>`;
 // tactile: a phone or a tablet (a finger, no mouse)
 const tactile = () => matchMedia("(pointer: coarse)").matches;
 // the chat fields grow with what is written through CSS field-sizing; without it, the same by hand (max-height in app.css)
@@ -1761,21 +1773,30 @@ pages.chat = async () => {
   const modeles = ["", ...chat.modeles];
   if (!modeles.includes(chat.modele)) modeles.push(chat.modele);
   setTimeout(() => majChat(true), 0);
-  return `<div class="bloc chat">
-    <div class="ligne m0 chat-tete"><h2 class="m0">${t("Chat with Claude")} <button type="button" class="chat-info" id="chat-info" title="${h(t("What the chat can do"))}" aria-label="${h(t("What the chat can do"))}">i</button></h2><span class="muet petit croit chat-replie" id="chat-mode">${modeChat()}</span>
-      <button type="button" class="btn btn-petit chat-replie" id="chat-nouveau">${t("New conversation")}</button></div>
+  // the chat of one project (the Studio's), as a conversation like the home one but its own: it names the project
+  // and the folder Claude reads; the home's assistant, one click away, is the one for Athanor as a whole
+  const p = (etat.vue || {}).projet || {};
+  return `<div class="bloc chat chat-projet" data-pieces="ct">
+    <div class="ligne m0 chat-tete"><div class="croit chat-titre"><h2 class="m0">${h(t("Chat about {0}", [p.nom || ""]))} <button type="button" class="chat-info" id="chat-info" title="${h(t("What the chat can do"))}" aria-label="${h(t("What the chat can do"))}">i</button></h2>
+        ${p.dossier ? `<p class="muet petit m0 chat-dossier" title="${h(p.dossier)}">${ic("dossier")} ${h(t("Claude reads this project's folder: {0}", [p.dossier]))}</p>` : ""}</div>
+      <a class="btn btn-petit" href="#accueil" title="${h(t("For Athanor as a whole: several projects, your servers, a new mission"))}">${t("General assistant")}</a>
+      <button type="button" class="btn btn-petit" id="chat-nouveau" hidden>${t("New conversation")}</button></div>
     <div class="chat-fil" id="chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}"></div>${boutonBas("chat-fil")}
-    <div class="chat-saisie">
-      <textarea id="chat-texte" class="composeur-champ" rows="2" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
-      ${zonePieces("ct")}
-      <div class="ligne m0 mt-1 chat-options chat-replie">
-        <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("Change the files")}</span></label>
-        <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>${t("Internet")}</span></label></div>
-      <div class="ligne m0 mt-1"><span class="ligne m0 chat-replie${chat.modele ? "" : " chat-modele-repli"}"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div></span>
-        <span class="espace"></span>${boutonOptions(chat.modele ? "" : "chat-options-bureau")}
+    <div class="composeur">
+      <textarea id="chat-texte" class="composeur-champ" rows="2" aria-label="${h(t("Your question or the change you want…"))}" aria-describedby="chat-mode" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
+      <input type="file" multiple hidden id="ct-fichiers">
+      <ul class="pieces-liste" id="ct-liste">${listePieces("ct")}</ul>
+      <div class="composeur-barre" role="group" aria-label="${h(t("What the chat can do"))}">
+        <button type="button" class="option-chat" data-choisir-pieces="ct" title="${h(t("or drop them here: images, PDF, text, documents, data (50 MB at most each)"))}">${ic("trombone")}<span>${t("Files")}</span></button>
+        <label class="option-chat" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}>${ic("globe")}<span>${t("Internet")}</span></label>
+        <label class="option-chat" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}>${ic("crayon")}<span>${t("Change the files")}</span></label>
+        <label class="option-chat option-modele" title="${h(t("Model"))}">${ic("etoile")}<select id="chat-modele" aria-label="${h(t("Model"))}">${modeles.map((m) => `<option value="${h(m)}"${chat.modele === m ? " selected" : ""}>${h(m || t("account default"))}</option>`).join("")}</select></label>
+        <span class="espace"></span>
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
-        <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")}</button></div>
+        <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")} ${ic("droite")}</button>
+      </div>
     </div>
+    <p class="petit muet m0 hub-capacites" id="chat-mode">${modeChat()}</p>
   </div>`;
 };
 
@@ -2604,7 +2625,7 @@ document.addEventListener("click", async (ev) => {
   if (b.id === "hub-chat-aide") return lancerTourChat();
   if (b.id === "hub-dossiers-ouvrir") { const p = $("#hub-dossiers"); p.hidden = !p.hidden; b.setAttribute("aria-expanded", String(!p.hidden)); return; }
   if (b.dataset.exemple) { // an example fills the field (an ending @ opens the list of projects), never sends
-    const c = $("#accueil-texte"); if (!c) return;
+    const c = b.closest(".chat, .accueil-chat")?.querySelector("textarea.composeur-champ"); if (!c) return; // the home's field or a project chat's
     c.value = etat.accueilTexte = b.dataset.exemple; c.focus(); c.setSelectionRange(c.value.length, c.value.length);
     return c.dispatchEvent(new Event("input", { bubbles: true }));
   }
@@ -8657,7 +8678,6 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "chat-info") return aideChat();
     if (b.id === "chat-stop") { await action(api("chat/arreter", "POST")); return majChat(true); }
     if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); majChat(true); } return; }
-    if (b.dataset.chatModele !== undefined) { chat.modele = b.dataset.chatModele; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* ignore */ } b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
     if (b.dataset.chatAgent !== undefined) return ajouterAgentChat(b);
     if (b.dataset.chatMcp !== undefined) return ajouterMCPChat(b);
     if (b.dataset.chatNote !== undefined) { b.disabled = true; await action(api("chat/note", "POST", { index: Number(b.dataset.chatNote) })); return majChat(true); }
@@ -8706,7 +8726,8 @@ $("#page").addEventListener("keydown", (ev) => {
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "chat-modif") { chat.modif = i.checked; const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); }
-  if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } }
+  if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); }
+  if (i.id === "chat-modele") { chat.modele = i.value; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* this device only */ } }
   if (i.dataset.quotaSeuil || i.dataset.quotaAction) {
     const cle = i.dataset.quotaSeuil || i.dataset.quotaAction, bloc = i.closest(".quota-arret");
     const seuil = Number((bloc.querySelector("[data-quota-seuil]") || {}).value || 0);
