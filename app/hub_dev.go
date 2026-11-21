@@ -124,7 +124,8 @@ func (moduleDev) Resume(s *Serveur) ResumeModule {
 	s.mu.Unlock()
 	q := quotaActuel(projets)
 	if v := valeurQuota(q); v != nil {
-		r.Stats = append(r.Stats, StatModule{Cle: "Quota used", Valeur: v, Page: "#suivi"})
+		r.Stats = append(r.Stats, StatModule{Cle: "Quota used", Valeur: v, Page: "#suivi"}) // the terminal's figure
+		r.Quota = q
 	}
 	switch {
 	case besoins > 0, q != nil && q.Statut == "rejected":

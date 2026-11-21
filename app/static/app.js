@@ -2104,14 +2104,24 @@ function statModule(s) {
   else if (typeof s.valeur === "string") valeur = `<b class="hub-valeur hub-statut">${h(t(STATUTS_QUOTA[s.valeur] || String(s.valeur)))}</b>`;
   return `<a class="hub-stat" href="${h(s.page || "#accueil")}">${valeur}<span class="muet petit">${h(t(s.cle))}</span></a>`;
 }
+// the Studio's quota on its tile: each window Claude Code reports (the 5 hours only on the plans that have it, then the
+// week, then a model's own week), its use and when it starts again; a click opens the Overview's details
+function quotaTuile(q) {
+  if (!q || !(q.fenetres || []).length) return "";
+  const rang = (n) => n === "five_hour" ? 0 : n === "seven_day" ? 1 : 2, maintenant = Date.now() / 1000;
+  return `<div class="tuile-quota">${[...q.fenetres].sort((a, b) => rang(a.nom) - rang(b.nom)).map((f) => {
+    const passe = f.reinit && f.reinit < maintenant, u = passe ? 0 : f.utilisation, pct = u == null ? null : Math.round(u * 100);
+    return `<a class="machine-ligne tuile-quota-ligne" href="#suivi"><div class="ligne m0"><span>${h(nomFenetre(f.nom))}</span><span class="espace"></span><b>${pct == null ? "—" : pct + " %"}</b></div>${pct == null ? "" : barreMachine(pct)}${f.reinit && !passe ? `<div class="muet petit">${h(t("Starts again {0}", [dans(f.reinit)]))}</div>` : ""}</a>`;
+  }).join("")}${q.statut === "rejected" ? `<p class="attention petit m0">${t("Limit reached: the pilot waits for it to start again.")}</p>` : ""}</div>`;
+}
 function tuileModule(m) {
   const r = m.resume || {}, [classe, libelle] = ETATS_MODULE[r.etat] || ETATS_MODULE.inactif;
   const ouvrir = (m.pages || [])[0];
   return `<section class="bloc tuile-module${r.etat === "attention" ? " besoin" : ""}" data-module="${h(m.id)}">
     <div class="ligne m0 tuile-tete"><span class="dot ${classe}" aria-hidden="true"></span><h2 class="m0">${h(t(m.nom))}</h2><span class="muet petit">${h(t(libelle))}</span><span class="espace"></span>
       ${ouvrir ? `<a class="btn btn-petit" href="${h(ouvrir.hash)}">${t("Open")} →</a>` : ""}</div>
-    <div class="hub-stats">${(r.stats || []).map(statModule).join("")}</div>
-    ${m.id === "dev" ? raccourcisDev() : ""}
+    <div class="hub-stats">${(r.stats || []).filter((s) => !(r.quota && s.cle === "Quota used")).map(statModule).join("")}</div>
+    ${quotaTuile(r.quota)}${m.id === "dev" ? raccourcisDev() : ""}
   </section>`;
 }
 // B6: New project, Manage and Archives one tap from Home (the phone needed three: menu, selector, entry)
@@ -2123,7 +2133,7 @@ function raccourcisDev() {
 function blocListeAccueil(cl, titre, liste, vide, modules, apres = "") {
   return `<section class="bloc ${cl}" aria-labelledby="${cl}-titre">
     <div class="ligne m0 tuile-tete"><h2 class="m0" id="${cl}-titre">${t(titre)}</h2><span class="espace"></span><a class="btn btn-petit" href="#global">${t("See all")} →</a></div>
-    ${liste.length ? `<div class="grille-projets">${liste.slice(0, 6).map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t(vide)}</div>`}${apres}
+    ${liste.length ? `<div class="grille-projets">${liste.slice(0, 4).map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t(vide)}</div>`}${apres}
   </section>`;
 }
 const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting for your answer", tous.filter((e) => e.attente), "Nothing waits for you.", modules);
@@ -2255,29 +2265,31 @@ pages.accueil = async () => {
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
   setTimeout(() => majHubChat(true), 0);
+  // the Home is a conversation with the assistant (left), what waits and what works beside it (right, under it on a phone)
   return `<div class="accueil">${bandeauRaccourci()}${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
-    <div class="ligne m0 accueil-actions local-seul"><button type="button" class="btn" data-nm-nouvelle>${t("New mission")}</button>
-      <span class="muet petit">${t("A project, its servers and API keys, or servers only, in one form launched in one click.")}</span></div>
+   <div class="accueil-grille">
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
-      <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
-        <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
-        <button type="button" class="btn btn-petit local-seul chat-replie" id="hub-chat-nouveau">${t("New conversation")}</button></div>
+      <div class="ligne m0 chat-tete"><h2 class="m0 accueil-titre croit">${t("Assistant")}</h2>
+        <button type="button" class="btn btn-petit local-seul" data-nm-nouvelle title="${h(t("A project, its servers and API keys, or servers only, in one form launched in one click."))}">${t("New mission")}</button>
+        <button type="button" class="btn btn-petit local-seul" id="hub-chat-nouveau" ${(hc.messages || []).length ? "" : "hidden"}>${t("New conversation")}</button>
+        <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button></div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>${boutonBas("hub-chat-fil")}
       <p class="petit muet m0 distant-seul">${t("From a device, this conversation is read only: write to the assistant on the computer.")}</p>
-      <div class="champ-mentions local-seul" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit composeur-champ" rows="2" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
-      <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
-      <input type="file" multiple hidden id="hc-fichiers" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.ini,.log,.html,.css,.js,.ts,.go,.py,.sql">
-      <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
-      <div class="ligne m0 puces-suggestions local-seul chat-replie" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
-      <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>${boutonOptions("local-seul")}
-        <button type="button" class="btn local-seul chat-replie" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${t("Attach files")}</button>
-        <button type="button" class="btn local-seul" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
-        <button type="submit" class="btn btn-primaire local-seul" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
-      <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</div>
+      <div class="composeur local-seul">
+        <div class="champ-mentions" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit composeur-champ" rows="2" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide hub-pouvoirs-resume" aria-label="${h(t("What do you want to do?"))}" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
+        <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
+        <input type="file" multiple hidden id="hc-fichiers" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.ini,.log,.html,.css,.js,.ts,.go,.py,.sql">
+        <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
+        ${pouvoirsHub(hc.pouvoirs || {}, hc.en_cours)}
+      </div>
+      <p class="petit muet m0 hub-capacites local-seul"><span id="hub-pouvoirs-resume">${h(capacitesHub(hc.pouvoirs || {}))}</span> <span id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</span></p>
     </form>
-    ${blocAttente(d.elements || [], modules)}
-    ${blocEnCours(d.elements || [], modules)}
-    <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}${tuileMachine()}</div>
+    <aside class="accueil-cote" aria-label="${h(t("What waits and what works"))}">
+      ${blocAttente(d.elements || [], modules)}
+      ${blocEnCours(d.elements || [], modules)}
+      <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}${tuileMachine()}</div>
+    </aside>
+   </div>
   </div>`;
 };
 // This computer (machine.go): processors, memory, each graphics card, each disk and each network link, read every 2 s while the home shows
@@ -2322,9 +2334,20 @@ document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form
 // conversation's (kept by the server, off by default, gone with a new conversation), always shown under the field.
 let minuterieHubChat;
 const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|mcp|action)>[\s\S]*?<\/\1>/g, "") }); // cards of the project chat: not here; its own card: carteActionHub
+// an empty conversation: Athanor's mark, the question, and a few ways to start (an example fills the field, never sends)
+const EXEMPLES_HUB = ["Where do my projects stand?", "A remark for the project @"];
+function videHub() {
+  return `<div class="chat-accueil-vide">
+    <img src="logo.svg" alt="" class="chat-logo" draggable="false">
+    <h2 class="m0">${t("What do you want to do?")}</h2>
+    <p class="muet m0">${t("Ask a question, or say what you want done: a project, a change, a server to set up. The assistant proposes, you decide.")}</p>
+    <div class="ligne m0 chat-vide-actions local-seul"><span class="puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</span>
+      ${EXEMPLES_HUB.map((x) => `<button type="button" class="btn btn-petit puce-sugg" data-exemple="${h(t(x))}">${h(t(x).replace(/@$/, "@…"))}</button>`).join("")}</div>
+  </div>`;
+}
 function filHub(d) {
   const msgs = (d.messages || []).map(sansCartes), cartes = d.actions || {};
-  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide"></div>`;
+  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : d.en_cours ? "" : videHub();
   if (d.en_cours) {
     const p = d.partiel || {}, textes = p.textes || [], outils = p.outils || [];
     html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp|action)>[\s\S]*$/, ""), true) : ""}
@@ -2458,10 +2481,16 @@ document.addEventListener("change", (ev) => {
   const z = ev.target.closest("[data-carte-action]")?.querySelector("[data-cact-confirme]");
   if (z) { z.hidden = !ev.target.checked; if (!ev.target.checked) z.querySelector("input").checked = false; }
 });
-const POUVOIRS_HUB = [["internet", "Internet", "Searches and reads the web when a message needs it."],
-  ["ecriture", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
-const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, n]) => t(n)),
-  ...((pv.dossiers || []).length ? [tn(pv.dossiers.length, "1 folder", "{0} folders", [pv.dossiers.length])] : [])].join(" · ");
+const POUVOIRS_HUB = [["internet", "Internet", "Searches and reads the web when a message needs it.", "globe"],
+  ["ecriture", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere.", "crayon"]];
+// what the assistant can do now, in plain words under the field (the powers and the folders change it)
+function capacitesHub(pv) {
+  const n = (pv.dossiers || []).length, ecrit = pv.ecriture && (pv.dossiers || []).some((d) => d.ecriture);
+  return [t("Reads your messages and the attached files, and answers."),
+    n ? tn(n, "Reads 1 folder of your computer.", "Reads {0} folders of your computer.", [n]) : t("Sees no file of your computer."),
+    pv.internet ? t("Searches the web.") : "", ecrit ? t("Changes files in the folders set to “read and write”.") : "",
+    t("To act, it proposes a card you launch.")].filter(Boolean).join(" ");
+}
 // M196: the folders pointed (checked by the server, hub_chat_dossiers.go), each read only or read and write
 function listeDossiersHub(pv) {
   const l = pv.dossiers || [];
@@ -2470,13 +2499,21 @@ function listeDossiersHub(pv) {
     <button type="button" class="btn-lien" data-dossier-retirer="${i}" title="${h(t("Remove"))}" aria-label="${h(t("Remove {0}", [d.chemin]))}">${ic("croix")}</button></li>`).join("")
     : `<li class="muet petit">${t("No folder: the assistant sees no file of your computer.")}</li>`;
 }
-function pouvoirsHub(pv) {
-  return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("{0}: {1}", [t("What the assistant can do"), `<span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span>`]).replace(" :", " :")}</summary>
-    ${POUVOIRS_HUB.map(([k, n, aide]) => `<label class="interrupteur m0 local-seul"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${t(n)}</span></label>
-    <p class="petit muet m0 local-seul" id="pv-aide-${k}">${t(aide)}</p>`).join("")}
-    <div class="hub-dossiers"><div class="ligne m0"><strong>${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit local-seul" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
+// the field's bar, always in sight: attach, the two powers (on: lit), the folders (their count opens their list), Send
+function pouvoirsHub(pv, enCours) {
+  return `<div class="hub-pouvoirs" id="hub-pouvoirs">
+    <div class="composeur-barre" role="group" aria-label="${h(t("What the assistant can do"))}">
+      <button type="button" class="option-chat" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${ic("trombone")}<span>${t("Files")}</span></button>
+      ${POUVOIRS_HUB.map(([k, n, aide, i]) => `<label class="option-chat" title="${h(t(aide))}"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""}>${ic(i)}<span>${t(n)}</span></label>`).join("")}
+      <button type="button" class="option-chat" id="hub-dossiers-ouvrir" aria-expanded="false" aria-controls="hub-dossiers" title="${h(t("The folders of your computer the assistant may read"))}">${ic("dossier")}<span>${t("Folders")}</span><span class="option-nb" id="hub-dossiers-nb">${(pv.dossiers || []).length}</span></button>
+      <span class="espace"></span>
+      <button type="button" class="btn" id="hub-chat-stop" ${enCours ? "" : "hidden"}>${t("Stop")}</button>
+      <button type="submit" class="btn btn-primaire" id="hub-chat-envoyer" ${enCours ? "hidden" : ""}>${t("Send")} ${ic("droite")}</button>
+    </div>
+    <div class="hub-dossiers" id="hub-dossiers" hidden><div class="ligne m0"><strong>${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
       <p class="petit muet m0" id="pv-aide-dossiers">${t("The assistant reads only the folders you point here; with Writing on, it changes files only in those set to “read and write”. Drop a folder here to add it.")}</p>
-      <ul class="hub-dossiers-liste" id="hub-dossiers-liste" aria-describedby="pv-aide-dossiers">${listeDossiersHub(pv)}</ul></div></details>`;
+      <ul class="hub-dossiers-liste" id="hub-dossiers-liste" aria-describedby="pv-aide-dossiers">${listeDossiersHub(pv)}</ul></div>
+  </div>`;
 }
 async function changerPouvoirs(change) {
   await action(api("hub/chat/pouvoirs", "POST", { ...((etat.hubChat || {}).pouvoirs || {}), ...change }), "");
@@ -2520,7 +2557,9 @@ async function majHubChat(force) {
   majBoutonBas(fil);
   const pv = d.pouvoirs || {};
   document.querySelectorAll("[data-pouvoir]").forEach((c) => { c.checked = !!pv[c.dataset.pouvoir]; });
-  const r = $("#hub-pouvoirs-resume"); if (r) r.textContent = resumePouvoirs(pv);
+  const r = $("#hub-pouvoirs-resume"); if (r) r.textContent = capacitesHub(pv);
+  const nb = $("#hub-dossiers-nb"); if (nb) nb.textContent = (pv.dossiers || []).length;
+  const nv = $("#hub-chat-nouveau"); if (nv) nv.hidden = !(d.messages || []).length;
   const ld = $("#hub-dossiers-liste"); if (ld) ld.innerHTML = listeDossiersHub(pv);
   const b = $("#hub-chat-envoyer"), st = $("#hub-chat-stop");
   if (b) b.hidden = !!d.en_cours;
@@ -2554,8 +2593,14 @@ document.addEventListener("keydown", (ev) => {
   entreeEnvoie(ev, envoyerHubChat);
 });
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("#hub-chat-aide, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
+  const b = ev.target.closest("#hub-chat-aide, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer], #hub-dossiers-ouvrir, [data-exemple]"); if (!b) return;
   if (b.id === "hub-chat-aide") return lancerTourChat();
+  if (b.id === "hub-dossiers-ouvrir") { const p = $("#hub-dossiers"); p.hidden = !p.hidden; b.setAttribute("aria-expanded", String(!p.hidden)); return; }
+  if (b.dataset.exemple) { // an example fills the field (an ending @ opens the list of projects), never sends
+    const c = $("#accueil-texte"); if (!c) return;
+    c.value = etat.accueilTexte = b.dataset.exemple; c.focus(); c.setSelectionRange(c.value.length, c.value.length);
+    return c.dispatchEvent(new Event("input", { bubbles: true }));
+  }
   if (b.id === "hub-dossier-ajouter") return ajouterDossierHub();
   if (b.dataset.dossierRetirer) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).filter((x, i) => i !== +b.dataset.dossierRetirer) });
   if (b.id === "hub-chat-stop") { await action(api("hub/chat/arreter", "POST")); return majHubChat(true); }

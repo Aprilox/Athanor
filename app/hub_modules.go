@@ -126,8 +126,9 @@ type StatModule struct {
 
 type ResumeModule struct {
 	Stats  []StatModule `json:"stats"`
-	Besoin int          `json:"besoin"` // items needing the owner (the bell)
-	Etat   string       `json:"etat"`   // "ok" | "attention" | "inactif"
+	Besoin int          `json:"besoin"`          // items needing the owner (the bell)
+	Etat   string       `json:"etat"`            // "ok" | "attention" | "inactif"
+	Quota  *EtatQuota   `json:"quota,omitempty"` // the Studio's: each window (5 hours, the week…) drawn on its tile
 }
 
 var (
