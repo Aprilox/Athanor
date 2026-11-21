@@ -76,10 +76,13 @@ func verifierDossierChat(k Kit, brut string) (string, error) {
 	// each step of the path: no symbolic link, no junction (Windows: a mount point that Readlink reads)
 	for d := c; ; d = filepath.Dir(d) {
 		fi, err := os.Lstat(d)
+		if err == nil && aliasMac(d) {
+			fi, err = os.Stat(d) // macOS's own link (/etc → /private/etc): the folder it leads to
+		}
 		if err != nil {
 			return "", errDossierAbsent
 		}
-		if fi.Mode()&os.ModeSymlink != 0 && !aliasMac(d) {
+		if fi.Mode()&os.ModeSymlink != 0 {
 			return "", errDossierLien
 		}
 		if fi.Mode()&os.ModeIrregular != 0 {
