@@ -184,7 +184,28 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 @media (max-width: 1100px) { .accueil-grille { grid-template-columns: minmax(0, 1fr); } .accueil-chat { position: static; height: auto; min-height: 0; } .accueil .hub-chat-fil { max-height: 62vh; min-height: 300px; } }
 /* an empty conversation: Athanor's mark in the middle, the question, ways to start */
 .chat-accueil-vide { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 28px 16px; }
-.chat-logo { width: 128px; height: 128px; filter: drop-shadow(0 14px 44px var(--accent-halo)); margin-bottom: 4px; user-select: none; }
+/* the empty conversation's mark: Athanor's logo drawn in the theme's colours as in the opening scene, then its cycle
+   turns slowly and its halo breathes (only with the animation on, html[data-scene]; paused while the window is hidden) */
+.chat-marque { position: relative; display: grid; place-items: center; margin-bottom: 4px; user-select: none; }
+.chat-marque::before { content: ""; position: absolute; inset: -22%; border-radius: 50%; background: radial-gradient(closest-side, var(--accent-halo), transparent); opacity: .75; }
+.chat-logo { position: relative; width: 128px; height: 128px; overflow: visible; }
+.ma-tuile { fill: var(--panel-2); stroke: var(--line); stroke-width: 2; }
+.ma-anneau, .ma-a, .ma-barre { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100; }
+.ma-anneau { stroke: var(--accent); stroke-width: 18; }
+.ma-fleche { fill: var(--accent); transform-box: fill-box; transform-origin: center; }
+.ma-a { stroke: var(--ink); stroke-width: 18; }
+.ma-barre { stroke: var(--ink); stroke-width: 16; }
+.ma-cycle { transform-box: view-box; transform-origin: 50% 50%; }
+html[data-scene] .chat-logo { animation: splash-logo .7s cubic-bezier(.2, .7, .2, 1) both; }
+html[data-scene] .ma-anneau { animation: splash-trait .9s .25s ease-in-out both; }
+html[data-scene] .ma-fleche { animation: splash-pop .3s 1.05s ease-out both; }
+html[data-scene] .ma-a { animation: splash-trait .6s .55s ease-out both; }
+html[data-scene] .ma-barre { animation: splash-trait .3s 1s ease-out both; }
+html[data-scene] .ma-cycle { animation: ma-tour 24s 1.4s linear infinite; }
+html[data-scene] .chat-marque::before { animation: ma-souffle 4s ease-in-out infinite; }
+html.scene-pause .ma-cycle, html.scene-pause .chat-marque::before { animation-play-state: paused; }
+@keyframes ma-tour { to { transform: rotate(360deg); } }
+@keyframes ma-souffle { 50% { opacity: 1; transform: scale(1.08); } }
 .chat-accueil-vide h2 { font-size: 26px; font-weight: 650; }
 .chat-accueil-vide p { max-width: 36em; }
 .accueil-barre .chat-vide-actions { flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }

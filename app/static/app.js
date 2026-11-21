@@ -2341,7 +2341,9 @@ const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|
 const EXEMPLES_HUB = ["Where do my projects stand?", "A remark for the project @"];
 function videHub() {
   return `<div class="chat-accueil-vide">
-    <img src="logo.svg" alt="" class="chat-logo" draggable="false">
+    <div class="chat-marque" aria-hidden="true"><svg class="chat-logo" viewBox="0 0 256 256"><rect class="ma-tuile" x="8" y="8" width="240" height="240" rx="56"/>
+      <g class="ma-cycle"><path class="ma-anneau" pathLength="100" d="M 186 79 A 76 76 0 1 0 204 128"/><path class="ma-fleche" d="M 184 136 L 224 136 L 204 104 Z"/></g>
+      <path class="ma-a" pathLength="100" d="M 92 168 L 128 86 L 164 168"/><path class="ma-barre" pathLength="100" d="M 109 138 L 147 138"/></svg></div>
     <h2 class="m0">${t("What do you want to do?")}</h2>
     <p class="muet m0">${t("Ask a question, or say what you want done: a project, a change, a server to set up. The assistant proposes, you decide.")}</p>
     <div class="ligne m0 chat-vide-actions local-seul"><span class="puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</span>
@@ -2554,7 +2556,8 @@ async function majHubChat(force) {
   etat.hubChatSig = sig;
   const fil = $("#hub-chat-fil"); if (!fil) return;
   const enBas = auBas(fil);
-  garderFocus(fil, () => { fil.innerHTML = filHub(d); }); // a card's button or field keeps the keyboard focus across a refresh of the thread
+  // a card's button or field keeps the keyboard focus across a refresh of the thread; an empty one in sight stays (its mark is not drawn again)
+  if ((d.messages || []).length || d.en_cours || !fil.querySelector(".chat-accueil-vide")) garderFocus(fil, () => { fil.innerHTML = filHub(d); });
   $("#hub-chat-envoyer").classList.toggle("btn-primaire", !fil.querySelector(".btn-primaire")); // one main action: a waiting card's Launch, else Send (M318)
   if (enBas || force) fil.scrollTop = fil.scrollHeight;
   majBoutonBas(fil);
