@@ -2,7 +2,7 @@
 
 *English: [DEPLOY.md](DEPLOY.md)*
 
-Comment Athanor met un projet en ligne : qui peut lancer un déploiement, les trois méthodes, ce qu'il écrit sur vos serveurs, comment il revient en arrière, comment il surveille le site, et ce qui n'atteint jamais l'IA. Dans l'application, *Guide › Mettre un site en ligne* vous accompagne ; où un projet va en ligne, et quand, se règle dans son onglet *Déploiement* ([README](../README.fr.md#le-déploiement-dun-projet)) ; Cloudflare est dans [CLOUDFLARE.md](CLOUDFLARE.md).
+Comment Athanor met un projet en ligne : qui peut lancer un déploiement, les trois méthodes, ce qu'il écrit sur vos serveurs, comment il revient en arrière, comment il surveille le site, et ce qui n'atteint jamais l'IA. Dans l'application, *Guide › Mettre un site en ligne* vous accompagne ; où un projet va en ligne, et quand, se règle dans son onglet *Déploiement* ([Serveurs et déploiement](SERVERS.fr.md#le-déploiement-dun-projet)) ; Cloudflare est dans [CLOUDFLARE.md](CLOUDFLARE.md).
 
 ## Qui lance un déploiement
 
