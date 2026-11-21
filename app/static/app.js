@@ -1520,10 +1520,32 @@ function blocMode(m, carte) {
     <span class="espace"></span><div class="choix m0">${[-1, 72, 168, 336, 720, 0].map((n) => `<button type="button" data-duree-max="${n}" class="${(m.duree_max ?? -1) === n ? "actif" : ""}">${n >= 0 ? libelleDuree(n) : m.duree_max_global ? t("Like Settings ({0} h)", [m.duree_max_global]) : t("Like Settings (unlimited)")}</button>`).join("")}</div>
     <input type="number" id="md-duree-max" class="cadrage-autre" min="1" max="87600" inputmode="numeric" value="${m.duree_max > 0 && ![72, 168, 336, 720].includes(m.duree_max) ? m.duree_max : ""}" placeholder="${h(t("Other (h)"))}" aria-label="${h(t("Other (h)"))}" title="${h(t("Other (h)"))}">
     </div>`}
+    <div class="mode-suite modeles-projet">
+    <span class="petit"><b>${t("Models")}</b> <span class="muet">${t("this project's own; Like Settings follows Settings › Claude. Applies from the next cycle.")}</span></span>
+    <div class="modeles-grille">${CLES_MODELES_PROJET.map((cle) => choixModeleProjet(m, cle)).join("")}</div>
+    </div>
   </div></div>`;
 }
+// the project's own models (modeles_projet.go): each one "Like Settings" (Settings' value shown in it) or a
+// model; the names proposed are the ones of Settings › Claude (the aliases, then the models this PC used)
+const CLES_MODELES_PROJET = ["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL"];
+function nomModeleGlobal(m, cle) {
+  const g = m.modeles_globaux || {};
+  // a setting absent from Settings' file: the pilot's own default
+  const v = cle in g ? g[cle] : { WORKER_MODEL: "sonnet", CHEAP_MODEL: "haiku" }[cle] || "";
+  if (v.toLowerCase() === "auto") return t("chosen by the lead");
+  if (v) return v;
+  return t({ MODEL: "account default", FALLBACK_MODEL: "no fallback", CHEAP_MODEL: "same as the sub-agents" }[cle] || "same as the lead");
+}
+function choixModeleProjet(m, cle) {
+  const propre = (m.modeles || {})[cle] || "";
+  const valeurs = [...new Set([...(m.modeles_proposes || []), ...(cle === "SUBAGENT_MODEL" ? ["auto"] : []), ...(propre ? [propre] : [])])];
+  return `<label class="modele-projet m0"><span class="petit muet">${t((REGLAGES[cle] || [])[1] || cle)}</span><select data-modele-projet="${cle}" class="${propre ? "actif" : ""}">
+    <option value="">${h(t("Like Settings ({0})", [nomModeleGlobal(m, cle)]))}</option>${valeurs.map((v) => `<option value="${h(v)}" ${v === propre ? "selected" : ""}>${h(v === "auto" ? t("chosen by the lead") : v)}</option>`).join("")}</select></label>`;
+}
 // changerMode: the block as it is on the page, with one change. changement: { parallele, parallele_max, eco,
-// rapide, cadrage_max (0: back to Settings), duree_max (0: unlimited, -1: back to Settings) }; what is left
+// rapide, cadrage_max (0: back to Settings), duree_max (0: unlimited, -1: back to Settings), modeles ({ key:
+// model }, "": back to Settings) }; what is left
 // out stays as it is. On New project nothing is sent yet: the choice waits in etat.npMode for the creation.
 async function changerMode(changement, de) {
   const z = (de && de.closest(".mode-ligne")) || $("#page"), coche = (id) => z.querySelector("#md-" + id).checked;
@@ -1534,6 +1556,7 @@ async function changerMode(changement, de) {
     return;
   }
   if (etat.page === "nouveau") {
+    if (changement.modeles) corps.modeles = { ...(etat.npMode.modeles || {}), ...changement.modeles };
     Object.assign(etat.npMode, corps);
     const zone = $("#np-mode"); if (zone) zone.innerHTML = blocMode(etat.npMode);
     return;
@@ -2978,26 +3001,25 @@ document.addEventListener("click", (ev) => {
 // --- managing a project: name, folder, milestones check, archive, delete
 // --- M291: "This project's settings" (Manage): the settings of reglages_projets.go, and the working mode (/api/mode).
 // One control for all of them: its first entry is "Default (<the value of Settings>)", the others the project's own.
-const NOMS_REGLAGES_PROJET = { modele: "Model of the lead", modele_secours: "Fallback model", modele_sous_agents: "Model of the sub-agents", modele_taches_simples: "Cheap model", permission: "Permissions" };
-const nomReglageProjet = (cle) => cle.startsWith("quota_") ? t("{0}: {1}", [t("Auto stop"), cle === "quota_modele" ? t("This week, each model") : nomFenetre(cle.slice(6))]) : t(NOMS_REGLAGES_PROJET[cle]);
+// (the project's own models are in its Working mode, the Models block)
+const nomReglageProjet = (cle) => cle.startsWith("quota_") ? t("{0}: {1}", [t("Auto stop"), cle === "quota_modele" ? t("This week, each model") : nomFenetre(cle.slice(6))]) : t("Permissions");
 function libelleReglageProjet(cle, v) {
   if (cle === "permission") return titrePermission(v);
-  if (!cle.startsWith("quota_")) return v === "auto" ? t("chosen by the lead") : v || t("account default");
   const [seuil, a] = v.split(":");
   return a ? t("{0}: {1}", [t("at {0} %", [seuil]), (ACTIONS_QUOTA().find(([x]) => x === a) || [a, a])[1]]) : t("off");
 }
 function choixReglageProjet(r) {
   const id = "rp-" + r.cle, defaut = t("As in Settings ({0})", [libelleReglageProjet(r.cle, r.defaut)]);
   if (r.cle === "permission") return selecteurPermissions(id, r.propre, { defaut, distant: (etat.vue || {}).distant });
-  const valeurs = r.cle.startsWith("quota_") ? ["0", ...SEUILS_QUOTA.flatMap((s) => ACTIONS_QUOTA().map(([a]) => s + ":" + a))] : etat.rp.modeles.concat(r.cle === "modele_sous_agents" ? ["auto"] : []);
+  const valeurs = ["0", ...SEUILS_QUOTA.flatMap((s) => ACTIONS_QUOTA().map(([a]) => s + ":" + a))];
   if (r.propre && !valeurs.includes(r.propre)) valeurs.push(r.propre);
   return `<select id="${id}">${["", ...valeurs].map((v) => `<option value="${h(v)}"${r.propre === v ? " selected" : ""}>${h(v ? libelleReglageProjet(r.cle, v) : defaut)}</option>`).join("")}</select>`;
 }
 const lignesReglagesProjet = (l = etat.rp.reglages) => l.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
   <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_PROJET())}</div><p class="muet petit m0 mt-1">${t("It covers this project's pilot and its deployment on the servers. When it deploys is in the Deployment tab; your own assistant in a server's terminal has its own permission, chosen there.")} <a href="#deploiement">${t("Deployment")}</a></p>` : ""}</div></div>`).join("");
 async function rendreReglagesProjet() {
-  const [r, mod, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), api("modeles").catch(() => ({})), rendreMode()]);
-  etat.rp = { reglages: r.reglages || [], modeles: mod.modeles || [] };
+  const [r, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), rendreMode()]);
+  etat.rp = { reglages: r.reglages || [] };
   return `<section class="bloc" id="rp" aria-labelledby="rp-titre"><h2 id="rp-titre">${t("This project's settings")}</h2>
     <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
     ${mode}<div id="rp-liste">${lignesReglagesProjet()}</div></section>`;
@@ -5973,8 +5995,8 @@ $("#page").addEventListener("submit", async (ev) => {
   if (etat.page !== "coffre") return;
   ev.preventDefault();
   if (ev.target.id === "cof-verrou") {
-    const champ = $("#cof-mdp");
-    if (await action(api("deverrouiller", "POST", { mot_de_passe: champ.value }))) { champ.value = ""; rendrePage(); }
+    const champ = $("#cof-mdp"), mdp = champ.value, r = await action(api("deverrouiller", "POST", { mot_de_passe: mdp }));
+    if (r) { champ.value = ""; rendrePage(); if (r.changer_mdp) exigerNouveauMdp(mdp); }
     return;
   }
   if (ev.target.id === "cof-colle") {
@@ -6375,7 +6397,7 @@ pages["nouvelle-mission"] = async () => {
   const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = projets.find((n) => n.toLowerCase() === f.projet.trim().toLowerCase());
   const pris = [...f.serveurs, ...f.autres], inconnus = [...(gestion ? pris.filter((x) => !serveurs.some((s) => s.id === x)) : []), ...f.apis.filter((x) => !apis.some((a) => a.id === x))];
   const avecServeurs = gestion && pris.some((x) => serveurs.some((s) => s.id === x)), recoit = studio && gestion && f.serveurs.some((x) => serveurs.some((s) => s.id === x));
-  etat.rp = { modeles: etat.cpModeles, reglages: (mis.reglages || []).filter((r) => r.cle !== "permission").map((r) => ({ ...r, propre: f.reglages[r.cle] || "" })) };
+  etat.rp = { reglages: (mis.reglages || []).filter((r) => r.cle !== "permission").map((r) => ({ ...r, propre: f.reglages[r.cle] || "" })) };
   const v = (x) => h(String(x || "")), mdv = { cadrage_global: 25, duree_max_global: 0, ...md, parallele_max: 3, ...(f.modes || {}) };
   const ligneServeur = (x) => { const coche = pris.includes(x.id), autre = f.autres.includes(x.id);
     return `<div class="nm-choix"><label class="case m0"><input type="checkbox" name="nm-srv" id="nm-srv-${h(x.id)}" value="${h(x.id)}"${coche ? " checked" : ""}> <span><b>${h(x.nom)}</b> <span class="muet petit">${h(x.hote || "")}</span></span></label>
@@ -6583,8 +6605,8 @@ $("#page").addEventListener("submit", async (ev) => {
   if (etat.page !== "serveurs") return;
   ev.preventDefault();
   if (ev.target.id === "srv-verrou") {
-    const champ = $("#srv-deverrou");
-    if (await action(api("deverrouiller", "POST", { mot_de_passe: champ.value }))) { champ.value = ""; rendrePage(); }
+    const champ = $("#srv-deverrou"), mdp = champ.value, r = await action(api("deverrouiller", "POST", { mot_de_passe: mdp }));
+    if (r) { champ.value = ""; rendrePage(); if (r.changer_mdp) exigerNouveauMdp(mdp); }
     return;
   }
   if (ev.target.id !== "srv-form") return;
@@ -8497,7 +8519,8 @@ $("#page").addEventListener("click", async (ev) => {
         if ((etat.pieces.np || []).length) await envoyerPieces("np", "demande", r.nom);
         // the settings chosen beside the form, when they differ from the defaults
         const md = etat.npMode; etat.npMode = null;
-        if (md && (md.parallele || md.eco || md.rapide || md.cadrage_max || md.duree_max !== -1)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max }).catch((e) => toast(e.message, "erreur"));
+        const mdModeles = Object.fromEntries(Object.entries((md && md.modeles) || {}).filter(([, v]) => v));
+        if (md && (md.parallele || md.eco || md.rapide || md.cadrage_max || md.duree_max !== -1 || Object.keys(mdModeles).length)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max, modeles: mdModeles }).catch((e) => toast(e.message, "erreur"));
         // the sign-in window opens (the link shows under Manage), or, with this computer connected, linked at once
         if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); if (rl && rl.cree) toast(t("Private repository created and linked: {0}", [rl.cree]), "ok"); }
         await rafraichir(); location.hash = "#suivi";
@@ -8620,6 +8643,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "md-parallele" || i.id === "md-eco" || i.id === "md-rapide") changerMode({}, i); // the switches add up
+  if (i.dataset.modeleProjet) changerMode({ modeles: { [i.dataset.modeleProjet]: i.value } }, i); // "": back to Settings
   // the framing time box typed by hand (10 to 240 min) and the work time limit (1 to 87600 h), checked by the
   // server, saved when the field is left
   const entre = (min, max) => i.value !== "" && Number.isFinite(Number(i.value)) && Math.round(Number(i.value)) >= min && Math.round(Number(i.value)) <= max;
@@ -8683,6 +8707,33 @@ $("#page").addEventListener("input", (ev) => {
 });
 
 // --- lock
+// exigerNouveauMdp: the password that unlocked is shorter than 12 characters (2.x accepted 4): a new one at once,
+// typed twice; the only other way out locks Athanor again. ancien: the password just typed ("" after a reload: asked).
+let nouveauMdpOuvert = false;
+async function exigerNouveauMdp(ancien) {
+  if (nouveauMdpOuvert) return;
+  nouveauMdpOuvert = true;
+  const o = { mdp: true, titre: t("Choose a new password"), ok: t("Continue"), annuler: t("Lock") };
+  const verrouiller = async () => { await api("verrouiller", "POST").catch(() => {}); etat.verrouille = true; afficherVerrou(); };
+  try {
+    for (;;) {
+      if (!ancien) {
+        ancien = await confirmer(t("Your password is shorter than 12 characters, the minimum since Athanor 3.0. Type it once more, then choose a new one."), o);
+        if (ancien === false) return verrouiller();
+      }
+      const nouveau = await confirmer(t("Your password is shorter than 12 characters, the minimum since Athanor 3.0: it now also protects the keys of the vault. Choose a new one, 12 characters or more."), o);
+      if (nouveau === false) return verrouiller();
+      if (nouveau.length < 12) { toast(t("At least 12 characters"), "erreur"); continue; }
+      const encore = await confirmer(t("Type the new password again."), { ...o, ok: t("Save the new password") });
+      if (encore === false) return verrouiller();
+      if (encore !== nouveau) { toast(t("The two passwords are different."), "erreur"); continue; }
+      try {
+        await api("mot-de-passe", "POST", { ancien, nouveau });
+        toast(t("Password changed."), "ok"); rafraichir(); return;
+      } catch (e) { toast(e.message, "erreur"); if ((e.data || {}).erreur_key === "Wrong current password") ancien = ""; }
+    }
+  } finally { nouveauMdpOuvert = false; }
+}
 function afficherVerrou() {
   const v = $("#verrou"); v.hidden = !etat.verrouille; v.classList.remove("ouvre");
   if (etat.verrouille) { const e = (etat.vue && etat.vue.etat) || {}; $("#verrou-etat").classList.toggle("travail", !!(etat.vue && (etat.vue.actif || etat.vue.tache_active))); $("#verrou-etat").textContent = etat.vue && etat.vue.actif ? t("Claude keeps working{0}.", [e.cycle ? " (" + t("cycle {0}", [e.cycle]) + ")" : ""]) : etat.vue && etat.vue.tache_active ? t("A server task keeps working.") : t("The pilot is stopped."); setTimeout(() => $("#verrou-mdp").focus(), 50); }
@@ -8697,10 +8748,11 @@ $("#verrou-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const v = $("#verrou");
   try {
-    await api("deverrouiller", "POST", { mot_de_passe: $("#verrou-mdp").value }); etat.verrouille = false; $("#verrou-mdp").value = ""; $("#verrou-erreur").textContent = "";
+    const mdp = $("#verrou-mdp").value, r = await api("deverrouiller", "POST", { mot_de_passe: mdp }); etat.verrouille = false; $("#verrou-mdp").value = ""; $("#verrou-erreur").textContent = "";
     // scene on: the padlock opens and the glow spreads while the home page loads underneath, then the lock goes
     if ("scene" in document.documentElement.dataset) { v.classList.add("ouvre"); setTimeout(() => { if (!etat.verrouille) afficherVerrou(); }, 600); } else afficherVerrou();
     rafraichir(); rendrePage(); chargerMenu();
+    if (r && r.changer_mdp) exigerNouveauMdp(mdp);
   } catch (e) {
     $("#verrou-erreur").textContent = e.message;
     v.classList.remove("secousse"); void v.offsetWidth; v.classList.add("secousse"); // a short shake, the scene goes on
@@ -8753,6 +8805,7 @@ async function rafraichir() {
     if (!perime && ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent)) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
     if (!perime && !v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) { rendrePage(); chargerMenu(); } }
+    if (v.changer_mdp && !v.verrouille) exigerNouveauMdp("");
     rendreBandeau(v);
     afficherResteVerrou(v.verrou_dans);
     if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }

@@ -69,74 +69,71 @@ func TestReglageProjetResolution(t *testing.T) {
 		t.Fatalf("no setting %q in %v", cle, v)
 		return nil
 	}
-	// by default: the global value
+	// by default: the global value (a project's models are no setting here: its Working mode, modeles_projet.go)
 	code, v := appel("GET", "demo", "", nil)
-	if m := vue(v, "modele"); code != 200 || m["valeur"] != "sonnet" || m["propre"] != "" || m["defaut"] != "sonnet" {
+	if m := vue(v, "permission"); code != 200 || m["valeur"] != "manuel" || m["propre"] != "" || m["defaut"] != "manuel" {
 		t.Fatalf("by default: %d %v", code, m)
 	}
-	if len(v["reglages"].([]any)) != len(clesReglagesProjet) || vue(v, "modele_taches_simples")["valeur"] != "haiku" || vue(v, "quota_five_hour")["valeur"] != "0" || vue(v, "permission")["valeur"] != "manuel" {
+	if len(v["reglages"].([]any)) != len(clesReglagesProjet) || vue(v, "quota_five_hour")["valeur"] != "0" {
 		t.Errorf("the global values: %v", v["reglages"])
 	}
 	if c, _ := appel("GET", "inconnu", "", nil); c != http.StatusNotFound {
 		t.Errorf("unknown project: %d", c)
 	}
-	// its own value: this project only, and a global change no longer reaches it
-	code, v = appel("POST", "demo", "", map[string]any{"cle": "modele", "valeur": "opus"})
-	if m := vue(v, "modele"); code != 200 || m["valeur"] != "opus" || m["propre"] != "opus" || m["defaut"] != "sonnet" {
+	// its own value: this project only
+	code, v = appel("POST", "demo", "", map[string]any{"cle": "permission", "valeur": "auto"})
+	if m := vue(v, "permission"); code != 200 || m["valeur"] != "auto" || m["propre"] != "auto" || m["defaut"] != "manuel" {
 		t.Fatalf("own value: %d %v", code, v)
 	}
-	if err := os.WriteFile(filepath.Join(s.config.Kit, ".env"), []byte("MODEL=haiku\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if a, b := reglageProjet("demo", "permission"), reglageProjet("autre", "permission"); a != "auto" || b != "manuel" {
+		t.Errorf("demo %q (want its own auto), autre %q (want the global manuel)", a, b)
 	}
-	if a, b := reglageProjet("demo", "modele"), reglageProjet("autre", "modele"); a != "opus" || b != "haiku" {
-		t.Errorf("demo %q (want its own opus), autre %q (want the global haiku)", a, b)
-	}
-	// invalid: refused, nothing changes
-	for _, c := range []map[string]any{{"cle": "modele", "valeur": "gpt-4"}, {"cle": "langue", "valeur": "fr"}, {"cle": "permission", "valeur": "tout"},
-		{"cle": "quota_five_hour", "valeur": "80:plus"}, {"cle": "quota_five_hour", "valeur": "101:apres"}, {"cle": "quota_mois", "valeur": "80:apres"}, {"cle": "modele", "valeur": "auto"}} {
+	// invalid: refused, nothing changes (a model is no longer a setting of this list)
+	for _, c := range []map[string]any{{"cle": "modele", "valeur": "opus"}, {"cle": "langue", "valeur": "fr"}, {"cle": "permission", "valeur": "tout"},
+		{"cle": "quota_five_hour", "valeur": "80:plus"}, {"cle": "quota_five_hour", "valeur": "101:apres"}, {"cle": "quota_mois", "valeur": "80:apres"}} {
 		if code, v := appel("POST", "demo", "", c); code != http.StatusBadRequest || v["error"] == nil && v["erreur"] == nil && v["message_key"] == nil {
 			t.Errorf("%v: %d %v, want 400 with its message", c, code, v)
 		}
 	}
-	for _, c := range []map[string]any{{"cle": "quota_five_hour", "valeur": "80:apres"}, {"cle": "quota_modele", "valeur": "0"}, {"cle": "modele_sous_agents", "valeur": "auto"}} {
+	for _, c := range []map[string]any{{"cle": "quota_five_hour", "valeur": "80:apres"}, {"cle": "quota_modele", "valeur": "0"}} {
 		if code, v := appel("POST", "demo", "", c); code != 200 || vue(v, c["cle"].(string))["valeur"] != c["valeur"] {
 			t.Errorf("%v: %d %v", c, code, v)
 		}
 	}
-	if a := reglageProjet("demo", "modele"); a != "opus" {
+	if a := reglageProjet("demo", "permission"); a != "auto" {
 		t.Errorf("after the refusals: %q", a)
 	}
 	// a value written in the file that is no longer valid follows the default
 	m := lireReglagesProjets()
-	m["autre"] = map[string]string{"modele": "claude-inconnu-9", "permission": "tout"}
+	m["autre"] = map[string]string{"permission": "tout"}
 	if err := ecrireReglagesProjets(m); err != nil {
 		t.Fatal(err)
 	}
-	if a, b := reglageProjet("autre", "modele"), reglageProjet("autre", "permission"); a != "haiku" || b != "manuel" {
-		t.Errorf("invalid stored values: %q %q, want the global ones", a, b)
+	if b := reglageProjet("autre", "permission"); b != "manuel" {
+		t.Errorf("invalid stored value: %q, want the global one", b)
 	}
 	// the settings follow the project's name
 	deplacerReglagesProjet("demo", "demo2")
-	if a, b := reglageProjet("demo2", "modele"), reglageProjet("demo", "modele"); a != "opus" || b != "haiku" {
+	if a, b := reglageProjet("demo2", "permission"), reglageProjet("demo", "permission"); a != "auto" || b != "manuel" {
 		t.Errorf("after the renaming: demo2 %q, demo %q", a, b)
 	}
 	deplacerReglagesProjet("demo2", "demo")
 	// back to the default
-	code, v = appel("POST", "demo", "", map[string]any{"cle": "modele", "valeur": "defaut"})
-	if m := vue(v, "modele"); code != 200 || m["valeur"] != "haiku" || m["propre"] != "" {
+	code, v = appel("POST", "demo", "", map[string]any{"cle": "permission", "valeur": "defaut"})
+	if m := vue(v, "permission"); code != 200 || m["valeur"] != "manuel" || m["propre"] != "" {
 		t.Fatalf("back to the default: %d %v", code, v)
 	}
-	if _, ok := lireReglagesProjets()["demo"]["modele"]; ok {
+	if _, ok := lireReglagesProjets()["demo"]["permission"]; ok {
 		t.Error("the value given back is still in the file")
 	}
 	// the audit: project, setting, before and after
 	b := journalAuditTexte(t)
-	for _, x := range []string{`"projet":"demo"`, "reglage du projet: modele", "defaut → opus", "opus → defaut", "reglage du projet: quota_five_hour", "defaut → 80:apres"} {
+	for _, x := range []string{`"projet":"demo"`, "reglage du projet: permission", "defaut → auto", "auto → defaut", "reglage du projet: quota_five_hour", "defaut → 80:apres"} {
 		if !strings.Contains(b, x) {
 			t.Errorf("audit: %q missing", x)
 		}
 	}
-	if strings.Contains(b, "gpt-4") {
+	if strings.Contains(b, "→ opus") {
 		t.Error("audit: a refused value was logged as a change")
 	}
 	// and leave with the project
@@ -169,8 +166,7 @@ func TestReglagesProjetsExistants(t *testing.T) {
 	if err := os.WriteFile(k.Env(), []byte("MODEL=opus\nFALLBACK_MODEL=sonnet\nSUBAGENT_MODEL=auto\nCHEAP_MODEL=\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	attendu := map[string]string{"modele": "opus", "modele_secours": "sonnet", "modele_sous_agents": "auto", "modele_taches_simples": "",
-		"quota_five_hour": "0", "quota_seven_day": "90:pause", "quota_modele": "0", "permission": "auto"}
+	attendu := map[string]string{"quota_five_hour": "0", "quota_seven_day": "90:pause", "quota_modele": "0", "permission": "auto"}
 	if len(attendu) != len(clesReglagesProjet) {
 		t.Fatalf("%d settings expected, %d known", len(attendu), len(clesReglagesProjet))
 	}
@@ -184,7 +180,7 @@ func TestReglagesProjetsExistants(t *testing.T) {
 	if code, _ := appel("GET", "demo", "", nil); code != 200 {
 		t.Errorf("GET: %d", code)
 	}
-	if code, _ := appel("POST", "demo", "", map[string]any{"cle": "modele", "valeur": ""}); code != 200 {
+	if code, _ := appel("POST", "demo", "", map[string]any{"cle": "quota_modele", "valeur": ""}); code != 200 {
 		t.Errorf("POST the default: %d", code)
 	}
 	if _, err := os.Stat(fichierReglagesProjets()); !os.IsNotExist(err) {

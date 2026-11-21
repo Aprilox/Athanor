@@ -35,6 +35,8 @@ type ModesCarte struct {
 	ParalleleMax int  `json:"parallele_max,omitempty"`
 	CadrageMax   *int `json:"cadrage_max,omitempty"`
 	DureeMax     *int `json:"duree_max,omitempty"`
+	// the project's own models, as POST /api/mode's (modeles_projet.go)
+	Modeles map[string]string `json:"modeles,omitempty"`
 }
 
 // depotProjet: the card's repository for github ("" none, lier OWNER/NAME or its address, creer a name, the

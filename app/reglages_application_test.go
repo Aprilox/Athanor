@@ -15,10 +15,20 @@ func piloteReglagesTest(t *testing.T, s *Serveur, nom string) *pilote {
 	if !ok {
 		t.Fatal("unknown project " + nom)
 	}
-	if err := os.MkdirAll(p.Dossier, 0o755); err != nil {
+	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &pilote{kit: s.config.Kit, projet: p.Dossier, model: "sonnet", cheapModel: "haiku"}
+	return &pilote{kit: s.config.Kit, projet: p.Dossier, etat: p.Atelier(), model: "sonnet", cheapModel: "haiku"}
+}
+
+// modelesPropres: the project's own models as its Working mode writes them (POST /api/mode, modeles_projet.go);
+// "" puts one back to Settings.
+func modelesPropres(t *testing.T, s *Serveur, nom string, m map[string]string) {
+	t.Helper()
+	p, _ := s.projetNomme(nom)
+	if err := p.ecrireMode(ModeVue{Modeles: m}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // modelesCycle: what a cycle that starts now launches: the lead's --model and --fallback-model, the sub-agents'
@@ -28,9 +38,9 @@ func modelesCycle(p *pilote) string {
 	return strings.Join([]string{p.model, p.fallbackModel, p.subagentModel, p.cheapModel}, ",")
 }
 
-// TestReglagesDeuxProjets (M290, note 01h48 §4): two projects, two lead models: each pilot launches its own, a
-// project that chose nothing keeps the kit's; the automatic stop on quota is the project's rule in the place of
-// the kit's, window by window; the chat and the team page follow the project's model.
+// TestReglagesDeuxProjets (M290, note 01h48 §4; 2.53.0's Models): two projects, two lead models: each pilot launches
+// its own, a project that chose nothing keeps the kit's; the automatic stop on quota is the project's rule in the
+// place of the kit's, window by window; the chat and the team page follow the project's model.
 func TestReglagesDeuxProjets(t *testing.T) {
 	s, appel := reglagesTest(t)
 	demo, autre := piloteReglagesTest(t, s, "demo"), piloteReglagesTest(t, s, "autre")
@@ -43,10 +53,11 @@ func TestReglagesDeuxProjets(t *testing.T) {
 	if a, b := modelesCycle(demo), modelesCycle(autre); a != "sonnet,,,haiku" || b != a {
 		t.Fatalf("no setting of their own: demo %q, autre %q", a, b)
 	}
-	definir("demo", "modele", "opus")
-	definir("demo", "modele_secours", "sonnet")
-	definir("demo", "modele_sous_agents", "auto")
-	definir("autre", "modele_taches_simples", "sonnet")
+	modelesPropres(t, s, "demo", map[string]string{"MODEL": "opus", "FALLBACK_MODEL": "sonnet", "SUBAGENT_MODEL": "auto"})
+	modelesPropres(t, s, "autre", map[string]string{"CHEAP_MODEL": "sonnet"})
+	if code, _ := appel("POST", "demo", "", map[string]any{"cle": "modele", "valeur": "opus"}); code == 200 {
+		t.Error("a model is still a setting of This project's settings: its one place is the Working mode")
+	}
 	if a, b := modelesCycle(demo), modelesCycle(autre); a != "opus,sonnet,auto,haiku" || b != "sonnet,,,sonnet" {
 		t.Errorf("two projects, two commands: demo %q, autre %q", a, b)
 	}
@@ -59,7 +70,7 @@ func TestReglagesDeuxProjets(t *testing.T) {
 	if v := variablesReglagesProjet(t.TempDir()); len(v) != 0 { // a folder that is no project of the application
 		t.Errorf("unknown folder: %v", v)
 	}
-	definir("demo", "modele", "defaut")
+	modelesPropres(t, s, "demo", map[string]string{"MODEL": ""})
 	if a := modelesCycle(demo); a != "sonnet,sonnet,auto,haiku" {
 		t.Errorf("back to the default: %q", a)
 	}
@@ -92,15 +103,13 @@ func TestReglagesDeuxProjets(t *testing.T) {
 // TestReglageTacheEnCours (M290): a setting changed while a cycle runs: this cycle keeps the model it started
 // with, the next one takes the new value; the other project's pilot never sees it.
 func TestReglageTacheEnCours(t *testing.T) {
-	s, appel := reglagesTest(t)
+	s, _ := reglagesTest(t)
 	demo, autre := piloteReglagesTest(t, s, "demo"), piloteReglagesTest(t, s, "autre")
 	if a := modelesCycle(demo); a != "sonnet,,,haiku" { // the cycle starts
 		t.Fatalf("first cycle: %q", a)
 	}
 	demo.modeleCycle = demo.model
-	if code, v := appel("POST", "demo", "", map[string]any{"cle": "modele", "valeur": "opus"}); code != 200 {
-		t.Fatalf("change during the cycle: %d %v", code, v)
-	}
+	modelesPropres(t, s, "demo", map[string]string{"MODEL": "opus"}) // changed during the cycle
 	if demo.model != "sonnet" || demo.modeleCycle != "sonnet" {
 		t.Errorf("the cycle under way changed its model: %q, %q", demo.model, demo.modeleCycle)
 	}
@@ -110,7 +119,8 @@ func TestReglageTacheEnCours(t *testing.T) {
 	if a := modelesCycle(demo); a != "opus,,,haiku" { // the next cycle
 		t.Errorf("next cycle: %q", a)
 	}
-	if demo.modelesDepart == nil || demo.modelesDepart[0] != "sonnet" { // what the pilot started with stays the default
-		t.Errorf("models at start: %v", demo.modelesDepart)
+	modelesPropres(t, s, "demo", map[string]string{"MODEL": ""})
+	if a := modelesCycle(demo); a != "sonnet,,,haiku" { // what the pilot started with stays the default
+		t.Errorf("back to the default: %q", a)
 	}
 }

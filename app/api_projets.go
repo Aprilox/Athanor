@@ -113,6 +113,7 @@ type EtatVue struct {
 	Verrouille  bool                  `json:"verrouille"`
 	VerrouDans  int                   `json:"verrou_dans"` // seconds before the window locks itself, -1 = no timer
 	MotDePasse  bool                  `json:"mot_de_passe"`
+	ChangerMdp  bool                  `json:"changer_mdp,omitempty"` // unlocked with a password shorter than longueurMinMdp
 	Projets     []ProjetVue           `json:"projets"`
 	Projet      *ProjetVue            `json:"projet"`
 	Actif       bool                  `json:"actif"`
@@ -171,6 +172,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	verrou := s.verrouillePour(r)
 	s.mu.Lock()
 	kit, mdp, courant := s.kitCourant(), s.config.MotDePasseHash != "", s.config.ProjetActif
+	changerMdp := s.mdpCourt && mdp && !verrou
 	langue, bienvenue, hubVu := s.config.Langue, !s.config.BienvenueVue, s.config.HubVu
 	theme, accent := s.config.Theme, s.config.Accent
 	verrouDans := secondesReste(s.resteVerrouAuto(horlogeVerrou()))
@@ -185,7 +187,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	if nom := r.URL.Query().Get("p"); nom != "" {
 		courant = nom
 	}
-	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Tours: tours, Version: versionAthanor}
+	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, ChangerMdp: changerMdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Tours: tours, Version: versionAthanor}
 	vue.Distant = appareilDe(r) != ""
 	if vue.VerrouDans = -1; !vue.Distant && !verrou {
 		vue.VerrouDans = verrouDans
@@ -329,8 +331,10 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 			reglages[l.Cle], presents[l.Cle] = strings.TrimSpace(l.Valeur), true
 		}
 	}
-	for v, propre := range variablesReglagesProjet(p.Dossier) { // the project's own models, as its pilot takes them (M290)
-		reglages[v], presents[v] = propre, true
+	for cle, v := range modelesProjet(p.envProjet()) { // the project's own (Manage › Working mode) first
+		if cle == "MODEL" || cle == "SUBAGENT_MODEL" || cle == "CHEAP_MODEL" {
+			reglages[cle], presents[cle] = v, true
+		}
 	}
 	simple := "haiku"
 	if presents["CHEAP_MODEL"] {
@@ -823,6 +827,13 @@ type ModeVue struct {
 	// back to the global value and nil leaves it as it is
 	DureeMax       *int `json:"duree_max,omitempty"`
 	DureeMaxGlobal int  `json:"duree_max_global"` // the global MAX_HOURS, for the page (0: unlimited)
+	// the project's own models (modeles_projet.go), key → model; a key left out follows Settings. In a POST,
+	// only the keys sent change ("": back to Settings), and nil leaves them all as they are
+	Modeles map[string]string `json:"modeles,omitempty"`
+	// for the page: the models of Settings (a key absent from the file is not sent: the pilot's default
+	// applies) and the names to propose
+	ModelesGlobaux  map[string]string `json:"modeles_globaux,omitempty"`
+	ModelesProposes []string          `json:"modeles_proposes,omitempty"`
 }
 
 // dureeMaxProjet: the work time limit a project set for itself, in hours (0: unlimited), and whether it set one.
@@ -876,6 +887,9 @@ func (p Projet) LireMode() ModeVue {
 	if n, ok := dureeMaxProjet(p.envProjet()); ok {
 		m.DureeMax = &n
 	}
+	if mp := modelesProjet(p.envProjet()); len(mp) > 0 {
+		m.Modeles = mp
+	}
 	return m
 }
 
@@ -903,7 +917,11 @@ func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
 		m = p.LireMode()
 	}
 	m.CadrageGlobal, m.DureeMaxGlobal = 25, 0
+	m.ModelesGlobaux, m.ModelesProposes = map[string]string{}, modelesConnus(s.kitCourant())
 	for _, l := range LireEnv(s.kitCourant().Env()) {
+		if estCleModeleProjet(l.Cle) {
+			m.ModelesGlobaux[l.Cle] = strings.TrimSpace(l.Valeur)
+		}
 		if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); l.Cle == "FRAMING_MAX_MIN" && err == nil && n >= 0 {
 			m.CadrageGlobal = n
 		} else if l.Cle == "MAX_HOURS" && err == nil && n >= 0 {
@@ -949,6 +967,13 @@ func (p Projet) ecrireMode(m ModeVue) error {
 			return erreurEntree("The work time limit is between 1 and 87600 hours, or unlimited.")
 		}
 	}
+	for cle, val := range m.Modeles { // the project's own models (modeles_projet.go), "": back to Settings
+		val = strings.TrimSpace(val)
+		if !estCleModeleProjet(cle) || (val != "" && !modeleProjetValide(cle, val)) {
+			return erreurEntree("Unknown model name: letters, digits and . _ - : / @ [ ] only.")
+		}
+		v[cle] = val
+	}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		return err
 	}
@@ -986,6 +1011,8 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	// the message tells what this call changed (the modes are independent switches)
 	memesModes := m.Parallele == avant.Parallele && m.Eco == avant.Eco && m.Rapide == avant.Rapide
 	switch {
+	case len(m.Modeles) > 0 && memesModes:
+		s.msg(w, "Models saved for this project: a running pilot uses them from its next cycle.")
 	case m.DureeMax != nil && memesModes:
 		s.msg(w, "Work time limit saved for this project: a running pilot applies it before its next cycle.")
 	case m.CadrageMax != nil && memesModes:

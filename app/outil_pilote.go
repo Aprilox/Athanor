@@ -84,7 +84,6 @@ type pilote struct {
 	etatDebutCycle string
 	etatOuvriers   string
 	modeleCycle    string
-	modelesDepart  *[4]string // model, fallback, sub-agents, simple tasks as the pilot started with (prendreReglagesProjet)
 	fichierLog     string
 	verrouVu       bool
 	parallel       bool
@@ -100,7 +99,10 @@ type pilote struct {
 	// the project's working modes at the start of its cycle
 	empreinteReglages string
 	modesLus          string
-	bashMax           string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
+	modelesGlobaux    map[string]string // the project's own models (modeles_projet.go): Settings' ones, read at the start
+	modelesLus        string            // the project's own, as read at the start of this cycle (resumeModeles)
+	modelesAnnonce    string            // the project's own last logged
+	bashMax           string            // BASH_MAX_OUTPUT_LENGTH outside the eco mode
 	quotaOuvriers     bool
 	modeleVerif       string
 	verrouFichier     *os.File

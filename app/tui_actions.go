@@ -1036,11 +1036,16 @@ func (a *appTUI) demanderMotDePasse() {
 		a.verrouDemande = true
 		c := *a.c
 		go func() {
-			err := c.appel("POST", "deverrouiller", map[string]string{"mot_de_passe": v[0]}, nil)
+			var r struct {
+				ChangerMdp bool `json:"changer_mdp"`
+			}
+			err := c.appel("POST", "deverrouiller", map[string]string{"mot_de_passe": v[0]}, &r)
 			a.majs <- func(a *appTUI) {
 				a.verrouDemande = false
 				if err != nil {
 					a.annoncer(a.texteErreur(err), true)
+				} else if r.ChangerMdp { // a 2.x password: the window asks for a new one as soon as it opens
+					a.annoncer(a.t("Your password is shorter than 12 characters: open Athanor's window to choose a new one."), true)
 				}
 				a.derniere["etat"] = time.Time{}
 			}

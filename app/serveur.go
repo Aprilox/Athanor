@@ -28,6 +28,7 @@ type Serveur struct {
 	essaisMu     sync.Mutex   // one password check at a time (verifierMdpLent)
 	essaisFile   atomic.Int32 // password checks waiting or running (bounded: essaisMdpFile)
 	echecsMdp    int          // wrong passwords typed on this PC since the last right one
+	mdpCourt     bool         // the password that unlocked is shorter than longueurMinMdp (2.x allowed 4): a new one is asked
 	config       Config
 	kit          Kit // read with kitCourant() (can change from Options)
 	kitMu        sync.RWMutex
@@ -603,6 +604,10 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 
 // ----------------------------------------------------------------------------- locking
 
+// longueurMinMdp: the shortest password Athanor accepts since 3.0.0; an older, shorter one still unlocks, then
+// the interface asks for a new one at once (EtatVue.ChangerMdp).
+const longueurMinMdp = 12
+
 // essaisMdpDistance: wrong passwords a remote device may type before it is removed from the trusted ones
 // (a stolen phone cannot try password after password).
 const essaisMdpDistance = 5
@@ -681,6 +686,10 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.deverrouillerCoffre(c.MotDePasse)
+	court := utf8.RuneCountInString(c.MotDePasse) < longueurMinMdp
+	s.mu.Lock()
+	s.mdpCourt = court
+	s.mu.Unlock()
 	if id != "" {
 		d := s.dist()
 		d.mu.Lock()
@@ -692,7 +701,7 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 		s.ouvrirSession(w)
 		s.mu.Unlock()
 	}
-	s.ecrireJSON(w, map[string]bool{"ok": true})
+	s.ecrireJSON(w, map[string]bool{"ok": true, "changer_mdp": court})
 }
 
 // remplacerHashMdp rewrites a hash of the old format (or weaker parameters) once the right password
@@ -755,7 +764,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	retrait := strings.TrimSpace(c.Nouveau) == ""
-	if !retrait && utf8.RuneCountInString(c.Nouveau) < 12 { // it alone guards the infra key against a copied disk (I3)
+	if !retrait && utf8.RuneCountInString(c.Nouveau) < longueurMinMdp { // it alone guards the infra key against a copied disk (I3)
 		s.erreur(w, http.StatusBadRequest, "At least 12 characters")
 		return
 	}
@@ -807,6 +816,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.mdpCourt = false // 12 characters at least, or no password any more
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "mot de passe", Resultat: map[bool]string{true: "créé", false: "changé"}[premier] + map[bool]string{true: " (retiré)", false: ""}[retrait]})
 	s.ecrireJSON(w, map[string]bool{"ok": true, "defini": s.config.MotDePasseHash != ""})
 }

@@ -19,14 +19,10 @@ import (
 	"sync"
 )
 
-// reglagesModeles: the model settings and the variable of the kit's .env that holds their global value.
-var reglagesModeles = map[string]string{"modele": "MODEL", "modele_secours": "FALLBACK_MODEL",
-	"modele_sous_agents": "SUBAGENT_MODEL", "modele_taches_simples": "CHEAP_MODEL"}
-
 // clesReglagesProjet: the settings a project may replace, in the page's order. A quota_<window> value is
 // "<percent>:<action>" (a rule of quota.go), "0" for no automatic stop.
-var clesReglagesProjet = []string{"modele", "modele_secours", "modele_sous_agents", "modele_taches_simples",
-	"quota_five_hour", "quota_seven_day", "quota_modele", "permission"}
+// The project's own models are set in its Working mode (modeles_projet.go, 2.53.0), its one place.
+var clesReglagesProjet = []string{"quota_five_hour", "quota_seven_day", "quota_modele", "permission"}
 
 var reglagesProjetsMu sync.Mutex
 
@@ -48,12 +44,10 @@ func ecrireReglagesProjets(m map[string]map[string]string) error {
 	return ecrireAtomique(fichierReglagesProjets(), b, 0o600)
 }
 
-// reglageValide: v is a value setting cle accepts (a known model, a known mode, a quota rule).
+// reglageValide: v is a value setting cle accepts (a known mode, a quota rule).
 func reglageValide(k Kit, cle, v string) bool {
 	fenetre, quota := strings.CutPrefix(cle, "quota_")
 	switch {
-	case reglagesModeles[cle] != "":
-		return slices.Contains(modelesConnus(k), v) || cle == "modele_sous_agents" && v == "auto"
 	case quota && fenetresRegles[fenetre]:
 		seuil, action, _ := strings.Cut(v, ":")
 		n, err := strconv.Atoi(seuil)
@@ -64,22 +58,11 @@ func reglageValide(k Kit, cle, v string) bool {
 	return false
 }
 
-// reglageGlobal: the value every project follows by default ("" for an unknown setting or an empty model).
+// reglageGlobal: the value every project follows by default ("" for an unknown setting).
 func reglageGlobal(cf Config, cle string) string {
 	k := Kit{Racine: cf.Kit}
 	fenetre, quota := strings.CutPrefix(cle, "quota_")
 	switch {
-	case reglagesModeles[cle] != "":
-		v := ""
-		if cle == "modele_taches_simples" {
-			v = "haiku" // CHEAP_MODEL absent from the .env (definitionAgent)
-		}
-		for _, l := range LireEnv(k.Env()) {
-			if l.Cle == reglagesModeles[cle] {
-				v = strings.TrimSpace(l.Valeur)
-			}
-		}
-		return v
 	case quota && fenetresRegles[fenetre]:
 		if r, ok := lireReglesQuota(k)[fenetre]; ok {
 			return fmt.Sprintf("%d:%s", r.Seuil, r.Action)
@@ -95,7 +78,7 @@ func reglageGlobal(cf Config, cle string) string {
 }
 
 // reglagePropre: the project's own value of cle, "" when it follows the default (never chosen, or a value no
-// longer valid: a model that left the list).
+// longer valid).
 func reglagePropre(cf Config, projet, cle string) string {
 	v := lireReglagesProjets()[projet][cle]
 	if v == "" || !reglageValide(Kit{Racine: cf.Kit}, cle, v) {
@@ -121,20 +104,16 @@ func nomProjetDossier(cf Config, dossier string) string {
 }
 
 // variablesReglagesProjet: the variables of the kit's .env the project of this folder replaced by a model of its
-// own ({"MODEL": "opus"}, M290); empty when it follows the defaults. The pilot, the lead, the agents and the chat
-// read it when they start, in their own process: another project or a session under way never sees the change.
-// shortcut: a pilot running inside WSL does not see the Windows application's file and keeps the defaults, hand
-// the values over at launch if WSL projects need their own models.
+// own ({"MODEL": "opus"}, its Working mode's Models); empty when it follows the defaults or is no project of the
+// application. The chat reads it when a session starts; the pilot reads the same file each cycle itself.
 func variablesReglagesProjet(dossier string) map[string]string {
-	cf, v := lireConfig(), map[string]string{}
-	if nom := nomProjetDossier(cf, dossier); nom != "" {
-		for cle, variable := range reglagesModeles {
-			if propre := reglagePropre(cf, nom, cle); propre != "" {
-				v[variable] = propre
-			}
+	cf := lireConfig()
+	for _, p := range cf.Projets {
+		if memeFichier(p.Dossier, dossier) {
+			return modelesProjet(p.envProjet()) // its Working mode's Models (modeles_projet.go), the pilot's one source
 		}
 	}
-	return v
+	return map[string]string{}
 }
 
 // reglesQuotaProjet: the automatic stops of the kit (fichierRegles, quota-arret.json) with the project's own rule

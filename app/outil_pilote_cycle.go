@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -706,15 +705,11 @@ func (p *pilote) rangerSolutions(fichier, quoi string) {
 	_ = lancerSolutions([]string{"ranger", fichier, quoi})
 }
 
-// prendreReglagesProjet: the models of the cycle that starts: the project's own (variablesReglagesProjet), else
-// the ones the pilot started with. Read once per cycle: a change during a cycle waits for the next one (M290).
+// prendreReglagesProjet: the models of the cycle that starts, the project's own (Manage › Working mode › Models,
+// its .athanor/.env: modeles_projet.go) over the ones of Settings; read once per cycle, a change during a cycle
+// waits for the next one.
 func (p *pilote) prendreReglagesProjet() {
-	if p.modelesDepart == nil {
-		p.modelesDepart = &[4]string{p.model, p.fallbackModel, p.subagentModel, p.cheapModel}
-	}
-	v, d := variablesReglagesProjet(p.projet), p.modelesDepart
-	p.model, p.fallbackModel = cmp.Or(v["MODEL"], d[0]), cmp.Or(v["FALLBACK_MODEL"], d[1])
-	p.subagentModel, p.cheapModel = cmp.Or(v["SUBAGENT_MODEL"], d[2]), cmp.Or(v["CHEAP_MODEL"], d[3])
+	p.appliquerModelesProjet(false)
 }
 
 func (p *pilote) preparerEquipe() {
@@ -1466,7 +1461,9 @@ func (p *pilote) lireModeParallele() {
 	p.parallel = false
 	p.parallelMax = 3
 	b, _ := os.ReadFile(filepath.Join(p.etat, ".env"))
-	p.modesLus = modesDemandes(string(b)) // what this cycle runs with, from the very bytes parsed below
+	// what this cycle runs with, from the very bytes parsed below; the models from the ones applied at the
+	// start of the cycle (appliquerModelesProjet)
+	p.modesLus = modesBase(string(b)) + suffixeModeles(p.modelesLus)
 	parStr, maxStr, ecoStr, rapideStr := "0", "3", "0", "0"
 	for _, l := range strings.Split(string(b), "\n") {
 		l = strings.TrimSuffix(l, "\r")
@@ -2171,6 +2168,7 @@ func lancerPilote(args []string) int {
 			p.ecranAvant[v] = val
 		}
 	}
+	p.appliquerModelesProjet(false) // the project's own models from the start (the guide of SUBAGENT_MODEL=auto)
 	_ = os.Setenv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", defEnv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", "1"))
 	_ = os.Setenv("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
 	p.bashMax = defEnv("BASH_MAX_OUTPUT_LENGTH", "20000")
@@ -2668,6 +2666,7 @@ func lancerPilote(args []string) int {
 		p.preparerExtensions()
 		p.preparerCycle()
 		p.appliquerIdentite()
+		p.appliquerModelesProjet(true) // the project's own models, before the team and the cycle use them
 		p.preparerEquipe()
 		// several computers (pcs_pilote.go): the others' work merged, a milestone taken, or wait for one
 		if attendre, raison := p.avantCyclePC(); attendre {

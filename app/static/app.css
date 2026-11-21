@@ -506,6 +506,10 @@ details[open] summary { margin-bottom: 10px; }
 .plan li.vague:first-child { padding-top: 0; }
 .plan li.etape { border-top: 2px solid var(--line-2); }
 .mode-ligne input.cadrage-autre { width: 8.5em; padding: 4px 8px; }
+.modeles-projet .modeles-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px; margin-top: 6px; }
+.modele-projet { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.modele-projet select { padding: 4px 8px; width: 100%; }
+.modele-projet select.actif { border-color: var(--accent); }
 .plan li.etape:not(.coche) .jalon-ico { color: var(--accent); }
 .plan .jalon-corps { min-width: 0; flex: 1; }
 .plan li[data-jalon-cle], .plan li[data-plan-archives] { cursor: pointer; }
