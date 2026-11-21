@@ -4,6 +4,9 @@
 *.go        text eol=lf
 *.md        text eol=lf
 *.sh        text eol=lf
+*.js        text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
 *.syso      binary
 *.ico       binary
 *.png       binary
@@ -12,3 +15,4 @@ app/third_party/** linguist-vendored
 app/tools/*.cs     linguist-vendored
 # Not needed in the release zip
 .github/           export-ignore
+app/testdata/*.txt text eol=lf

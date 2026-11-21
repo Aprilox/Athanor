@@ -1,0 +1,168 @@
+package main
+
+import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// TestDistanceToutesRoutes: every route of serveur.go through gestionDistance with a paired device.
+// The hub's routes are an allowlist (refused by default), the old ones keep interditDistance.
+func TestDistanceToutesRoutes(t *testing.T) {
+	s, h, _ := serveurDistance(t)
+	cle := appairerTest(t, s, h)
+	atteint := false
+	// a handler that only notes it was reached: the decision is gestionDistance's, no route really runs
+	hf := s.gestionDistance(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atteint = true
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	appel := func(methode, chemin string) (int, bool) {
+		atteint = false
+		w := appelDistance(hf, methode, chemin, cle, "")
+		return w.Code, atteint
+	}
+
+	// serveur.go and the modules that declare their own routes (moduleRoutes)
+	fichiers, _ := filepath.Glob("*.go")
+	var src []byte
+	for _, f := range fichiers {
+		if !strings.HasSuffix(f, "_test.go") {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src = append(src, b...)
+		}
+	}
+	motifs := regexp.MustCompile(`mux\.HandleFunc\("([A-Z]+) (/[^"]*)"`).FindAllStringSubmatch(string(src), -1)
+	if len(motifs) < 50 {
+		t.Fatalf("only %d routes read in serveur.go", len(motifs))
+	}
+	joker := regexp.MustCompile(`\{[^}]*\}`)
+	vus := map[string]bool{}
+	for _, m := range motifs {
+		methode, chemin := m[1], joker.ReplaceAllString(m[2], "x")
+		vus[methode+" "+m[2]] = true
+		r, _ := http.NewRequest(methode, "https://abc-def.trycloudflare.com"+chemin, nil)
+		refus := interditDistance(r) || refuseHubDistance(r)
+		if strings.HasPrefix(chemin, "/api/mcp/appairer") { // another Athanor pairs through the tunnel (sorte athanor, M187)
+			refus = false
+		}
+		code, ok := appel(methode, chemin)
+		switch {
+		case refus && (code != http.StatusForbidden || ok):
+			t.Errorf("%s %s: %d (reached %v), want 403", methode, chemin, code, ok)
+		case !refus && (code == http.StatusForbidden || !ok):
+			t.Errorf("%s %s: %d (reached %v), want the route reached", methode, chemin, code, ok)
+		}
+	}
+	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances", "POST /api/instances/mdns", "POST /api/distants"} {
+		if !vus[r] {
+			t.Errorf("route %q no longer in serveur.go: update this test", r)
+		}
+	}
+
+	cas := []struct {
+		methode, chemin string
+		refus           bool
+	}{
+		{"GET", "/api/hub", false},                          // allowed
+		{"POST", "/api/projets/demo/cle-deploiement", true}, // B68: a key registered on GitHub, at the computer only
+		{"GET", "/api/projets/demo/environnements", false},
+		{"GET", "/api/projets/demo/deploiement", false},          // M281: the project's one deployment: read from a device,
+		{"POST", "/api/projets/demo/deploiement", true},          // changed at the computer only, like the environments it replaces
+		{"POST", "/api/projets/demo/preparer-deploiement", true}, // M284: "Prepare now" launches a Servers task: this computer only
+		{"GET", "/api/projets/demo/reglages", false},             // M280: a project's settings, read and chosen from a device
+		{"POST", "/api/projets/demo/reglages", false},            // (Ignore permissions is refused there by the route itself)
+		{"GET", "/api/coffre", false},                            // allowed (the vault's list, no secret value)
+		{"POST", "/api/hub", true},                               // hub route not in the allowlist
+		{"POST", "/api/hub/alertes", true},                       // Ignore / Reopen: written on this computer only
+		{"GET", "/api/coffre/x", true},                           // invented, no allowlist entry: refused by default
+		{"POST", "/api/coffre/x", true},
+		{"DELETE", "/api/coffre/x", true},
+		{"POST", "/api/coffre", true},
+		{"GET", "/api/coffre/categories", false}, // M287: the categories' names, read from a device
+		{"POST", "/api/coffre/categories", true}, // made, renamed and removed on this computer only
+		{"POST", "/api/coffre/categories/x", true},
+		{"DELETE", "/api/coffre/categories/x", true},
+		{"GET", "/api/coffre/categories/x", true},
+		{"GET", "/api/acces", false},               // a project's grants, no value
+		{"GET", "/api/hub/audit", false},           // the audit log, read from a device
+		{"POST", "/api/hub/audit/verifier", false}, // and checked
+		{"POST", "/api/hub/audit", true},
+		{"GET", "/api/hub/audit/verifier", true},
+		{"GET", "/api/hub/approbations", false},  // P7: the owner reads the approvals from the phone
+		{"POST", "/api/hub/approbations", false}, // and decides them
+		{"DELETE", "/api/hub/approbations", true},
+		{"POST", "/api/hub/approbations/x", true},
+		{"POST", "/api/hub/urgence", false}, // the emergency stop from the phone
+		{"GET", "/api/hub/urgence", true},
+		{"GET", "/api/hub/chat", false}, // M199: the home conversation read from a device
+		{"POST", "/api/hub/chat", true}, // never written, nor its powers, folders, files and cards
+		{"POST", "/api/hub/chat/pouvoirs", true},
+		{"POST", "/api/hub/chat/piece", true},
+		{"POST", "/api/hub/chat/action", true},
+		{"POST", "/api/hub/chat/arreter", true},
+		{"POST", "/api/hub/chat/effacer", true},
+		{"GET", "/api/hub/chatx", true},
+		{"POST", "/api/acces", true},
+		{"GET", "/api/acces/x", true},
+		{"GET", "/api/serveurs", false},   // the inventory, read from a device
+		{"GET", "/api/serveurs/x", false}, // and a server's sheet
+		{"POST", "/api/serveurs/x", true}, // renamed, roles changed, removed: on this computer only
+		{"DELETE", "/api/serveurs/x", true},
+		{"POST", "/api/serveurs/ajouter", true},
+		{"GET", "/api/serveurs/x/y", true},
+		{"GET", "/api/serveurs/x/taches", false},  // a server's tasks, read from a device (M97)
+		{"GET", "/api/serveurs/local/sftp", true}, // this computer.s files (SFTP page, Local panel): refused unless the remote terminal is allowed
+		{"POST", "/api/serveurs/local/sftp", true},
+		{"GET", "/api/serveurs/x/sftp/y/texte", true},
+		// M302: the old missions are only read and deleted; every other mission route is gone, so refused
+		{"GET", "/api/missions", false},
+		{"GET", "/api/missions/x", false},
+		{"DELETE", "/api/missions/x", false},
+		{"POST", "/api/missions/x", true},
+		{"GET", "/api/missions/x/y", true},
+		{"POST", "/api/missions", true},
+		{"POST", "/api/missions/x/lancer", true},
+		{"POST", "/api/missions/x/supprimer", true},
+		{"POST", "/api/missions/vider", true},
+		{"POST", "/api/serveurs/x/taches", true}, // launched and stopped on this computer only
+		{"POST", "/api/serveurs/x/taches/t/arreter", true},
+		{"POST", "/api/serveurs/x/taches/t/main", true}, // Take over (M231f)
+		{"GET", "/api/serveurs/x/y/taches", true},
+		{"GET", "/api/hubx", true}, // plain prefix
+		{"POST", "/api/mot-de-passe", true},
+		{"POST", "/api/ouvrir", true},
+		{"POST", "/api/mcp", true},                  // the hub's MCP: only with a remote Athanor's token (TestDistantAppairage)
+		{"POST", "/api/mcp/appairer", false},        // another Athanor's pairing passes (sorte athanor only, M187)
+		{"POST", "/api/mcp/appairer/statut", false}, // and its answer
+		{"GET", "/api/annonce", true},               // the announcement and the instances of this PC (M185)
+		{"GET", "/api/instances", true},
+		{"POST", "/api/instances", true},
+		{"POST", "/api/instances/mdns", true}, // the local network discovery: the computer only (M186)
+		{"GET", "/api/clients", true},         // MCP clients: the computer's window only
+		{"POST", "/api/clients", true},
+		{"POST", "/api/instance/x", true},
+		{"POST", "/api/distance", true},
+		{"GET", "/api/distance", false},     // unchanged: a device reads the Remote page
+		{"GET", "/api/projets", false},      // unchanged
+		{"POST", "/api/preferences", false}, // unchanged
+		// M174b (2.52.0): the working modes, field rapide included, as before from an unlocked device; ?defaut=1
+		// as the project's creation (POST /api/projets)
+		{"GET", "/api/mode?p=demo", false},
+		{"POST", "/api/mode?p=demo", false},
+		{"GET", "/api/mode?defaut=1", false},
+		{"POST", "/api/projets", false},
+	}
+	for _, c := range cas {
+		code, ok := appel(c.methode, c.chemin)
+		if c.refus != (code == http.StatusForbidden) || c.refus == ok {
+			t.Errorf("%s %s: %d (reached %v), refused expected %v", c.methode, c.chemin, code, ok, c.refus)
+		}
+	}
+}

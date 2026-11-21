@@ -1,0 +1,291 @@
+package main
+
+// The vault's HTTP API (GET/POST /api/coffre, POST/DELETE /api/coffre/{id}) and its hub module. No
+// answer ever holds a secret's value: entries go out through Liste/masquer, errors are fixed messages.
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"slices"
+	"strings"
+	"unicode/utf8"
+)
+
+const (
+	maxNomCoffre    = 100
+	maxNoteCoffre   = 2000
+	maxValeurCoffre = 64 << 10
+)
+
+const (
+	errCoffreRequete = erreurEntree("Invalid request")
+	errCoffreValeur  = erreurEntree("Give the entry a value")
+	errCoffreNomLong = erreurEntree("The name is too long (100 characters at most)")
+	errCoffreNote    = erreurEntree("The note is too long (2000 characters at most)")
+	errCoffreTaille  = erreurEntree("The value is too large (64 KiB at most)")
+	errChampsValeur  = erreurEntree("The fields changed: retype the value, so it only goes where you chose")
+)
+
+// erreurCoffre answers a vault error with its status: a closed key is 423, a bad entry 400.
+func (s *Serveur) erreurCoffre(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, errCoffreVerrouille), errors.Is(err, errCoffreSansMdp):
+		code = http.StatusLocked
+	case errors.Is(err, errCoffreInconnu):
+		code = http.StatusNotFound
+	case errors.As(err, new(erreurEntree)):
+		code = http.StatusBadRequest
+	}
+	s.erreur(w, code, err.Error())
+}
+
+// coffrePret: the loaded vault, or false once the refusal is written.
+func (s *Serveur) coffrePret(w http.ResponseWriter) bool {
+	if s.coffreErr != nil || s.coffre == nil {
+		s.erreur(w, http.StatusInternalServerError, "The vault file cannot be read")
+		return false
+	}
+	return true
+}
+
+// corpsCoffre: what the page sends; a nil field is left unchanged by POST /api/coffre/{id}.
+type corpsCoffre struct {
+	Nom     *string `json:"nom"`
+	Famille string  `json:"famille"`
+	Type    *string `json:"type"`
+	Note    *string `json:"note"`
+	Portee  *string `json:"portee"`
+	Valeur  *string `json:"valeur"`
+	// M287: id of one of the owner's categories ("" takes the entry out of its category)
+	Categorie *string `json:"categorie"`
+	// M225: the production value when it differs ("" goes back to one value for every environment)
+	Prod *string `json:"prod"`
+	// the values that go with a secret (nil: unchanged)
+	Champs *[]ChampCoffre `json:"champs"`
+	// Athanor's password, retyped to move an infra entry to code (hub_preuve.go)
+	MotDePasse string `json:"mot_de_passe"`
+}
+
+// lireCorpsCoffre decodes and bounds the body; a decoding error never echoes the input.
+func lireCorpsCoffre(w http.ResponseWriter, r *http.Request) (corpsCoffre, error) {
+	var c corpsCoffre
+	r.Body = http.MaxBytesReader(w, r.Body, 4*maxValeurCoffre)
+	if err := lireCorps(r, &c); err != nil {
+		return c, errCoffreRequete
+	}
+	switch {
+	case c.Nom != nil && utf8.RuneCountInString(*c.Nom) > maxNomCoffre:
+		return c, errCoffreNomLong
+	case c.Note != nil && utf8.RuneCountInString(*c.Note) > maxNoteCoffre:
+		return c, errCoffreNote
+	case c.Valeur != nil && len(*c.Valeur) > maxValeurCoffre, c.Prod != nil && len(*c.Prod) > maxValeurCoffre:
+		return c, errCoffreTaille
+	case c.Valeur != nil && *c.Valeur == "":
+		return c, errCoffreValeur
+	}
+	return c, nil
+}
+
+func val(p *string, defaut string) string {
+	if p == nil {
+		return defaut
+	}
+	return *p
+}
+
+// apiCoffre: GET /api/coffre, the entries (secrets without their value) and the state of the keys.
+func (s *Serveur) apiCoffre(w http.ResponseWriter, r *http.Request) {
+	if !s.coffrePret(w) {
+		return
+	}
+	// M289: fiches, the zones, rights and state Test learnt about a Cloudflare API (never a token)
+	s.ecrireJSON(w, map[string]any{"entrees": s.coffre.Liste(), "etat": s.etatCoffre(), "migration": s.resumeMigration(), "fiches": fichesCoffre()})
+}
+
+// apiCoffreAjouter: POST /api/coffre, a new entry.
+func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
+	if !s.coffrePret(w) {
+		return
+	}
+	c, err := lireCorpsCoffre(w, r)
+	if err == nil && c.Valeur == nil {
+		err = errCoffreValeur
+	}
+	if err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	nouvelle := EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""), Note: val(c.Note, ""), Portee: val(c.Portee, ""), Categorie: val(c.Categorie, "")}
+	if c.Champs != nil {
+		nouvelle.Champs = *c.Champs
+	}
+	if s.nomPris(nouvelle.Nom, porteeEntree(nouvelle), "") {
+		s.erreurCoffre(w, errNomPris)
+		return
+	}
+	e, err := s.coffre.Ajouter(nouvelle, *c.Valeur)
+	if err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	if c.Prod != nil && *c.Prod != "" {
+		if err := s.coffre.PoserValeurProd(e.ID, *c.Prod); err != nil {
+			_ = s.coffre.Supprimer(e.ID) // all or nothing
+			s.erreurCoffre(w, err)
+			return
+		}
+		e.DeuxValeurs = true
+	}
+	s.injecterTous(nil) // a value now in the vault and granted nowhere leaves the old files
+	s.ecrireJSON(w, e)
+}
+
+// errNomPris: two entries of one name in one scope could not be told apart in a grant, nor in what a pilot
+// receives (case ignored: Windows variables have none).
+var errNomPris = erreurEntree("Another entry already has this name: give this one another name")
+
+// nomPris: another entry than sauf already has this name (any case) in this scope.
+func (s *Serveur) nomPris(nom, portee, sauf string) bool {
+	return slices.ContainsFunc(s.coffre.Liste(), func(x EntreeCoffre) bool {
+		return x.ID != sauf && x.Portee == portee && strings.EqualFold(x.Nom, nom)
+	})
+}
+
+// apiCoffreModifier: POST /api/coffre/{id}, new metadata and/or a new value.
+func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
+	if !s.coffrePret(w) {
+		return
+	}
+	c, err := lireCorpsCoffre(w, r)
+	if err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	id := r.PathValue("id")
+	var e EntreeCoffre
+	for _, x := range s.coffre.Liste() {
+		if x.ID == id {
+			e = x
+		}
+	}
+	if e.ID == "" {
+		s.erreurCoffre(w, errCoffreInconnu)
+		return
+	}
+	if nom, portee := val(c.Nom, e.Nom), val(c.Portee, e.Portee); (nom != e.Nom || portee != e.Portee) && s.nomPris(nom, portee, id) {
+		s.erreurCoffre(w, errNomPris)
+		return
+	}
+	if c.Categorie != nil && *c.Categorie != "" && !slices.ContainsFunc(s.coffre.Categories(), func(x CategorieCoffre) bool { return x.ID == *c.Categorie }) {
+		s.erreurCoffre(w, errCategorieInconnue) // before any change: all or nothing
+		return
+	}
+	if c.Champs != nil && slices.Equal(*c.Champs, e.Champs) {
+		c.Champs = nil // the same fields: nothing to bind again
+	}
+	if c.Champs != nil && e.Famille == "secret" && c.Valeur == nil {
+		s.erreurCoffre(w, errChampsValeur) // RT1: the kept value never follows changed fields (another SMTP server) unless retyped
+		return
+	}
+	versCode := e.Portee == "infra" && val(c.Portee, e.Portee) == "code"
+	if versCode { // C35: code reopens alone on this PC (DPAPI) and can be granted: never a server's key, always the owner
+		if s.cleDeServeur(w, id, "This key opens the server {0}: it stays in the infra scope") {
+			return
+		}
+		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "portée infra → code refusée", Resultat: e.Nom + ": " + err.Error()})
+			s.erreur(w, code, err.Error())
+			return
+		}
+	}
+	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil || c.Prod != nil || c.Champs != nil {
+		if e.Portee == "code" && val(c.Portee, e.Portee) == "infra" && s.acces != nil && s.accesErr == nil {
+			// code to infra: its grants go and the files are rewritten while it is still code (its fingerprint
+			// then recognises the value); an infra entry has none and would stay as an old-file line (M43 A1)
+			reste := slices.DeleteFunc(s.coffre.Liste(), func(x EntreeCoffre) bool { return x.ID == id })
+			if err := s.acces.Synchroniser(reste, s.nomsProjets()); err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			s.injecterTous(nil)
+		}
+		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee), c.Champs, c.Valeur); err != nil {
+			s.erreurCoffre(w, err)
+			return
+		}
+		if c.Prod != nil {
+			if err := s.coffre.PoserValeurProd(id, *c.Prod); err != nil {
+				s.erreurCoffre(w, err)
+				return
+			}
+			e.DeuxValeurs = *c.Prod != ""
+		}
+		s.injecterTous(nil)
+	}
+	if c.Categorie != nil {
+		if err := s.coffre.Classer(id, *c.Categorie); err != nil {
+			s.erreurCoffre(w, err)
+			return
+		}
+		e.Categorie = *c.Categorie
+	}
+	if versCode {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "portée infra → code", Resultat: e.Nom})
+	}
+	s.ecrireJSON(w, e)
+}
+
+// apiCoffreSupprimer: DELETE /api/coffre/{id}.
+func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
+	if !s.coffrePret(w) {
+		return
+	}
+	id := r.PathValue("id")
+	if s.cleDeServeur(w, id, "This key opens the server {0}: remove that server first") { // removed, it would cut it off
+		return
+	}
+	if err := s.retirerDuCoffre(id); err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// retirerDuCoffre deletes an entry with its grants (also used by the e-mail module for an account's password).
+func (s *Serveur) retirerDuCoffre(id string) error {
+	if s.acces != nil && s.accesErr == nil {
+		// its grants go and the files are rewritten while it is still in the vault: its value is then
+		// recognised and leaves every secrets.env instead of staying there as an old-file line
+		reste := slices.DeleteFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == id })
+		if err := s.acces.Synchroniser(reste, s.nomsProjets()); err != nil {
+			return err
+		}
+		s.injecterTous(nil)
+	}
+	if err := s.coffre.Supprimer(id); err != nil {
+		return err
+	}
+	oublierFiches(id)
+	_ = s.synchroniserAcces()
+	return nil
+}
+
+// cleDeServeur: true, the refusal written (409 with the servers' names), when a server reaches its host with
+// this vault entry or the inventory cannot be read.
+func (s *Serveur) cleDeServeur(w http.ResponseWriter, id, message string) bool {
+	noms, err := serveursUtilisantCle(id)
+	if err != nil {
+		s.erreurServeurs(w, err)
+		return true
+	}
+	if len(noms) == 0 {
+		return false
+	}
+	n := strings.Join(noms, ", ")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusConflict)
+	_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": message, "args": []string{n}, "erreur": strings.Replace(message, "{0}", n, 1)})
+	return true
+}

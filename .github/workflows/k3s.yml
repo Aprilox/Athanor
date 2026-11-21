@@ -1,0 +1,35 @@
+# The k3s deployment method (M139) against a real k3s installed in the runner: an example manifest applied with
+# -f (v1), then with a kustomization (v2), then rolled back to v1 by `kubectl rollout undo`, through the very
+# scripts Athanor runs on a server (app/deploiements_k3s.go, TestK3sReel). Run by hand only: k3s takes a while
+# to install and the method is used only when an owner asks for it.
+name: k3s
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k3s:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Install k3s
+        # Traefik is not needed by the example; the node must be Ready before a pod can start
+        run: |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
+          for _ in $(seq 1 60); do sudo test -f /etc/rancher/k3s/k3s.yaml && break; sleep 2; done
+          sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml wait --for=condition=Ready node --all --timeout=180s
+      - name: Deploy, then roll back
+        # a skip would pass silently: the PASS line is required
+        run: |
+          ATHANOR_TEST_K3S=1 go test -count=1 -timeout 15m -run '^TestK3sReel$' -v . | tee k3s.log
+          grep -q -- '--- PASS: TestK3sReel' k3s.log

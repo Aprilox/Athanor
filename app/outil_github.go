@@ -63,7 +63,7 @@ func genreSecret(texte string) string {
 func genresFichier(f string) []string {
 	var g []string
 	if m := reFichierEnv.FindStringSubmatch(f); m != nil && !envPermis[m[1]] {
-		g = append(g, "environment file")
+		g = append(g, ".env file")
 	}
 	if reCleFichier.MatchString(f) {
 		g = append(g, "private key file")

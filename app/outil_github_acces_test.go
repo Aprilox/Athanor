@@ -24,11 +24,10 @@ case "$GH_TOKEN" in revoque*) echo "HTTP 401: Bad credentials" >&2; exit 1 ;; es
 // connection's account only; a creation then signs in no more; revoked on GitHub, forgotten here and the
 // creation signs in again; Forget and Disconnect remove it.
 func TestAccesGardeGH(t *testing.T) {
-	for _, x := range []string{"ssh-keygen", "git"} {
-		if _, err := exec.LookPath(x); err != nil {
-			t.Skip("no " + x)
-		}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
 	}
+	sshKeygenUtilisable(t)
 	bin := t.TempDir()
 	trace := filepath.Join(t.TempDir(), "trace")
 	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(faux_gh_acces), 0o755); err != nil {

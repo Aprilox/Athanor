@@ -11,7 +11,7 @@ import (
 // choisirDossierSysteme: the system's folder dialog; dispo false when there is none (no desktop).
 func choisirDossierSysteme(depart, titre string) (chemin string, ok, dispo bool) {
 	if titre == "" {
-		titre = "Athanor"
+		titre = "Athanor Hub"
 	}
 	switch runtime.GOOS {
 	case "darwin":

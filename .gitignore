@@ -27,3 +27,12 @@ __pycache__/
 /dist/
 # repairs made on one PC (texts replacing the kit's, see app/remplacables.go)
 /local/
+# Test executable built for the owner (never committed)
+/deliverable/
+# Data of an executable started from the repository root (vault included)
+/hub/
+/modules/
+/Athanor-hub.exe
+# Published executables copied to the root to try them (same files as the Releases)
+/Athanor-Windows-*.exe
+/Athanor-Linux-*

@@ -1,0 +1,340 @@
+package main
+
+// Migration of the secrets kept before the vault (V§10.7): a copy, never a move, of each project's
+// .athanor/secrets.env, of extensions/secrets.json and of the secret keys of the kit's .env into code-scope
+// entries marked with their source. The fingerprint makes a new run create nothing; hub/coffre-migration.json
+// lists what was created, so "Undo the import" removes exactly that. The old files are only read.
+
+import (
+	"errors"
+	"maps"
+	"net/http"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+	"unicode/utf8"
+)
+
+type etatMigration struct {
+	Entrees    []string   `json:"entrees"`    // the ids it created
+	Empreintes []string   `json:"empreintes"` // the values already imported: an entry the user deleted is not brought back
+	Annulee    bool       `json:"annulee,omitempty"`
+	Faite      bool       `json:"faite,omitempty"` // the automatic import ran once: later files only come in by "Import again"
+	AnnuleeLe  *time.Time `json:"annulee_le,omitempty"`
+	Maj        time.Time  `json:"maj"`
+}
+
+type secretAncien struct{ nom, valeur, typ, source, fichier string }
+
+var migrationMu sync.Mutex
+
+// shortcut: off under `go test`, so the servers of the other tests never import their fixtures into a
+// vault; the migration test switches it on.
+var migrationAuto = !testing.Testing()
+
+func cheminMigration(c *Coffre) string {
+	return filepath.Join(filepath.Dir(c.chemin), "coffre-migration.json")
+}
+
+func lireEtatMigration(chemin string) etatMigration {
+	var e etatMigration
+	lireJSONFichier(chemin, &e)
+	return e
+}
+
+func (e *etatMigration) enregistrer(chemin string) error {
+	e.Maj = time.Now().UTC()
+	return ecrireJSONFichier(chemin, e, 0o600)
+}
+
+// secretsAnciens: the secrets of the old files, placeholders and oversized values left out.
+func (s *Serveur) secretsAnciens() []secretAncien {
+	s.mu.Lock()
+	projets := slices.Clone(s.config.Projets)
+	s.mu.Unlock()
+	kit := s.kitCourant()
+	var tous []secretAncien
+	for _, p := range projets {
+		b, err := lireAtelier(p, "secrets.env", tailleTachesMax)
+		if err != nil {
+			continue
+		}
+		for _, l := range strings.Split(string(b), "\n") {
+			l = strings.TrimRight(l, "\r")
+			if m := reLigneSecret.FindStringSubmatch(l); m != nil { // NAME='value', ' written '\''
+				v := strings.ReplaceAll(l[len(m[1])+2:len(l)-1], `'\''`, "'")
+				tous = append(tous, secretAncien{nom: m[1], valeur: v, source: "projet:" + p.Nom, fichier: p.Nom + "/.athanor/secrets.env"})
+			}
+		}
+	}
+	sec := lireSecrets(kit)
+	for _, id := range slices.Sorted(maps.Keys(sec)) {
+		for _, nom := range slices.Sorted(maps.Keys(sec[id])) {
+			tous = append(tous, secretAncien{nom: nom, valeur: sec[id][nom], source: "mcp:" + id, fichier: "extensions/secrets.json (" + id + ")"})
+		}
+	}
+	for _, l := range LireEnv(kit.Env()) {
+		if l.Cle != "" && estNomSecret(l.Cle) {
+			tous = append(tous, secretAncien{nom: l.Cle, valeur: sansGuillemets(l.Valeur), source: ".env", fichier: ".env"})
+		}
+	}
+	var out []secretAncien
+	for _, a := range tous {
+		p := proposerNomValeur(a.nom, a.valeur) // the type recognised as by Paste; nil = a placeholder
+		if p == nil || a.valeur == "" || len(a.valeur) > maxValeurCoffre || utf8.RuneCountInString(a.nom) > maxNomCoffre {
+			continue
+		}
+		a.typ = p.Type
+		if p.Famille == "variable" { // given as a secret, even under an ordinary name
+			a.typ = "autre"
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// migrerSecrets copies the old secrets into the vault and returns how many entries it created. auto: at
+// start-up or at the unlock, never after an undo; otherwise "Import again", which clears the undo.
+func (s *Serveur) migrerSecrets(auto bool) (int, error) {
+	if s.coffre == nil || s.coffreErr != nil || (auto && !migrationAuto) {
+		return 0, nil
+	}
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
+	s.coffre.effacerNotesImport()
+	chemin := cheminMigration(s.coffre)
+	etat := lireEtatMigration(chemin)
+	if auto && (etat.Annulee || etat.Faite) { // an agent can write secrets.env: never import it behind the user's back
+		return 0, nil
+	}
+	anciens := s.secretsAnciens()
+	if len(anciens) > 0 {
+		if err := s.coffre.OuvrirCode(); err != nil {
+			return 0, err // closed (no keystore here): the unlock runs it again
+		}
+	}
+	if !auto && etat.Annulee {
+		etat.Annulee, etat.AnnuleeLe = false, nil
+		if err := etat.enregistrer(chemin); err != nil {
+			return 0, err
+		}
+	}
+	connues := map[string]bool{}
+	parEmpreinte := map[string]string{} // fingerprint → entry id
+	for id, f := range s.coffre.EmpreintesConnues() {
+		connues[f] = true
+		parEmpreinte[f] = id
+	}
+	for _, f := range etat.Empreintes {
+		connues[f] = true
+	}
+	importees := map[string]string{} // B10: name|source → id, a key changed in its old file updates its entry
+	for _, e := range s.coffre.Liste() {
+		if e.Source != "" && e.Portee == "code" {
+			importees[e.Nom+"|"+e.Source] = e.ID
+		}
+	}
+	cree := 0
+	for _, a := range anciens {
+		if cree >= maxImportParPasse {
+			break // shortcut: a huge file comes in over several "Import again"; fine for old secret files
+		}
+		f := s.coffre.Empreinte(a.valeur)
+		if f == "" {
+			continue
+		}
+		if connues[f] {
+			s.accorderPartagee(a, parEmpreinte[f])
+			continue
+		}
+		if id := importees[a.nom+"|"+a.source]; id != "" {
+			if err := s.coffre.RemplacerValeur(id, a.valeur); err != nil {
+				return cree, err
+			}
+		} else {
+			e, err := s.coffre.Ajouter(EntreeCoffre{Nom: a.nom, Famille: "secret", Type: a.typ, Portee: "code",
+				Source: a.source}, a.valeur) // B11: no note, the card's translated "Imported from" line says it
+			if errors.As(err, new(erreurEntree)) {
+				continue
+			}
+			if err != nil {
+				return cree, err
+			}
+			importees[a.nom+"|"+a.source] = e.ID
+			parEmpreinte[f] = e.ID
+			etat.Entrees = append(etat.Entrees, e.ID)
+		}
+		connues[f] = true
+		etat.Empreintes = append(etat.Empreintes, f)
+		if err := etat.enregistrer(chemin); err != nil { // after each one: an interrupted run still undoes what it made
+			return cree, err
+		}
+		cree++
+	}
+	if auto && !etat.Faite {
+		etat.Faite = true
+		return cree, etat.enregistrer(chemin)
+	}
+	return cree, nil
+}
+
+const maxImportParPasse = 200
+
+// accorderPartagee: a value already in the vault found in another project's old file (the same key in
+// two projects) is granted to that project on dev too, or the injection would take it from its file.
+func (s *Serveur) accorderPartagee(a secretAncien, id string) {
+	nom, ok := strings.CutPrefix(a.source, "projet:")
+	if !ok || id == "" || s.acces == nil || s.accesErr != nil {
+		return
+	}
+	for _, e := range s.coffre.Liste() {
+		if e.ID == id && e.Source != a.source {
+			variable := a.nom
+			if !nomSecretValide(variable) {
+				variable = ""
+			}
+			a, err := s.acces.Ajouter(nom, e, "dev", variable, "migration")
+			if errors.Is(err, errAccesDoublon) {
+				a, err = s.acces.Ajouter(nom, e, "dev", "", "migration")
+			}
+			if err == nil {
+				s.auditAcces("migration", nom, "acces_accorde", e, a.Variable, a.Env)
+			}
+		}
+	}
+}
+
+// annulerMigration removes the entries the migration created (those the user already deleted, or
+// changed since, are kept) and marks it undone: nothing is imported again until "Import again". garder:
+// project → variable → value of the removed entries, for the files that had them (the project it came
+// from and those granted it), so the injection puts them back.
+func (s *Serveur) annulerMigration() (n int, garder map[string]map[string]string, err error) {
+	if s.coffre == nil || s.coffreErr != nil {
+		return 0, nil, errors.New("The vault file cannot be read")
+	}
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
+	chemin := cheminMigration(s.coffre)
+	etat := lireEtatMigration(chemin)
+	modifiees := map[string]bool{} // B9: an entry the user edited after the import is theirs now
+	empreintes := s.coffre.EmpreintesConnues()
+	retirees := map[string]bool{} // C13: only the values removed here may come back by "Import again"
+	entrees := map[string]EntreeCoffre{}
+	for _, e := range s.coffre.Liste() {
+		modifiees[e.ID] = e.Modifie.After(e.Cree)
+		entrees[e.ID] = e
+	}
+	garder = map[string]map[string]string{}
+	garde := func(projet, variable, valeur string) {
+		if garder[projet] == nil {
+			garder[projet] = map[string]string{}
+		}
+		garder[projet][variable] = valeur
+	}
+	for len(etat.Entrees) > 0 {
+		id := etat.Entrees[0]
+		if modifiees[id] {
+			etat.Entrees = etat.Entrees[1:]
+			continue
+		}
+		if v, err := s.coffre.Valeur(id); err == nil && s.acces != nil {
+			if nom, ok := strings.CutPrefix(entrees[id].Source, "projet:"); ok && nomSecretValide(entrees[id].Nom) {
+				garde(nom, entrees[id].Nom, v)
+			}
+			for _, projet := range s.nomsProjets() {
+				for _, a := range s.acces.Projet(projet).Acces {
+					if a.Entree == id {
+						garde(projet, a.Variable, v)
+					}
+				}
+			}
+		}
+		if err := s.coffre.Supprimer(id); err != nil && !errors.Is(err, errCoffreInconnu) {
+			_ = etat.enregistrer(chemin)
+			return n, garder, err
+		} else if err == nil {
+			retirees[empreintes[etat.Entrees[0]]] = true
+			n++
+		}
+		etat.Entrees = etat.Entrees[1:]
+	}
+	maintenant := time.Now().UTC()
+	gardees := slices.DeleteFunc(etat.Empreintes, func(f string) bool { return retirees[f] })
+	etat = etatMigration{Annulee: true, AnnuleeLe: &maintenant, Empreintes: gardees}
+	return n, garder, etat.enregistrer(chemin)
+}
+
+// resumeMigration: for the Vault page, the imported entries still in the vault and whether it was undone.
+func (s *Serveur) resumeMigration() map[string]any {
+	etat := lireEtatMigration(cheminMigration(s.coffre))
+	ids := map[string]bool{}
+	for _, e := range s.coffre.Liste() {
+		ids[e.ID] = true
+	}
+	n := 0
+	for _, id := range etat.Entrees {
+		if ids[id] {
+			n++
+		}
+	}
+	return map[string]any{"importees": n, "annulee": etat.Annulee}
+}
+
+// apiCoffreMigration: POST /api/coffre/migration, "Import again".
+func (s *Serveur) apiCoffreMigration(w http.ResponseWriter, r *http.Request) {
+	if !s.coffrePret(w) {
+		return
+	}
+	n, err := s.migrerSecrets(false)
+	s.injecterTous(nil)
+	if err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	s.ecrireJSON(w, map[string]int{"importees": n})
+}
+
+// apiCoffreMigrationAnnuler: POST /api/coffre/migration/annuler, "Undo the import".
+func (s *Serveur) apiCoffreMigrationAnnuler(w http.ResponseWriter, r *http.Request) {
+	if !s.coffrePret(w) {
+		return
+	}
+	n, garder, err := s.annulerMigration()
+	_ = s.synchroniserAcces() // grants of the removed entries go, even after a partial undo
+	s.injecterTous(garder)    // their values stay in the files that had them: nothing is lost
+	if err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	s.ecrireJSON(w, map[string]int{"retirees": n})
+}
+
+// effacerNotesImport (B11): older imports wrote "Imported from FILE" as the note, in the language of
+// that day, under the card's own translated line; such a note is cleared, its date kept.
+func (c *Coffre) effacerNotesImport() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var prefixes []string
+	for l := range languesConnues {
+		p, _, _ := strings.Cut(traduireTUI(dicoTUI(l), "Imported from {0}"), "{0}")
+		prefixes = append(prefixes, p)
+	}
+	change := false
+	for i, e := range c.f.Entrees {
+		if e.Source == "" || e.Note == "" || strings.ContainsRune(e.Note, '\n') {
+			continue
+		}
+		for _, p := range prefixes {
+			if strings.HasPrefix(e.Note, p) {
+				c.f.Entrees[i].Note, change = "", true
+				break
+			}
+		}
+	}
+	if change {
+		_ = c.enregistrer() // shortcut: a failed save keeps the old notes in the file; the next start clears them
+	}
+}

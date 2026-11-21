@@ -428,6 +428,8 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		Action string `json:"action"`
 		Valeur string `json:"valeur"`
 		Mode   string `json:"mode"`
+		// a deletion's programs to stop first, from the refusal that named them
+		Arreter []int `json:"arreter"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -466,7 +468,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		if err := s.modifierProjet(p.Nom, func(cf *Config, x *Projet) error {
 			for _, y := range cf.Projets {
 				if y.Nom != p.Nom && strings.EqualFold(y.Nom, nouveau) {
-					return errors.New("A project with this name or folder already exists")
+					return errors.New("A project already has this name: choose another name")
 				}
 			}
 			x.Nom = nouveau
@@ -486,6 +488,11 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		delete(s.dernierActif, p.Nom)
 		delete(s.relancer, p.Nom)
 		s.mu.Unlock()
+		deplacerReglagesProjet(p.Nom, nouveau)
+		deplacerRelais(p.Nom, nouveau)
+		if s.acces != nil {
+			_ = s.acces.RenommerProjet(p.Nom, nouveau)
+		}
 		s.ecrireJSON(w, map[string]any{"message_key": "Project renamed.", "args": []string{}, "nom": nouveau})
 
 	case "deplacer": // move or rename the folder itself, with everything in it
@@ -538,6 +545,13 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		// A6: the old folder is no longer the project: its copy of the grants goes, the new one is rewritten
+		if filepath.Clean(p.Atelier()) != filepath.Clean(nouveau.Atelier()) {
+			_ = os.Remove(cheminSecrets(p))
+		}
+		if _, err := os.Stat(cheminSecrets(nouveau)); err == nil {
+			_, _ = s.injecterAcces(nouveau, nil)
+		}
 		s.suivreGitHub(p.Dossier, cible)
 		decoches, recoches, _ := nouveau.VerifierJalons()
 		demanderReverification(nouveau, "project pointed from "+p.Dossier+" to "+cible)
@@ -586,52 +600,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "supprimer":
-		var cible string
-		switch c.Mode {
-		case "liste":
-		case "atelier":
-			cible = p.Atelier()
-		case "dossier":
-			cible = p.Dossier
-			// checked again now: never a system or personal folder, never another project's files
-			if cle := dossierInterdit(p.Dossier, s.kitCourant().Racine); cle != "" {
-				s.erreur(w, http.StatusBadRequest, cle)
-				return
-			}
-			if err := s.conflitProjets(p.Dossier, p.Nom); err != nil {
-				s.erreur(w, http.StatusBadRequest, err.Error())
-				return
-			}
-		default:
-			s.erreur(w, http.StatusBadRequest, "Unknown action")
-			return
-		}
-		if cible != "" {
-			if _, err := os.Lstat(cible); err == nil {
-				if err := mettreALaCorbeille(cible); err != nil {
-					s.erreur(w, http.StatusInternalServerError, "Cannot send it to the recycle bin: "+err.Error())
-					return
-				}
-			} else if !os.IsNotExist(err) {
-				s.erreur(w, http.StatusInternalServerError, "Cannot send it to the recycle bin: "+err.Error())
-				return
-			}
-		}
-		if err := s.retirerProjet(p); err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if c.Mode != "liste" {
-			s.oublierGitHub(p) // its GitHub key goes with its Athanor data (kept when only removed from the list)
-		}
-		switch c.Mode {
-		case "liste":
-			s.msg(w, "Project removed from the list. Its folder is intact; delete its .athanor subfolder to clean it.")
-		case "atelier":
-			s.msg(w, "Project removed; its workshop (.athanor) is in the recycle bin.")
-		default:
-			s.msg(w, "Project removed; its folder is in the recycle bin.")
-		}
+		s.supprimerProjet(w, p, c.Mode, c.Arreter)
 
 	default:
 		s.erreur(w, http.StatusBadRequest, "Unknown action")
@@ -742,6 +711,17 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	delete(s.dernierActif, p.Nom)
 	delete(s.relancer, p.Nom)
 	s.mu.Unlock()
+	s.arreterTachesProjet(p.Nom) // M312c: before its relay goes, which names them: no agent stays at work for a removed project
+	deplacerReglagesProjet(p.Nom, "")
+	deplacerRelais(p.Nom, "")
+	if s.acces != nil {
+		s.oublierCleDeploiement(p.Nom) // the vault entry goes with the grants (the repository: oublierGitHub)
+		_ = s.acces.SupprimerProjet(p.Nom)
+		if _, err := os.Stat(cheminSecrets(p)); err == nil { // A6: files kept, the granted values leave them
+			_, _ = s.injecterAcces(p, nil)
+		}
+	}
+	s.oublierApprobations(p.Nom)
 	k := s.kitCourant()
 	choix := lireChoix(k)
 	if _, ok := choix[p.Dossier]; ok {
@@ -751,6 +731,29 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	dossierAgents(k, p.Dossier, "") // the library keeps its sub-agents
 	s.apresChangementProjets()
 	return nil
+}
+
+// oublierApprobations: a removed project's pending approvals are refused (they stayed in the bell, their project
+// gone, owner's note of 2026-11-17) and its "never ask again" rules go, so that a new project of the same name
+// starts with none.
+func (s *Serveur) oublierApprobations(nom string) {
+	if s.approbations == nil {
+		return
+	}
+	verrouDecision.Lock() // an accept in progress ends first
+	l, err := s.approbations.RefuserDuProjet(nom, "hub")
+	verrouDecision.Unlock()
+	for _, x := range l {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env, Agent: x.Agent,
+			Action: "approbation refuser", Resultat: x.Action + " " + x.ID + " → refusee (projet supprimé)"})
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "project removed: approvals:", err)
+	}
+	regles, _ := s.approbations.RetirerRegles(func(r RegleAccord) bool { return r.Projet == nom })
+	for _, x := range regles {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: x.Projet, Env: x.Env, Action: "règle retirée: " + x.Action, Resultat: "projet supprimé"})
+	}
 }
 
 // verifierEnFond: while milestones wait for their files (after a folder change), the current project

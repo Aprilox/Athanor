@@ -34,7 +34,8 @@ func TestBancEquipeLien(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	if out, err := exec.Command("go", "build", "-tags", "essai", "-o", bin, ".").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-tags", "essai", "-ldflags=-s -w", "-o", bin, ".").CombinedOutput(); err != nil {
+		sautSiDefender(t, string(out))
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	conf := filepath.Join(t.TempDir(), "gitconfig")
@@ -178,7 +179,8 @@ func bancEquipeLien(t *testing.T, bin string, couper bool) {
 			t.Fatalf("pilot %d did not end with the delivery%s", i, journal)
 		}
 	}
-	if !strings.Contains(sorties[0], "the request came with the team's workshop") {
+	// the first workshop pull, before the wait loop, already brings it when the master shared first
+	if !strings.Contains(sorties[0], "the request came with the team's workshop") && !regexp.MustCompile(`Team workshop \(direct link\): [^\n]*REQUEST\.md[^\n]* received`).MatchString(sorties[0]) {
 		t.Fatalf("the node did not get the master's request%s", journal)
 	}
 	// GitHub: the code only, never the workshop

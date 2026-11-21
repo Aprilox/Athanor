@@ -96,6 +96,27 @@ func TestRouvrirApresLivraison(t *testing.T) {
 	}
 }
 
+// A queued request reopens the delivered project once: its own delivery is not reopened by the request (M310c).
+func TestDemandeEnFileRouvreUneFois(t *testing.T) {
+	p := projetLivreEssai(t)
+	noterLivraison(p.Dossier)
+	ecrireEssai(t, filepath.Join(p.Atelier(), "queue", "01-pricing.md"), "Add a pricing page.\n")
+	pl := &pilote{projet: p.Dossier, etat: p.Atelier(), prive: t.TempDir()}
+	if !pl.prochaineDemande() || projetLivre(p) {
+		t.Fatal("the queued request did not reopen the project")
+	}
+	plan := filepath.Join(p.Atelier(), "PLAN.md")
+	ecrireEssai(t, plan, strings.Replace(lire(t, plan), "- [ ] Resume", "- [x] Resume", 1)) // the pilot did it and delivers again
+	ecrireEssai(t, filepath.Join(p.Atelier(), "FINAL_REPORT.md"), "# Final Report\nSTATUS: DONE\n")
+	if pl.prochaineDemande() || pl.rouvrirApresLivraison() {
+		t.Fatalf("reopened a second time: %+v", nouveauDepuisLivraison(p.Dossier))
+	}
+	_ = p.AjouterRemarque("Add a dark mode", "## Notes", "(notes)")
+	if !pl.rouvrirApresLivraison() {
+		t.Fatal("a note written after the second delivery did not reopen it")
+	}
+}
+
 // Start on a delivered project to which nothing came: said, instead of a pilot that ends at once.
 func TestDemarrerLivreRienDeNeuf(t *testing.T) {
 	p := projetLivreEssai(t)
@@ -116,4 +137,26 @@ func lireI18nEssai(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// M240k3: Start without a connection to Claude (no .env in the kit): refused with why, never "Pilot started".
+func TestDemarrerSansClaude(t *testing.T) {
+	kit := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(kit, "template"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(kit, "template", "CLAUDE.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := nouveauServeur(Config{Kit: kit})
+	p := Projet{Nom: "sans-claude", Dossier: t.TempDir()}
+	if msg, err := s.demarrerPilote(p); err == nil || err.Error() != texteSansClaude {
+		t.Fatalf("no .env: %q %v", msg, err)
+	}
+	if !strings.Contains(lireI18nEssai(t), `"`+texteSansClaude+`"`) {
+		t.Fatal("not translated")
+	}
+	if b, _ := statique.ReadFile("static/app.js"); !strings.Contains(string(b), `const SANS_CLAUDE = "`+texteSansClaude+`"`) {
+		t.Fatal("the interface no longer recognises the refusal (SANS_CLAUDE)")
+	}
 }

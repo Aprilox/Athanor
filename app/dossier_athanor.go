@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // nomConfig: athanor-config.json (Windows), athanor-config-linux.json, athanor-config-darwin.json.
@@ -43,8 +44,9 @@ func dossierAthanorDefaut() string {
 	return dossierDonneesApp()
 }
 
-// dossierExecutable: the folder of the running executable.
-func dossierExecutable() string {
+// dossierExecutable: the folder of the running executable, resolved once (M206: every dossierAthanor() of a
+// page's request paid an EvalSymlinks).
+var dossierExecutable = sync.OnceValue(func() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
@@ -53,7 +55,7 @@ func dossierExecutable() string {
 		exe = r
 	}
 	return filepath.Dir(exe)
-}
+})
 
 // installationAncienne: the executable sits in a kit folder of an older version (its configuration
 // file next to it, or its .env and template/): that folder stays Athanor's folder.
@@ -148,4 +150,26 @@ func premierLancement(d string, accepte bool) bool {
 		}
 	}
 	return os.MkdirAll(d, 0o755) == nil
+}
+
+// donneesAthanor: Athanor's own data a pilot must neither change nor read (I4): the settings, hub/ (the
+// vault, the approvals, the audit journal) and modules/, in the kit's folder and in dossierAthanor() (one
+// and the same in a recent installation; in WSL the kit is the Windows folder seen from Linux).
+// avecAbsents: the folders that do not exist yet too (Seatbelt accepts them; Claude's bubblewrap does not).
+func donneesAthanor(kit string, avecAbsents bool) []string {
+	var l []string
+	vus := map[string]bool{}
+	for _, base := range []string{kit, dossierAthanor()} {
+		if base == "" || vus[base] {
+			continue
+		}
+		vus[base] = true
+		for _, n := range []string{"hub", "modules", "athanor-config.json", "athanor-config-linux.json", "athanor-config-darwin.json"} {
+			p := filepath.Join(base, n)
+			if _, err := os.Stat(p); err == nil || avecAbsents {
+				l = append(l, p)
+			}
+		}
+	}
+	return l
 }

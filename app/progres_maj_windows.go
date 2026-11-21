@@ -131,7 +131,7 @@ func (p *progresMaj) boucle() {
 	le, _, _ := pGetSystemMetrics.Call(0) // SM_CXSCREEN
 	he, _, _ := pGetSystemMetrics.Call(1)
 	l, ht := int32(480), int32(140)
-	titre, _ := syscall.UTF16PtrFromString("Athanor")
+	titre, _ := syscall.UTF16PtrFromString("Athanor Hub")
 	h, _, _ := pCreateWindowExW.Call(0x8, uintptr(unsafe.Pointer(classeProgres)), uintptr(unsafe.Pointer(titre)), // WS_EX_TOPMOST
 		0x80000000|0x10000000|0x00800000, uintptr((int32(le)-l)/2), uintptr((int32(he)-ht)/2), uintptr(l), uintptr(ht), 0, 0, 0, 0) // WS_POPUP | WS_VISIBLE | WS_BORDER
 	p.mu.Lock()

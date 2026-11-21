@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -229,6 +231,12 @@ func TestTUITraduction(t *testing.T) {
 	u = append(u, p2...)
 	p3, _ := os.ReadFile("tui_distance.go")
 	u = append(u, p3...)
+	p4, _ := os.ReadFile("tui_accueil.go")
+	u = append(u, p4...)
+	p5, _ := os.ReadFile("tui_missions.go")
+	u = append(u, p5...)
+	p6, _ := os.ReadFile("tui_approbations.go")
+	u = append(u, p6...)
 	src := string(b) + string(c) + string(d) + strings.ReplaceAll(string(u), "app.t(", "a.t(")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
@@ -245,7 +253,7 @@ func clesTUI(src string) []string {
 	var l []string
 	vu := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(?:a\.|[^A-Za-z0-9_.])t\("((?:[^"\\]|\\.)*)"`).FindAllStringSubmatch(src, -1) {
-		cle := strings.NewReplacer(`\"`, `"`, `\n`, "\n").Replace(m[1])
+		cle := cleJS(m[1])
 		if !vu[cle] {
 			vu[cle] = true
 			l = append(l, cle)
@@ -306,6 +314,12 @@ func essaiServeurTUI(t *testing.T) (*Serveur, *clientTUI, Projet) {
 	_ = os.MkdirAll(filepath.Join(kit, "template"), 0o755)
 	_ = os.WriteFile(filepath.Join(kit, "template", "CLAUDE.md"), []byte("# x\n"), 0o644)
 	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "essai", Langue: "fr"})
+	return s, clientTUIPour(t, s), p
+}
+
+// clientTUIPour: the terminal's access to s, served by a test server (the address alone refused).
+func clientTUIPour(t *testing.T, s *Serveur) *clientTUI {
+	t.Helper()
 	s.cleAcces = aleatoire(24)
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -324,13 +338,13 @@ func essaiServeurTUI(t *testing.T) (*Serveur, *clientTUI, Projet) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, c, p
+	return c
 }
 
 // attendreTUI: the server's answers applied until cond holds.
 func attendreTUI(t *testing.T, a *appTUI, cond func() bool) {
 	t.Helper()
-	fin := time.After(10 * time.Second)
+	fin := time.After(30 * time.Second) // under the full check's parallel shards a TUI step took over 10 s (M267, M271)
 	for !cond() {
 		select {
 		case f := <-a.majs:
@@ -355,6 +369,7 @@ func TestTUIContreLeServeur(t *testing.T) {
 	a := nouvelleAppTUI(c, true)
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.vue != nil && a.c.projet == "essai" })
+	taper(a, "1") // the launch shows the home (TestTUIAccueil)
 	e := nouvelEcran(120, 32)
 	a.dessiner(e)
 	ecran := e.texteEcran()
@@ -426,7 +441,7 @@ func TestTUIContreLeServeur(t *testing.T) {
 	}
 	// the modes add up: the fast mode on top of the eco mode
 	taper(a, "\x1b[B\x1b[B\r")
-	attendreTUI(t, a, func() bool { return p.modeActif("FAST") && strings.Contains(a.toast, "Mode fast activé") })
+	attendreTUI(t, a, func() bool { return p.modeActif("FAST") && strings.Contains(a.toast, "Mode rapide activé") })
 	if m := p.LireMode(); m.Parallele || !m.Eco || !m.Rapide {
 		t.Fatalf("mode: %+v", m)
 	}
@@ -450,9 +465,19 @@ func TestTUIVerrou(t *testing.T) {
 	s, c, _ := essaiServeurTUI(t)
 	s.mu.Lock()
 	s.config.Sel = "sel"
-	s.config.MotDePasseHash = hacher("sel", "secret")
+	s.config.MotDePasseHash = hacherMotDePasse("secret")
 	s.mu.Unlock()
 	a := nouvelleAppTUI(c, false)
+	a.tic()
+	attendreTUI(t, a, func() bool { return a.form != nil })
+	// the locked screen: the form alone, its button says what it does
+	ev := nouvelEcran(80, 24)
+	a.dessiner(ev)
+	if tx := ev.texteEcran(); !strings.Contains(tx, a.t("Unlock")) || strings.Contains(tx, a.t("Save")) || strings.Contains(tx, a.t("Updating…")) || strings.Contains(tx, "1…0") {
+		t.Fatalf("locked screen:\n%s", tx)
+	}
+	a.abandonnerFormulaire() // Escape: the prompt comes back at the next refresh
+	a.derniere["etat"] = time.Time{}
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.form != nil })
 	taper(a, "faux\r")
@@ -883,6 +908,7 @@ func TestTUIDistanceContreLeServeur(t *testing.T) {
 // automatic push off, why the last push did not go).
 func TestTUISuiviGitHub(t *testing.T) {
 	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.page = pSuivi
 	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
 		Etat: &Etat{DernierCommit: "abc12345 M9: the shop"}}
 	ecran := func() string {
@@ -921,6 +947,7 @@ func TestTUISuiviGitHub(t *testing.T) {
 // The Overview's progress box says the savings measured.
 func TestTUISuiviGains(t *testing.T) {
 	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.page = pSuivi
 	stats := []LigneStat{{Cycle: "1", Etat: "ok", CoutUSD: 1.5, Commit: "a1"}, {Cycle: "2", Etat: "ok", CoutUSD: 0.8, Commit: "b2"}}
 	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
 		Etat: &Etat{DernierCommit: "b2 M2"}, Stats: stats,
@@ -997,4 +1024,162 @@ func TestTUIEquipeDirecte(t *testing.T) {
 	}
 	e := nouvelEcran(100, 30)
 	a.dessiner(e)
+}
+
+// TestTUIAccueil: the hub's home at launch, with the tiles of GET /api/hub, its key H (free on every
+// page), Escape back to it, 1…9, 0 unchanged.
+func TestTUIAccueil(t *testing.T) {
+	// B91 : un dossier d'Athanor à lui, sans les missions laissées par les tests précédents du même éclat
+	d := t.TempDir()
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(v, filepath.Join(d, "home"))
+	}
+	s, c, _ := essaiServeurTUI(t)
+	a := nouvelleAppTUI(c, true)
+	if a.page != pAccueil {
+		t.Fatalf("launch page %d", a.page)
+	}
+	a.tic()
+	attendreTUI(t, a, func() bool { return a.vue != nil && a.hub != nil })
+	// the same data as /api/hub
+	attendu, _ := json.Marshal(moduleDev{}.Resume(s))
+	dev := slices.IndexFunc(a.hub.Modules, func(m ModuleVue) bool { return m.ID == "dev" })
+	if len(a.hub.Modules) != len(modulesHub()) || a.hub.Modules[0].ID != "hub" || dev < 0 {
+		t.Fatalf("modules %+v", a.hub.Modules)
+	}
+	if lu, _ := json.Marshal(a.hub.Modules[dev].Resume); string(lu) != string(attendu) {
+		t.Fatalf("tile %s, /api/hub %s", lu, attendu)
+	}
+	for _, taille := range [][2]int{{80, 24}, {120, 40}} {
+		e := nouvelEcran(taille[0], taille[1])
+		a.dessiner(e)
+		ecran := e.texteEcran()
+		for _, x := range []string{"Athanor", "Studio", "Inactif", "Projets en cours", "Besoin de vous : 0", "Pages de Studio"} {
+			if !strings.Contains(ecran, x) {
+				t.Fatalf("%v: no %q in\n%s", taille, x, ecran)
+			}
+		}
+		if taille[0] == 120 && !strings.Contains(ecran, "H Accueil") {
+			t.Fatalf("the pages' list: no home first\n%s", ecran)
+		}
+	}
+	// H is free on every page (no page letter, no page shortcut), and leads home
+	for pg := 0; pg < nbPages; pg++ {
+		a.page = pg
+		if a.lettrePage("H") != "" {
+			t.Fatalf("page %d takes H", pg)
+		}
+		for _, r := range a.raccourcisPage() {
+			if r.k == "H" || r.k == "h" {
+				t.Fatalf("page %d shows the key %q", pg, r.k)
+			}
+		}
+		taper(a, "H")
+		if a.page != pAccueil {
+			t.Fatalf("H from page %d: %d", pg, a.page)
+		}
+	}
+	// 1…9, 0 keep Dev's pages; Escape comes back; Tab goes round through the home
+	// a slice, not a map: the Tab below expects "0" to be the last key
+	for _, c := range []struct {
+		k  string
+		pg int
+	}{{"1", pSuivi}, {"3", pDemandes}, {"9", pReglages}, {"0", pDistance}} {
+		taper(a, c.k)
+		if a.page != c.pg {
+			t.Fatalf("key %s: page %d", c.k, a.page)
+		}
+	}
+	taper(a, "\t")
+	if a.page != pAccueil {
+		t.Fatalf("Tab after Remote: %d", a.page)
+	}
+	taper(a, "2")
+	taper(a, "\x1b")
+	if a.page != pAccueil {
+		t.Fatalf("Escape: %d", a.page)
+	}
+	// Escape still clears the log's filter first
+	a.page = pJournal
+	a.recherche.mettreTexte("x")
+	taper(a, "\x1b")
+	if a.page != pJournal || a.recherche.texte() != "" {
+		t.Fatalf("Escape on a filtered log: page %d, filter %q", a.page, a.recherche.texte())
+	}
+	// Enter opens the first module's page; the help shows the home's key
+	a.page = pAccueil
+	taper(a, "\r")
+	if a.page != pSuivi {
+		t.Fatalf("Enter: %d", a.page)
+	}
+	a.aide = true
+	e := nouvelEcran(120, 40)
+	a.dessiner(e)
+	if !strings.Contains(e.texteEcran(), "H, Esc") {
+		t.Fatalf("the help:\n%s", e.texteEcran())
+	}
+	// "In progress": a working element says its milestone and what its pilot does, as the web does
+	a.aide, a.page = false, pAccueil
+	a.hub.Elements = []ElementHub{{Module: "dev", ID: "b", Titre: "b", Etat: "actif", Avancement: &Avancement{Fait: 3, Total: 10, Etape: "Milestone {0}/{1}"}, Activite: "Écrire la page", Action: "Tests"},
+		{Module: "dev", ID: "c", Titre: "c", Etat: "actif", Activite: "Seul"}}
+	e = nouvelEcran(120, 40)
+	a.dessiner(e)
+	for _, x := range []string{"b  Studio  Jalon 4/10 : Écrire la page, Tests", "c  Studio  Seul", "Tout voir (2)"} {
+		if !strings.Contains(e.texteEcran(), x) {
+			t.Fatalf("no %q in\n%s", x, e.texteEcran())
+		}
+	}
+}
+
+func TestTUIEtroitEtCalme(t *testing.T) {
+	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Langue: "fr", Projets: []ProjetVue{{Nom: "a", Courant: true}}, Projet: &ProjetVue{Nom: "a"}}
+	a.langue, a.d = "fr", dicoTUI("fr")
+	// 80 columns: every page keeps a tab, the active one by its name, and it can be clicked
+	a.page = pReglages
+	a.env = []LigneEnv{} // read, but the kit has no settings
+	e := nouvelEcran(80, 24)
+	a.dessiner(e)
+	onglets := e.ligneTexte(1)
+	for _, k := range []string{" H ", " 1 ", " 5 ", " 8 ", "   0", "9 Réglages"} {
+		if !strings.Contains(onglets, k) {
+			t.Fatalf("tab %q missing: %q", k, onglets)
+		}
+	}
+	if !strings.Contains(e.texteEcran(), "Pas encore de réglages") || strings.Contains(e.texteEcran(), "Mise à jour") {
+		t.Fatalf("empty settings:\n%s", e.texteEcran())
+	}
+	x := strings.LastIndex(onglets, " 0")
+	a.souris(evenementTUI{genre: evSouris, x: len([]rune(onglets[:x])) + 1, y: 1, appui: true})
+	if a.page != pDistance {
+		t.Fatalf("click on tab 0: page %d", a.page)
+	}
+	// the lead's mission in the app's language
+	a.page = pEquipe
+	a.agents = []Agent{{ID: "chef", Genre: "chef", Statut: "attend", Mission: "Leads the current milestone: reads the plan, codes, checks, commits."}}
+	e = nouvelEcran(120, 30)
+	a.dessiner(e)
+	if strings.Contains(e.texteEcran(), "Leads the current") {
+		t.Fatalf("team in English:\n%s", e.texteEcran())
+	}
+	// a reply on its way: a still screen (no spinner)
+	a.page = pChat
+	a.chat = &reponseChatTUI{EnCours: true}
+	a.dessiner(e)
+	// below the header: its clock may pass a minute during the wait (seen once in M304's full check)
+	sousEntete := func() string { _, r, _ := strings.Cut(e.texteEcran(), "╭"); return r }
+	avant := sousEntete()
+	time.Sleep(250 * time.Millisecond)
+	a.dessiner(e)
+	if sousEntete() != avant || avant == "" || strings.ContainsAny(avant, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
+		t.Fatalf("the chat moves:\n%s", avant)
+	}
+}
+
+// M313a: an alert's argument that is itself a message (the failed test e-mail) is translated, never dumped as JSON.
+func TestTraduireTUIMessageImbrique(t *testing.T) {
+	d := map[string]string{"The test e-mail of {0} failed: {1}": "L'e-mail de test de {0} a échoué : {1}", "No answer": "Pas de réponse"}
+	if g := traduireTUI(d, "The test e-mail of {0} failed: {1}", "Pro", &MessageMoteur{Cle: "No answer"}); g != "L'e-mail de test de Pro a échoué : Pas de réponse" {
+		t.Fatal(g)
+	}
 }

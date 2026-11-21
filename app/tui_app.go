@@ -21,11 +21,15 @@ const (
 	pGitHub
 	pReglages
 	pDistance
+	pAccueil // the hub's home (key H), drawn first in the lists
 	nbPages
 )
 
 // clesPages: the pages' names (keys of the app's translations).
-var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote"}
+var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote", "Home"}
+
+// ordrePages: the pages as the lists show them (the home first, then Dev's pages 1…9, 0).
+var ordrePages = [nbPages]int{pAccueil, pSuivi, pJournal, pDemandes, pChat, pSante, pPourVous, pEquipe, pGitHub, pReglages, pDistance}
 
 type paletteTUI struct {
 	fond, panneau, ligne, bord, encre, muet, accent, surAccent, ok, attention, erreur, violet couleurT
@@ -58,11 +62,11 @@ func melange(a, b couleurT, f float64) couleurT {
 // paletteDe: the app's palette and accent (static/i18n.js THEMES and ACCENTS, app.css).
 func paletteDe(theme, accent string) paletteTUI {
 	themes := map[string][5]string{
-		"ardoise": {"#141b24", "#1b2430", "#2d3a49", "#e9eef3", "#8e9dad"},
-		"minuit":  {"#0b0d11", "#12151b", "#242933", "#eceff4", "#8a92a0"},
-		"ocean":   {"#0e1a2b", "#132238", "#27405f", "#e6eef8", "#8fa6c2"},
-		"clair":   {"#f3f5f8", "#ffffff", "#d9dfe7", "#1b2430", "#5d6b7b"},
-		"sable":   {"#f6f1e8", "#fffdf8", "#e0d6c5", "#2b2620", "#6f655a"},
+		"ardoise": {"#141b24", "#1b2430", "#2d3a49", "#e9eef3", "#98a6b4"},
+		"minuit":  {"#0b0d11", "#12151b", "#242933", "#eceff4", "#8f96a4"},
+		"ocean":   {"#0e1a2b", "#132238", "#27405f", "#e6eef8", "#90a7c3"},
+		"clair":   {"#f3f5f8", "#ffffff", "#d9dfe7", "#1b2430", "#525e6c"},
+		"sable":   {"#f6f1e8", "#fffdf8", "#e0d6c5", "#2b2620", "#5f574d"},
 	}
 	t, ok := themes[theme]
 	if !ok {
@@ -71,7 +75,7 @@ func paletteDe(theme, accent string) paletteTUI {
 	clair := theme == "clair" || theme == "sable"
 	accents := map[string]string{"sarcelle": "#3fc6a5", "bleu": "#5b9dff", "violet": "#a98bff", "ambre": "#f2b441", "rose": "#ef7aa6"}
 	if clair {
-		accents = map[string]string{"sarcelle": "#178f72", "bleu": "#2f6fd6", "violet": "#7a4fd6", "ambre": "#c47d10", "rose": "#d2487c"}
+		accents = map[string]string{"sarcelle": "#137a62", "bleu": "#2c69cb", "violet": "#7a4fd6", "ambre": "#96600c", "rose": "#b83f6d"}
 	}
 	a, ok := accents[accent]
 	if !ok {
@@ -80,9 +84,9 @@ func paletteDe(theme, accent string) paletteTUI {
 	p := paletteTUI{fond: hexCouleur(t[0]), panneau: hexCouleur(t[1]), ligne: hexCouleur(t[2]), encre: hexCouleur(t[3]), muet: hexCouleur(t[4]), accent: hexCouleur(a)}
 	switch theme {
 	case "clair":
-		p.ok, p.attention, p.erreur, p.violet = hexCouleur("#178f72"), hexCouleur("#b7791f"), hexCouleur("#c53d35"), hexCouleur("#7a4fd6")
+		p.ok, p.attention, p.erreur, p.violet = hexCouleur("#137a62"), hexCouleur("#946219"), hexCouleur("#c53d35"), hexCouleur("#7a4fd6")
 	case "sable":
-		p.ok, p.attention, p.erreur, p.violet = hexCouleur("#2d8a5e"), hexCouleur("#b06a12"), hexCouleur("#bf3b2e"), hexCouleur("#7048c0")
+		p.ok, p.attention, p.erreur, p.violet = hexCouleur("#26754f"), hexCouleur("#955a0f"), hexCouleur("#bf3b2e"), hexCouleur("#7048c0")
 	default:
 		p.ok, p.attention, p.erreur, p.violet = hexCouleur("#3fc6a5"), hexCouleur("#f2b441"), hexCouleur("#e5584f"), hexCouleur("#a98bff")
 	}
@@ -143,6 +147,7 @@ type formulaireTUI struct {
 	champs []champTUI
 	sel    int
 	fn     func(valeurs []string)
+	bouton string   // the label of the confirm button ("Save" when empty)
 	erreur string   // what the server answered: the form stays open with it
 	debut  []string // the fields as the form opened: closing it unchanged asks nothing
 }
@@ -211,7 +216,8 @@ type appTUI struct {
 
 	// For you, Team, GitHub, Settings (tui_pages2.go)
 	taches       []TacheUtilVue
-	selTache     int
+	selTache     int // approvals first, then the tasks (tui_approbations.go)
+	appr         *reponseApprTUI
 	agents       []Agent
 	selAgent     int
 	gh           *GitHubVue
@@ -224,8 +230,10 @@ type appTUI struct {
 	formValide   *formulaireTUI // the form whose fields are being saved
 	// Remote (tui_distance.go)
 	dist           *DistanceVue
+	hub            *reponseHubTUI // the home's tiles (tui_accueil.go)
 	selApp         int
 	chiffresJusque time.Time // the 6 digits shown until then
+	// Missions (tui_missions.go)
 	// executer: a command run in this terminal, in front of the user (the screen given back meanwhile), its
 	// exit code; nil where there is no terminal to hand over (the tests)
 	executer func(titre string, ligne []string, dossier string) (int, error)
@@ -233,7 +241,7 @@ type appTUI struct {
 
 func nouvelleAppTUI(c *clientTUI, proprio bool) *appTUI {
 	a := &appTUI{c: c, majs: make(chan func(*appTUI), 64), enCours: map[string]bool{}, derniere: map[string]time.Time{}, proprio: proprio,
-		outils: true, sousAgents: true, l: 80, h: 24}
+		outils: true, sousAgents: true, l: 80, h: 24, page: pAccueil}
 	a.saisie.multi = true
 	a.saisie.maxRunes = 20000
 	a.pal = paletteDe("", "")
@@ -253,7 +261,11 @@ func (a *appTUI) annoncer(texte string, erreur bool) {
 // texteErreur: an error of the API in the user's language.
 func (a *appTUI) texteErreur(err error) string {
 	if e, ok := err.(*erreurAPI); ok {
-		return a.t(e.Cle)
+		args := make([]any, len(e.Args))
+		for i, x := range e.Args {
+			args[i] = x
+		}
+		return a.t(e.Cle, args...)
 	}
 	return err.Error()
 }
@@ -364,6 +376,9 @@ func (a *appTUI) tic() {
 		if a.vue != nil && !a.vue.Verrouille && a.page == pDistance {
 			a.chargerDistance()
 		}
+		if a.vue != nil && !a.vue.Verrouille && a.page == pAccueil {
+			a.chargerHub()
+		}
 		return
 	}
 	apres := a.dernierN
@@ -413,6 +428,8 @@ func (a *appTUI) tic() {
 		a.chargerPages2()
 	case pDistance:
 		a.chargerDistance()
+	case pAccueil:
+		a.chargerHub()
 	}
 }
 

@@ -63,8 +63,8 @@ func infoPlistMac(version string) string {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key><string>Athanor</string>
-	<key>CFBundleDisplayName</key><string>Athanor</string>
+	<key>CFBundleName</key><string>Athanor Hub</string>
+	<key>CFBundleDisplayName</key><string>Athanor Hub</string>
 	<key>CFBundleIdentifier</key><string>` + idBundleMac + `</string>
 	<key>CFBundleExecutable</key><string>athanor</string>
 	<key>CFBundleIconFile</key><string>athanor</string>

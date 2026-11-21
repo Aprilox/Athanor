@@ -1,0 +1,53 @@
+@@sudo
+oui
+@@os
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+ID=debian
+HOME_URL="https://www.debian.org/"
+@@uname
+vps-prod-1
+6.1.0-26-amd64
+x86_64
+@@cpu
+4
+@@memoire
+MemTotal:        8137700 kB
+MemFree:          912340 kB
+MemAvailable:    5242880 kB
+@@disque
+/dev/vda1           82438832 21485012  56751352      28% /
+@@allume
+93784.52 361520.10
+@@ports-ss
+Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:Port Process
+udp   UNCONN 0      0      127.0.0.53%lo:53         0.0.0.0:*     users:(("systemd-resolve",pid=402,fd=13))
+tcp   LISTEN 0      4096       127.0.0.1:5432       0.0.0.0:*     users:(("postgres",pid=811,fd=6))
+tcp   LISTEN 0      511          0.0.0.0:80         0.0.0.0:*     users:(("nginx",pid=903,fd=6),("nginx",pid=902,fd=6))
+tcp   LISTEN 0      128          0.0.0.0:22         0.0.0.0:*     users:(("sshd",pid=650,fd=3))
+tcp   LISTEN 0      511          0.0.0.0:443        0.0.0.0:*     users:(("nginx",pid=903,fd=7))
+tcp   LISTEN 0      128             [::]:22            [::]:*     users:(("sshd",pid=650,fd=4))
+tcp   LISTEN 0      4096               *:8080             *:*     users:(("docker-proxy",pid=1201,fd=4))
+@@logiciels
+docker|/usr/bin/docker|Docker version 27.3.1, build ce12230
+k3s|
+kubectl|
+nginx|/usr/sbin/nginx|nginx version: nginx/1.22.1
+caddy|
+ufw|/usr/sbin/ufw|ufw 0.36.2
+compose|docker compose|2.29.7
+@@pare-feu
+Status: active
+@@services-systemd
+containerd.service      loaded active running containerd container runtime
+cron.service            loaded active running Regular background program processing daemon
+docker.service          loaded active running Docker Application Container Engine
+nginx.service           loaded active running A high performance web server and a reverse proxy server
+postgresql@15-main.service loaded active running PostgreSQL Cluster 15-main
+ssh.service             loaded active running OpenBSD Secure Shell server
+@@conteneurs
+api|registry.example.org/acme/api:1.4.2|Up 3 days
+redis|redis:7-alpine|Up 3 days (healthy)
+@@fin

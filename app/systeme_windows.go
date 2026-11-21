@@ -101,7 +101,7 @@ func FenetreApp(url string) bool {
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		AutoFocus:     true,
 		DataPath:      filepath.Join(os.Getenv("LocalAppData"), "Athanor", "webview2"),
-		WindowOptions: webview2.WindowOptions{Title: "Athanor", Width: 1240, Height: 820, Center: true, IconId: 1},
+		WindowOptions: webview2.WindowOptions{Title: "Athanor Hub", Width: 1240, Height: 820, Center: true, IconId: 1},
 	})
 	if w == nil {
 		return false
@@ -600,7 +600,7 @@ func (b *Bureau) boucle() {
 			b.marquerIsole(false)
 			b.regles.Store(&reglesBureau{numClaude: -1})
 			// Programs started while the option was on stay on Claude's desktop until they close: it stays
-			// reachable ("View Claude's desktop") as long as windows remain there, to go and close them.
+			// reachable ("See the windows Claude opened") as long as windows remain there, to go and close them.
 			if b.isole == 0 {
 				b.isole = ouvrirBureauIsoleExistant()
 			}

@@ -45,8 +45,9 @@ type MessageChat struct {
 	// what Claude Code said the whole session cost so far: a resumed session (--resume) reports its total,
 	// this turn's cost is the difference with the turn before (coutTourChat)
 	CoutSession float64 `json:"cout_session,omitempty"`
-	Note        bool    `json:"note,omitempty"`  // the note was sent to the pilot
-	Agent       string  `json:"agent,omitempty"` // the sub-agent it proposed, added to the team under this name
+	Note        bool    `json:"note,omitempty"`     // the note was sent to the pilot
+	Serveurs    bool    `json:"serveurs,omitempty"` // its <serveurs> addition went to the plan for the servers
+	Agent       string  `json:"agent,omitempty"`    // the sub-agent it proposed, added to the team under this name
 	// Internet: the user let Claude search and read the web for this message (when the request needs it)
 	Internet bool     `json:"internet,omitempty"`
 	Pieces   []string `json:"pieces,omitempty"` // the files attached (.athanor/attachments/chat/…)
@@ -55,11 +56,15 @@ type MessageChat struct {
 	// "relance" when it started again after it, else why not
 	Pause  bool   `json:"pause,omitempty"`
 	Pilote string `json:"pilote,omitempty"`
+	// Action: the home conversation's card (hub_chat_actions.go) once the user launched or refused it
+	Action *CarteActionChat `json:"action,omitempty"`
 }
 
 type conversationChat struct {
 	Session  string        `json:"session"`
 	Messages []MessageChat `json:"messages"`
+	// the home conversation's powers (hub_chat.go), kept with it: a new conversation starts with all off
+	Pouvoirs PouvoirsChat `json:"pouvoirs"`
 }
 
 type chatEnCours struct {
@@ -212,9 +217,10 @@ cannot run commands. Keep the change small and focused, never touch .athanor/ (t
 asked, and end with the list of the files you changed. Athanor commits your changes for you.`
 
 var (
-	reNote  = regexp.MustCompile(`(?s)<note>(.*?)</note>`)
-	reAgent = regexp.MustCompile(`(?s)<agent>(.*?)</agent>`)
-	reMCP   = regexp.MustCompile(`(?s)<mcp>(.*?)</mcp>`)
+	reNote     = regexp.MustCompile(`(?s)<note>(.*?)</note>`)
+	reServeurs = regexp.MustCompile(`(?s)<serveurs>(.*?)</serveurs>`)
+	reAgent    = regexp.MustCompile(`(?s)<agent>(.*?)</agent>`)
+	reMCP      = regexp.MustCompile(`(?s)<mcp>(.*?)</mcp>`)
 )
 
 const prefixePieceChat = ".athanor/attachments/chat/"
@@ -245,6 +251,11 @@ func (s *Serveur) apiChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	s.ecrireJSON(w, s.etatChat(p))
+}
+
+// etatChat: a conversation (a project's, or the home one) with its turn under way.
+func (s *Serveur) etatChat(p Projet) map[string]any {
 	k := s.kitCourant()
 	c := lireConversation(k, p)
 	chatMu.Lock()
@@ -264,36 +275,91 @@ func (s *Serveur) apiChat(w http.ResponseWriter, r *http.Request) {
 		chatMu.Unlock()
 		rep["partiel"] = map[string]any{"textes": textes, "outils": outils, "mode": mode}
 	}
-	s.ecrireJSON(w, rep)
+	return rep
 }
 
-func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		Message string `json:"message"`
-		Modele  string `json:"modele"`
-		// "modif": Claude may change the files (with the pilot running, it stops at the end of its cycle first,
-		// then starts again); anything else: a read-only turn, a change becomes a note for the pilot
-		Mode string `json:"mode"`
-		// Internet: Claude may search and read the web for this message, only when the request needs it
-		Internet bool     `json:"internet"`
-		Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
-	}
-	if err := lireCorps(r, &c); err != nil || (strings.TrimSpace(c.Message) == "" && len(c.Pieces) == 0) {
+type demandeChat struct {
+	Message string `json:"message"`
+	Modele  string `json:"modele"`
+	// "modif": Claude may change the files (with the pilot running, it stops at the end of its cycle first,
+	// then starts again); anything else: a read-only turn, a change becomes a note for the pilot
+	Mode string `json:"mode"`
+	// Internet: Claude may search and read the web for this message, only when the request needs it
+	Internet bool     `json:"internet"`
+	Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
+	// the home bar's chips, resolved by type and id (resoudreMentions), never by the name alone
+	Mentions []MentionDemandee `json:"mentions"`
+	// what the model reads after the message (the mentions by id and host), never shown in the owner's bubble
+	Annexe string `json:"-"`
+	// the home conversation's folders (hub_chat_dossiers.go), set by the server, never by the page
+	Dossiers []DossierChat `json:"-"`
+}
+
+// lireDemandeChat: the message read and checked (text or files, length, model); false once the error is written.
+func (s *Serveur) lireDemandeChat(w http.ResponseWriter, r *http.Request, c *demandeChat) bool {
+	if err := lireCorps(r, c); err != nil || (strings.TrimSpace(c.Message) == "" && len(c.Pieces) == 0) {
 		s.erreur(w, http.StatusBadRequest, "Write your message first")
-		return
+		return false
 	}
 	if utf8.RuneCountInString(c.Message) > 20000 {
 		s.erreur(w, http.StatusBadRequest, "Message too long (20,000 characters at most)")
-		return
+		return false
 	}
 	if c.Modele != "" && !reModele.MatchString(c.Modele) && !modelesChat[c.Modele] {
 		s.erreur(w, http.StatusBadRequest, "Unknown model")
+		return false
+	}
+	return true
+}
+
+func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
+	var c demandeChat
+	if !s.lireDemandeChat(w, r, &c) {
 		return
 	}
 	p, ok := s.projetRequis(w, r)
 	if !ok {
 		return
 	}
+	question, modif := consigneQuestion, consigneModif
+	if x := s.consigneServeursChat(p); x != "" { // a project with servers: a remark may be for them
+		question, modif = question+x, modif+x
+	}
+	s.envoyerChat(w, p, c, consigneChat, question, modif)
+}
+
+// consigneServeursChat: what Discuss adds for a project whose deployment has servers ("" without): ask whether a
+// remark is for the code or the servers, and write the servers' one for their plan.
+func (s *Serveur) consigneServeursChat(p Projet) string {
+	if s.acces == nil {
+		return ""
+	}
+	e := s.acces.Environnements(p.Nom)[s.deploiementProjet(p.Nom)]
+	if len(e.Serveurs) == 0 {
+		return ""
+	}
+	return "\n\nThis project also has servers (" + strings.Join(nomsServeurs(e.tousServeurs()), ", ") + "), set up by Athanor's Servers agent from the " +
+		"plan for the servers; the pilot never touches them. When the user gives a remark or asks for a change, ask them in one short question " +
+		"whether it is for the code (the pilot) or for the servers, unless their message already says which. For the code: as above. For the " +
+		"servers: change no file and write what to add to the plan for the servers, on its own, between <serveurs> and </serveurs> (short, " +
+		"precise, in the user's language): Athanor shows it with a button that adds it to that plan, and the Servers agent then sets it up."
+}
+
+// consigneSobre: how Claude writes in every conversation (project chat, the Studio's "Discuss", the home chat),
+// written once here (M227b); the page still strips pictograms from the display (app.js: sansEmoji).
+const consigneSobre = `
+
+How you write, in every conversation: no emojis, no pictograms, no decorative symbols. Short, plain
+sentences; get to the point. A list only when it truly helps; code and commands in code blocks.`
+
+// promptChat: a conversation's system prompt, the mode's instructions in place of %s, then consigneSobre.
+func promptChat(gabarit, consigne string) string {
+	return strings.Replace(gabarit, "%s", consigne, 1) + consigneSobre
+}
+
+// envoyerChat: the user's message into the conversation, then Claude's turn (gabarit: the system prompt,
+// its %s the instructions of the mode, question or modif).
+func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, gabarit, question, modif string) {
 	pieces, err := piecesChat(p, c.Pieces)
 	if err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -336,9 +402,9 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	conv.Messages = append(conv.Messages, MessageChat{Role: "vous", Texte: texte, Mode: mode, Modele: c.Modele, Quand: time.Now().Format(time.RFC3339), Internet: c.Internet, Pieces: pieces, Pause: pause})
 	ecrireConversation(k, p, conv)
 
-	consigne := consigneQuestion
+	consigne := question
 	if mode == "modif" {
-		consigne = consigneModif
+		consigne = modif
 	}
 	sujet := strings.Join(strings.Fields(texte), " ")
 	if utf8.RuneCountInString(sujet) > 60 {
@@ -348,6 +414,7 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 		sujet = strings.TrimPrefix(pieces[0], prefixePieceChat)
 	}
 	en.sujet = sujet
+	texte += c.Annexe
 	if len(pieces) > 0 {
 		texte += "\n\nAttached files (read them):"
 		for _, x := range pieces {
@@ -356,11 +423,15 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	}
 	fichiers := map[string]string{
 		id + ".msg":     strings.TrimSpace(texte),
-		id + ".prompt":  strings.Replace(consigneChat, "%s", consigne, 1),
+		id + ".prompt":  promptChat(gabarit, consigne),
 		id + ".subject": "Chat: " + sujet,
 	}
 	if c.Internet {
 		fichiers[id+".internet"] = "1" // outil_chat_session.go: WebSearch and WebFetch allowed for this turn
+	}
+	if len(c.Dossiers) > 0 {
+		b, _ := json.Marshal(c.Dossiers)
+		fichiers[id+".dossiers"] = string(b) // outil_chat_session.go: --add-dir, and the files guard's folders
 	}
 	for nom, contenu := range fichiers {
 		if err := os.WriteFile(filepath.Join(d, nom), []byte(contenu), 0o600); err != nil {
@@ -391,7 +462,7 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 }
 
 func nettoyerTourChat(d, id string) {
-	for _, ext := range []string{".msg", ".prompt", ".subject", ".commit", ".settings.json", ".err", ".internet"} {
+	for _, ext := range []string{".msg", ".prompt", ".subject", ".commit", ".settings.json", ".err", ".internet", ".dossiers"} {
 		os.Remove(filepath.Join(d, id+ext))
 	}
 }
@@ -424,8 +495,8 @@ func (s *Serveur) lancerTourChat(k Kit, p Projet, en *chatEnCours, id string) er
 			if i := strings.LastIndex(detail, "\n"); i >= 0 {
 				detail = detail[i+1:]
 			}
-			if detail == "" {
-				detail = err.Error()
+			if detail == "" { // Claude quit without a word: most often not signed in on this computer
+				detail = "Claude stopped without an answer: it may not be signed in on this computer. Open Setup & health, check Claude, then try again."
 			}
 		}
 		commit, _ := os.ReadFile(filepath.Join(d, id+".commit"))
@@ -549,6 +620,7 @@ func (s *Serveur) finChat(k Kit, p Projet, en *chatEnCours, commit, detail strin
 		m.Pilote = s.relancerApresChat(p, commit, en.sujet)
 	}
 	conv.Messages = append(conv.Messages, m)
+	conv.Pouvoirs = lireConversation(k, p).Pouvoirs // switched during the turn: the user's latest choice
 	ecrireConversation(k, p, conv)
 	chatMu.Lock()
 	delete(chatsActifs, p.Dossier)
@@ -583,10 +655,12 @@ func texteChangeChat(langue string) string {
 }
 
 func (s *Serveur) apiChatArreter(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.projetRequis(w, r)
-	if !ok {
-		return
+	if p, ok := s.projetRequis(w, r); ok {
+		s.arreterChat(w, p)
 	}
+}
+
+func (s *Serveur) arreterChat(w http.ResponseWriter, p Projet) {
 	chatMu.Lock()
 	en := chatsActifs[p.Dossier]
 	attente := false
@@ -608,10 +682,13 @@ func (s *Serveur) apiChatArreter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Serveur) apiChatEffacer(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.projetRequis(w, r)
-	if !ok {
-		return
+	if p, ok := s.projetRequis(w, r); ok {
+		s.effacerChat(w, p)
 	}
+}
+
+// effacerChat: a new conversation (Claude's session and the home's powers go with the old one).
+func (s *Serveur) effacerChat(w http.ResponseWriter, p Projet) {
 	chatMu.Lock()
 	enCours := chatsActifs[p.Dossier] != nil
 	chatMu.Unlock()
@@ -654,6 +731,40 @@ func (s *Serveur) apiChatNote(w http.ResponseWriter, r *http.Request) {
 	conv.Messages[c.Index].Note = true
 	ecrireConversation(k, p, conv)
 	s.msg(w, "Note sent: the pilot reads it at its next cycle.")
+}
+
+// apiChatServeurs: POST /api/chat/serveurs {index}: Claude's <serveurs> of a message is added to the plan for the
+// servers of the project's deployment (ajouterPlanServeurs).
+func (s *Serveur) apiChatServeurs(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Index int `json:"index"`
+	}
+	if err := lireCorps(r, &c); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	p, ok := s.projetRequis(w, r)
+	if !ok || !s.accesPret(w, p.Nom) {
+		return
+	}
+	k := s.kitCourant()
+	conv := lireConversation(k, p)
+	if c.Index < 0 || c.Index >= len(conv.Messages) || conv.Messages[c.Index].Role != "claude" {
+		s.erreur(w, http.StatusBadRequest, "Unknown message")
+		return
+	}
+	m := reServeurs.FindStringSubmatch(conv.Messages[c.Index].Texte)
+	if m == nil {
+		s.erreur(w, http.StatusBadRequest, "This message has no addition for the servers")
+		return
+	}
+	if err := s.ajouterPlanServeurs(p, m[1], deQui(r)); err != nil {
+		s.erreurMissionHTTP(w, err)
+		return
+	}
+	conv.Messages[c.Index].Serveurs = true
+	ecrireConversation(k, p, conv)
+	s.msg(w, "Added to the plan for the servers: the Servers agent sets it up.")
 }
 
 // noteAvecPieces: the note names the files attached to the user's message it answers (the pilot then reads
@@ -707,7 +818,7 @@ func (s *Serveur) apiChatAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := lireAgents(k)
-	cle, code, err := enregistrerAgentPerso(k, &f, p, strings.TrimSpace(c.Ancien), c.Agent)
+	cle, code, err := enregistrerAgentPerso(k, &f, []string{p.Dossier}, strings.TrimSpace(c.Ancien), c.Agent)
 	verrouAgents.Unlock()
 	if err != nil {
 		s.erreur(w, code, err.Error())
@@ -732,6 +843,7 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 		Source      string `json:"source"`
 		Config      string `json:"config"` // the JSON of the server, as the card shows it
 		Windows     bool   `json:"windows"`
+		Confirme    bool   `json:"confirme_windows"` // a Windows program runs outside the cage: confirmed apart
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -747,6 +859,14 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "This message proposes no MCP server")
 		return
 	}
+	if conv.Messages[c.Index].MCP != "" {
+		s.erreur(w, http.StatusConflict, "This card was already decided.")
+		return
+	}
+	if c.Windows && !c.Confirme {
+		s.erreur(w, http.StatusBadRequest, "Confirm that this server may run outside the cage, with your rights.")
+		return
+	}
 	id := identExt(c.Nom)
 	if !reIDExt.MatchString(id) || id == "unreal-mcp" {
 		s.erreur(w, http.StatusBadRequest, "Invalid name")
@@ -757,57 +877,92 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// the files come from Claude's message itself, never from the request
-	var prop struct {
-		Fichiers map[string]string `json:"fichiers"`
+	id, code, err := ajouterMCPBiblio(k, c.Nom, c.Description, c.Source, c.Config, c.Windows, fichiersMCPMessage(conv.Messages[c.Index].Texte), []string{cleProjet(p)})
+	audit := LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: p.Nom, Action: "chat : ajout du serveur MCP " + identExt(c.Nom)}
+	if c.Windows {
+		audit.Action += " (programme Windows, hors cage)"
 	}
-	brut := strings.TrimSpace(reMCP.FindStringSubmatch(conv.Messages[c.Index].Texte)[1])
-	brut = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(brut, "```json"), "```"), "```"))
-	_ = json.Unmarshal([]byte(brut), &prop)
-	if err := verifierFichiersMCP(prop.Fichiers); err != nil {
-		s.erreur(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	extMu.Lock()
-	defer extMu.Unlock()
-	if len(prop.Fichiers) > 0 {
-		outils := filepath.Join(k.Racine, "tools")
-		_ = os.MkdirAll(outils, 0o755)
-		d, err := dossierSur(outils, "mcp-ecrits", id)
-		if err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		for nom, contenu := range prop.Fichiers {
-			if err := ecrireSur(filepath.Join(d, nom), []byte(contenu)); err != nil {
-				s.erreur(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-		}
-	}
-	ids, _, code, err := installerMCPPerso(k, c.Nom, c.Config, c.Source, c.Description, c.Windows)
 	if err != nil {
+		audit.Resultat = "échec : " + err.Error()
+		s.ecrireAudit(audit)
 		s.erreur(w, code, err.Error())
 		return
 	}
-	choix := lireChoix(k)
-	ch := choix[cleProjet(p)]
-	if !contient(ch.MCP, ids[0]) {
-		ch.MCP = append(ch.MCP, ids[0])
-	}
-	if ch.Skills == nil {
-		ch.Skills = []string{}
-	}
-	choix[cleProjet(p)] = ch
-	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	audit.Resultat = "ajouté et activé : " + id
+	s.ecrireAudit(audit)
 	conv = lireConversation(k, p)
 	if c.Index < len(conv.Messages) {
-		conv.Messages[c.Index].MCP = ids[0]
+		conv.Messages[c.Index].MCP = id
 		ecrireConversation(k, p, conv)
 	}
 	s.msg(w, "“{0}” added to the library and switched on in this project.", strings.TrimSpace(c.Nom))
+}
+
+// fichiersMCPMessage: the files of a server Claude wrote, as its message gives them between <mcp> and </mcp>.
+func fichiersMCPMessage(texte string) map[string]string {
+	var prop struct {
+		Fichiers map[string]string `json:"fichiers"`
+	}
+	if m := reMCP.FindStringSubmatch(texte); m != nil {
+		brut := strings.TrimSpace(m[1])
+		brut = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(brut, "```json"), "```"), "```"))
+		_ = json.Unmarshal([]byte(brut), &prop)
+	}
+	return prop.Fichiers
+}
+
+var errMCPHomonyme = errors.New("An MCP server already has this name: remove it first on the Skills & MCP page, or give another name.")
+
+// ajouterMCPBiblio: a server proposed in a chat, as the user checked it on its card: the files of a server Claude
+// wrote into tools/mcp-ecrits/<id>/ (${ATHANOR_MCP_DIR}), the server into the library (as a pasted configuration,
+// api_extensions.go) and switched on in the projects of these keys (projets.json); its id, or the HTTP code and the error.
+func ajouterMCPBiblio(k Kit, nom, description, source, config string, windows bool, fichiers map[string]string, cles []string) (string, int, error) {
+	if err := verifierFichiersMCP(fichiers); err != nil {
+		return "", http.StatusBadRequest, err
+	}
+	extMu.Lock()
+	defer extMu.Unlock()
+	// never over an installed server: its files, its keys and the projects it is on would go to the new code
+	if _, existe := lireBiblio(k).MCP[identExt(nom)]; existe {
+		return "", http.StatusConflict, errMCPHomonyme
+	}
+	if len(fichiers) > 0 {
+		outils := filepath.Join(k.Racine, "tools")
+		_ = os.MkdirAll(outils, 0o755)
+		d, err := dossierSur(outils, "mcp-ecrits", identExt(nom))
+		if err != nil {
+			return "", http.StatusInternalServerError, err
+		}
+		for n, contenu := range fichiers {
+			if err := ecrireSur(filepath.Join(d, n), []byte(contenu)); err != nil {
+				return "", http.StatusInternalServerError, err
+			}
+		}
+	}
+	ids, _, code, err := installerMCPPerso(k, nom, config, source, description, windows)
+	if err != nil {
+		return "", code, err
+	}
+	return ids[0], 0, activerMCPProjets(k, ids[0], cles)
+}
+
+// activerMCPProjets: the library's server id switched on in the projects of these keys (extMu held).
+func activerMCPProjets(k Kit, id string, cles []string) error {
+	if len(cles) == 0 {
+		return nil
+	}
+	choix := lireChoix(k)
+	for _, cle := range cles {
+		ch := choix[cle]
+		if !contient(ch.MCP, id) {
+			ch.MCP = append(ch.MCP, id)
+		}
+		if ch.Skills == nil {
+			ch.Skills = []string{}
+		}
+		choix[cle] = ch
+	}
+	return ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644)
 }
 
 // verifierFichiersMCP: the files of a server Claude wrote: plain names, 20 at most, 1 MB each, 4 MB in all.

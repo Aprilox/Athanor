@@ -42,6 +42,12 @@ func (a *appTUI) dessiner(e *ecranT) {
 		a.dessinerCouches(e)
 		return
 	}
+	if a.vue.Verrouille { // only the password form and its refusal, on a plain background
+		a.dessinerToast(e)
+		a.zonesHaut = len(a.zones)
+		a.dessinerCouches(e)
+		return
+	}
 	a.barreHaut(e)
 	y, h := 1, e.h-2
 	x := 0
@@ -75,9 +81,19 @@ func (a *appTUI) dessiner(e *ecranT) {
 			a.pageReglages(e, x, y, l, h)
 		case pDistance:
 			a.pageDistance(e, x, y, l, h)
+		case pAccueil:
+			a.pageAccueil(e, x, y, l, h)
 		}
 	}
 	a.barreBas(e)
+	a.dessinerToast(e)
+	a.zonesHaut = len(a.zones)
+	a.dessinerCouches(e)
+}
+
+// dessinerToast: the last announcement, bottom right.
+func (a *appTUI) dessinerToast(e *ecranT) {
+	p := a.pal
 	if a.toast != "" {
 		coul := p.accent
 		if a.toastErr {
@@ -98,8 +114,6 @@ func (a *appTUI) dessiner(e *ecranT) {
 			e.texte(tx+2, ty+i, lt, li, a.st(p.encre, p.panneau))
 		}
 	}
-	a.zonesHaut = len(a.zones)
-	a.dessinerCouches(e)
 }
 
 // couleurPhase: the colour of a project's state (the app's dot).
@@ -122,7 +136,7 @@ func (a *appTUI) barreHaut(e *ecranT) {
 	v := a.vue
 	e.rect(0, 0, e.l, 1, a.st(p.encre, p.panneau))
 	x := 0
-	x += e.texte(x, 0, 0, " ◆ Athanor ", a.gras(p.surAccent, p.accent))
+	x += e.texte(x, 0, 0, " ◆ Athanor Hub ", a.gras(p.surAccent, p.accent))
 	x += e.texte(x, 0, 0, " v"+v.Version+" ", a.st(p.muet, p.panneau))
 	droite := ""
 	if v.PourVous > 0 {
@@ -200,23 +214,26 @@ func (a *appTUI) colonneGauche(e *ecranT, x, y, l, h int) {
 		return
 	}
 	ix, iy, il, _ = a.boite(e, x, yp, l, hpg, a.t("Pages"), false)
-	for i := 0; i < nbPages && i < hpg-2; i++ {
+	for n, i := range ordrePages {
+		if n >= hpg-2 {
+			break
+		}
 		fond := p.panneau
 		st := a.st(p.encre, fond)
 		if i == a.page {
 			fond = p.ligne
-			e.rect(ix-1, iy+i, il+2, 1, a.st(p.encre, fond))
-			e.mettre(ix-1, iy+i, '▌', a.st(p.accent, fond))
+			e.rect(ix-1, iy+n, il+2, 1, a.st(p.encre, fond))
+			e.mettre(ix-1, iy+n, '▌', a.st(p.accent, fond))
 			st = a.gras(p.encre, fond)
 		}
-		e.texte(ix, iy+i, 2, numeroPage(i), a.st(p.accent, fond))
+		e.texte(ix, iy+n, 2, numeroPage(i), a.st(p.accent, fond))
 		lib := a.t(clesPages[i])
 		if i == pDemandes && a.vue != nil && a.vue.Attente > 0 {
 			lib += " (" + strconv.Itoa(a.vue.Attente) + ")"
 		}
-		e.texte(ix+2, iy+i, il-2, lib, st)
+		e.texte(ix+2, iy+n, il-2, lib, st)
 		page := i
-		a.zone(ix-1, iy+i, il+2, 1, func() { a.allerPage(page) })
+		a.zone(ix-1, iy+n, il+2, 1, func() { a.allerPage(page) })
 	}
 	// below: Athanor's folder, and where the terminal's own messages go
 	reste := y + h - (yp + hpg)
@@ -230,8 +247,15 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 	p := a.pal
 	e.rect(0, y, e.l, 1, a.st(p.encre, p.fond))
 	x := 1
-	for i := 0; i < nbPages; i++ {
+	plein := 1
+	for _, i := range ordrePages {
+		plein += largeurTexte(" "+numeroPage(i)+" "+a.t(clesPages[i])+" ") + 1
+	}
+	for _, i := range ordrePages {
 		lib := " " + numeroPage(i) + " " + a.t(clesPages[i]) + " "
+		if plein > e.l && i != a.page { // narrow terminal: the other pages by their key only
+			lib = " " + numeroPage(i) + " "
+		}
 		st := a.st(p.muet, p.fond)
 		if i == a.page {
 			st = a.gras(p.surAccent, p.accent)
@@ -247,7 +271,12 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 }
 
 // numeroPage: the key of a page (1…9, then 0 for the tenth).
-func numeroPage(i int) string { return strconv.Itoa((i + 1) % 10) }
+func numeroPage(i int) string {
+	if i == pAccueil {
+		return "H"
+	}
+	return strconv.Itoa((i + 1) % 10)
+}
 
 // raccourci: one key and what it does, for the bottom bar.
 type raccourci struct{ k, lib string }
@@ -289,6 +318,8 @@ func (a *appTUI) raccourcisPage() []raccourci {
 		}
 	case pDistance:
 		r = a.raccourcisDistance()
+	case pAccueil:
+		r = []raccourci{{"Enter", t("Open")}, {"1…0", t("Studio pages")}}
 	default:
 		r = a.raccourcisPages2()
 	}
@@ -314,7 +345,12 @@ func (a *appTUI) barreBas(e *ecranT) {
 		}
 		glob = append(glob, raccourci{"p", t("Project")})
 	}
-	glob = append(glob, raccourci{"?", t("Help")}, raccourci{"q", t("Quit")})
+	// Help before Home: on 80 columns the bar is cut at its end, and the help lists H too
+	glob = append(glob, raccourci{"?", t("Help")})
+	if a.page != pAccueil {
+		glob = append(glob, raccourci{"H", t("Home")})
+	}
+	glob = append(glob, raccourci{"q", t("Quit")}, raccourci{"!", t("Emergency stop")})
 	x := 1
 	ecrire := func(r raccourci, fin bool) bool {
 		lt := largeurTexte(r.k) + 1 + largeurTexte(r.lib) + 2
@@ -327,7 +363,10 @@ func (a *appTUI) barreBas(e *ecranT) {
 	}
 	// the page's keys first, then the global ones, as many as fit
 	tous := append(a.raccourcisPage(), glob...)
-	for _, r := range tous {
+	for i, r := range tous {
+		if i >= len(tous)-len(glob) && a.lettrePage(r.k) != "" {
+			continue // a global key the page takes for itself (a, p on Missions)
+		}
 		if !ecrire(r, false) {
 			break
 		}
@@ -407,7 +446,7 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 		if e.DernierCommit != "" {
 			return t("Pilot stopped"), t("Last saved work: {0}", e.DernierCommit), p.muet
 		}
-		return t("Pilot stopped"), t("Click Start to resume."), p.muet
+		return t("Ready to start"), t("Click Start: Claude begins with your request."), p.muet
 	}
 	if !v.KitValide {
 		return t("Tool folder not found"), t("Set it in Options."), p.erreur
@@ -462,7 +501,7 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 	case "budget":
 		return t("API budget or credit used up, Claude is waiting"), t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once."), p.attention
 	case "attente_vous":
-		return t("Claude is waiting for you"), t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", v.PourVous), p.attention
+		return t("Claude is waiting for you"), tuiPluriel(t, v.PourVous, "1 task on the For you page: the pilot resumes as soon as you answer it.", "{0} tasks on the For you page: the pilot resumes as soon as you answer one."), p.attention
 	case "entre_cycles":
 		return t("Between two cycles"), t("Cycle {0} is done, the next one starts with a fresh context.", e.Cycle), p.ok
 	case "erreur":
@@ -581,7 +620,7 @@ func (a *appTUI) lignesMaintenant(l int) [][]segTUI {
 		r = append(r, []segTUI{{"↻ " + t("New settings: restart after cycle"), a.st(p.attention, fond)}})
 	}
 	if v.PourVous > 0 {
-		texte("🙋 "+t("Claude needs you")+" · "+t("{0} task(s) on the For you page", v.PourVous), a.gras(p.attention, fond))
+		texte("🙋 "+t("Claude needs you")+" · "+tuiPluriel(t, v.PourVous, "1 task on the For you page", "{0} tasks on the For you page"), a.gras(p.attention, fond))
 	}
 	if v.Actif && v.PiloteAncien {
 		if v.VersionPilote != "" {
@@ -1366,7 +1405,6 @@ func (a *appTUI) pageChat(e *ecranT, x, y, l, h int) {
 				lignes = append(lignes, lc{"  ▸ " + o, a.st(p.muet, fond)})
 			}
 		}
-		lignes = append(lignes, lc{"  " + string("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[(time.Now().UnixMilli()/100%10)*3:(time.Now().UnixMilli()/100%10)*3+3]), a.st(p.accent, fond)})
 	}
 	if len(a.chat.Messages) == 0 && !a.chat.EnCours {
 		for i, li := range envelopper(a.t("Ask Claude about the project, or for a change: it reads the code, the plan and the log."), il) {
@@ -1603,7 +1641,11 @@ func (a *appTUI) dessinerFormulaire(e *ecranT) {
 	}
 	// the buttons: Save, Cancel (Tab reaches them, a click presses them)
 	bx := ix
-	for i, lib := range []string{a.t("Save"), a.t("Cancel")} {
+	valider := a.t("Save")
+	if f.bouton != "" {
+		valider = f.bouton
+	}
+	for i, lib := range []string{valider, a.t("Cancel")} {
 		texte := " " + lib + " "
 		st := a.st(p.encre, p.ligne)
 		if i == 0 {
@@ -1636,6 +1678,7 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 	t := a.t
 	a.voile(e)
 	lignes := [][2]string{
+		{"H, Esc", t("Home")},
 		{"1…9, 0, Tab", t("Pages")},
 		{"s", t("Start")},
 		{"a", t("Stop after cycle") + " / " + t("Let it go on")},
@@ -1643,6 +1686,8 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 		{"p, [ ]", t("Choose a project")},
 		{"N · M", t("New project") + " · " + t("Manage")},
 		{"g", t("Get GitHub's work")},
+		{"!", t("Emergency stop")},
+		{"y · r · t", t("For you") + ": " + t("Accept") + " · " + t("Refuse") + " · " + t("Never ask again")},
 		{"↑ ↓ PgUp PgDn", t("Scroll")},
 		{"n · e · d", t("New request") + " · " + t("Note along the way") + " · " + t("Delete")},
 		{"o r u / f", t("Log") + ": " + t("Tools") + ", " + t("Results") + ", " + t("Sub-agents") + ", " + t("filter…") + ", " + t("Follow")},

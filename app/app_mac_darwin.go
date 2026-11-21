@@ -121,7 +121,7 @@ func creerFenetre() {
 		return
 	}
 	fen.Send(sel("setReleasedWhenClosed:"), false)
-	fen.Send(sel("setTitle:"), nsChaine("Athanor"))
+	fen.Send(sel("setTitle:"), nsChaine("Athanor Hub"))
 	fen.Send(sel("setContentView:"), vue)
 	fen.Send(sel("setContentMinSize:"), nsTaille{900, 600})
 	fen.Send(sel("setDelegate:"), mac.delegue) // the red button hides it
@@ -320,7 +320,7 @@ func preparerAppMac(a actionsAppMac) (objc.ID, objc.ID, bool) {
 			app.Send(sel("setApplicationIconImage:"), img)
 		}
 	}
-	classe("NSProcessInfo").Send(sel("processInfo")).Send(sel("setProcessName:"), nsChaine("Athanor"))
+	classe("NSProcessInfo").Send(sel("processInfo")).Send(sel("setProcessName:"), nsChaine("Athanor Hub"))
 	t := textesAppMac(a.langue())
 	// the menu bar while Athanor is in front: Athanor (Open, Quit), Edit (the copy and paste of the
 	// interface's fields need it), Window
@@ -338,7 +338,7 @@ func preparerAppMac(a actionsAppMac) (objc.ID, objc.ID, bool) {
 	o.Send(sel("setTarget:"), delegue)
 	refaire := element(t.refaire, sel("redo:"), "z")
 	refaire.Send(sel("setKeyEquivalentModifierMask:"), uint(1<<17|1<<20)) // ⇧⌘Z
-	sousMenu("Athanor", o, classe("NSMenuItem").Send(sel("separatorItem")), element(t.quitter, sel("terminate:"), "q"))
+	sousMenu("Athanor Hub", o, classe("NSMenuItem").Send(sel("separatorItem")), element(t.quitter, sel("terminate:"), "q"))
 	sousMenu(t.edition, element(t.defaire, sel("undo:"), "z"), refaire, classe("NSMenuItem").Send(sel("separatorItem")),
 		element(t.couper, sel("cut:"), "x"), element(t.copier, sel("copy:"), "c"), element(t.coller, sel("paste:"), "v"),
 		element(t.toutSelectionner, sel("selectAll:"), "a"))
@@ -362,13 +362,13 @@ func creerIcone() {
 	icone.Send(sel("setVisible:"), true)
 	bouton := icone.Send(sel("button"))
 	if bouton != 0 {
-		if img := classe("NSImage").Send(sel("imageWithSystemSymbolName:accessibilityDescription:"), nsChaine("flame"), nsChaine("Athanor")); img != 0 {
+		if img := classe("NSImage").Send(sel("imageWithSystemSymbolName:accessibilityDescription:"), nsChaine("flame"), nsChaine("Athanor Hub")); img != 0 {
 			img.Send(sel("setTemplate:"), true) // drawn in the menu bar's colour (light or dark)
 			bouton.Send(sel("setImage:"), img)
 		} else {
-			bouton.Send(sel("setTitle:"), nsChaine("Athanor"))
+			bouton.Send(sel("setTitle:"), nsChaine("Athanor Hub"))
 		}
-		bouton.Send(sel("setToolTip:"), nsChaine("Athanor"))
+		bouton.Send(sel("setToolTip:"), nsChaine("Athanor Hub"))
 	}
 	m := classe("NSMenu").Send(sel("new"))
 	m.Send(sel("setDelegate:"), mac.delegue)

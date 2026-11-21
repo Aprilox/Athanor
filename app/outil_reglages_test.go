@@ -149,6 +149,11 @@ func TestPariteReglages(t *testing.T) {
 			} else {
 				fs["allowRead"] = l[:len(l)-1]
 			}
+			// since M65 (I4) Athanor's own data is denied too, which settings.py did not do
+			delete(fs, "denyWrite")
+			if l, ok := fs["denyRead"].([]any); ok && len(l) > 2 {
+				fs["denyRead"] = l[:2]
+			}
 		}
 		if !reflect.DeepEqual(sansProgramme(t, p), sansProgramme(t, g)) {
 			t.Errorf("%s:\n--- go\n%s\n--- python\n%s", c.nom, bg, bp)
@@ -203,6 +208,9 @@ func TestReglagesContenu(t *testing.T) {
 	attendus := []string{`"enableAllProjectMcpServers": true`, `"mcp__unreal"`, `"includeCoAuthoredBy": false`}
 	if runtime.GOOS != "windows" { // native Windows: no sandbox, and the paths written Windows' way
 		attendus = append(attendus, `hook fichiers `+p, `"failIfUnavailable": true`)
+		if runtime.GOOS == "darwin" { // TLS checks inside Seatbelt (curl, git): the trust agent only
+			attendus = append(attendus, `"allowMachLookup"`, `"com.apple.TrustEvaluationAgent"`)
+		}
 	} else { // and no PowerShell tool (a window of its own at each command, outside the Bash hooks)
 		attendus = append(attendus, `"CLAUDE_CODE_USE_POWERSHELL_TOOL": "0"`)
 	}

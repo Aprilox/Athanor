@@ -6,6 +6,7 @@ package main
 // instance a command Claude runs, cannot drive the application.
 
 import (
+	"html"
 	"net/http"
 	"time"
 )
@@ -68,8 +69,12 @@ func (s *Serveur) pageAcces(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusForbidden)
+	// in Athanor's language first (N9), then in English for whoever reads it from elsewhere
+	texte := "<p>" + html.EscapeString(libelle(s.langue(), "sans_session")) + "</p>"
+	if s.langue() != "en" {
+		texte += "\n<p>" + html.EscapeString(libelle("en", "sans_session")) + "</p>"
+	}
 	_, _ = w.Write([]byte(`<!doctype html><meta charset="utf-8"><title>Athanor</title><body style="font-family:sans-serif;background:#111;color:#ddd;padding:40px">
-<p>Open Athanor from its shortcut (Athanor.exe, or athanor on Linux): this page only works in the window Athanor opens.</p>
-<p>Ouvrez Athanor depuis son raccourci (Athanor.exe, ou athanor sous Linux) : cette page ne fonctionne que dans la fenêtre qu'Athanor ouvre.</p>`))
+` + texte))
 	return false
 }

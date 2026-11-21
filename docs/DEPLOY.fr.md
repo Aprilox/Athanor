@@ -1,0 +1,72 @@
+# Déployer avec Athanor
+
+*English: [DEPLOY.md](DEPLOY.md)*
+
+Comment Athanor met un projet en ligne : qui peut lancer un déploiement, les trois méthodes, ce qu'il écrit sur vos serveurs, comment il revient en arrière, comment il surveille le site, et ce qui n'atteint jamais l'IA. Dans l'application, *Guide › Mettre un site en ligne* vous accompagne ; où un projet va en ligne, et quand, se règle dans son onglet *Déploiement* ([README](../README.fr.md#le-déploiement-dun-projet)) ; Cloudflare est dans [CLOUDFLARE.md](CLOUDFLARE.md).
+
+## Qui lance un déploiement
+
+- **Athanor lui-même**, au moment que le projet a choisi dans son onglet *Déploiement* : *Après chaque jalon* (chaque jalon coché envoie le dernier commit du projet) ou *À la livraison* (chaque livraison, une suivante comprise). Un projet sans serveur n'est jamais déployé.
+- **L'agent Serveurs**, pour le premier déploiement seulement : une tâche qu'Athanor lance seul à ce moment-là, ou que vous lancez par *Préparer maintenant*. L'agent lit le projet et votre plan ; son propre plan contient une étape `deployer` (classée *changement*) et choisit la méthode. Athanor la retient avec le déploiement du projet pour que les déploiements suivants se passent d'agent. Une tâche que vous lancez *Pour le projet* sur la fiche d'un serveur peut déployer de la même façon.
+- **Le pilote du projet**, avec l'outil `demander_deploiement` du hub : la demande vous attend (la cloche, *Pour vous*, votre téléphone), sauf si vous avez choisi *Ne plus demander pour ce projet* ou si le projet est en mode *Ignorer les permissions*.
+- **Vous** : *Revenir à la version d'avant* dans l'onglet *Déploiement* du projet, *Réessayer* ou *Revenir* sur un incident.
+
+Un accord est lié au SHA complet du commit, aux serveurs, au projet et à qui l'a demandé ; il ne resservira pas pour un autre commit, et rien ne touche le serveur avant lui. Il se donne avec le mot de passe d'Athanor retapé, ou depuis un téléphone appairé. Deux cas le demandent toujours, quel que soit celui qui lance le déploiement et quoi qu'on ait accepté avant : des fichiers de construction modifiés (plus bas), et le site de production d'un projet d'avant la 3.0 (ou un site sur un serveur qui en porte un), à chaque déploiement et à chaque retour arrière. Seul le mode *Ignorer les permissions*, choisi pour le projet dans la fenêtre d'Athanor, les laisse passer, et le journal d'audit écrit chacun.
+
+## Les méthodes
+
+| Méthode | Quand | Ce qui tourne sur le serveur | Retour arrière |
+|---|---|---|---|
+| `statique` | un site de fichiers (HTML, un front construit) | Caddy sert `current/<dossier publié>` | `current` pointe sur la version d'avant |
+| `compose` | le projet a un `compose.yaml` / `docker-compose.yml`, ou un `Dockerfile` (Athanor écrit alors un petit fichier compose) | `docker compose -p <projet>-site up -d` dans le dossier de la version | `compose up` de la version d'avant |
+| `k3s` | seulement si vous le demandez, sur un seul serveur | `kubectl apply -k` (ou `-f`) d'un dossier du dépôt, puis attente de ses Deployments, StatefulSets et DaemonSets | `kubectl apply` de la version d'avant, de nouveau |
+
+**Le serveur web.** Par défaut, Athanor écrit le fichier Caddy du site et recharge Caddy. Quand le plan de déploiement nomme un autre serveur web (nginx, Apache…), l'agent du premier déploiement configure ce serveur une fois, pour servir `current/<dossier publié>` (`statique`) ou relayer vers le port publié (`compose`), et enregistre la méthode avec `proxy: aucun` : ensuite Athanor ne fait que préparer chaque version et basculer `current`, n'écrit aucun fichier Caddy et n'installe jamais Caddy. Les **autres serveurs** d'un projet (une base de données, un worker…, choisis dans sa mission) sont préparés selon le plan et ne reçoivent jamais de déploiement. En autonomie totale aussi, l'agent du premier déploiement lit le plan de déploiement (donc le serveur web qu'il nomme).
+
+**L'enregistrement DNS de l'adresse.** La vérification externe a besoin que l'adresse se résolve. Quand le déploiement a la clé Cloudflare de sa zone, l'agent met l'enregistrement manquant dans son plan (un enregistrement A vers l'adresse publique que nomme le plan, sinon vers celle du serveur) ; sans cette clé, il vous dit quel enregistrement créer. Ses vérifications de statut (`curl -o /dev/null -w '%{http_code}'`) sont des lectures, jamais un changement à accepter.
+
+**Derrière un CDN ou un proxy.** Athanor vérifie l'adresse du site là où elle pointe sur internet (le proxy de Cloudflare, un autre CDN, un reverse proxy sur une autre machine) ; une adresse de votre réseau local n'est vérifiée que si c'est celle d'un de vos serveurs.
+
+**Rien d'écrit dans Athanor : le plan décide.** L'emplacement du site, sa façon de tourner et de se mettre à jour viennent de votre plan pour les serveurs et des conventions de sa techno, choisis par l'agent au premier déploiement et enregistrés : le dossier sur les serveurs (`racine` : `/var/www/<site>`, `/srv/<appli>`, `/opt/<appli>`… ; par défaut celui d'Athanor, pour un site déployé avant), la méthode (*statique* : un dossier servi par un serveur web ; *compose* : son fichier compose ; *k3s* ; *commande* : rien n'est envoyé, chaque serveur se met à jour lui-même avec une commande, pour une pile qui récupère son code ou se déploie au push, avec son propre retour arrière), une commande lancée dans chaque nouvelle version avant sa mise en ligne (`avant` : installer, construire) et une autre une fois en ligne et après un retour arrière (`apres` : recharger un service, relancer un gestionnaire de processus, prévenir une plateforme). Chaque commande est classée comme toute commande de l'agent et acceptée dans son plan. Les jalons et livraisons suivants déploient de la même façon, sans agent. Les clés du projet (son onglet *Accès*) peuvent aller sur les serveurs dans un `.env` que l'appli lit : l'agent écrit `{{coffre:NOM}}`, Athanor y met la valeur. **`DEPLOYMENT.md`**, écrit dans le dossier du projet quand la méthode est enregistrée, dit tout cela ; l'agent tient aussi un README sur les serveurs.
+
+**Comme le pilote de dev.** Chaque plan de l'agent Serveurs porte ses critères d'acceptation, écrits d'après votre demande et votre plan pour les serveurs (un service tourne, un port écoute ou est fermé, une adresse répond…) : quel que soit le projet, ils disent quand le travail est fait. Il installe ce que le plan demande ; quand une étape échoue, il cherche pourquoi et propose une autre voie. Une fois appliqué, un vérificateur indépendant contrôle chaque critère : un critère raté renvoie l'agent avec le rapport vers une autre voie (deux fois au plus). Le *plan des serveurs* montre chaque critère coché ou en échec. Ce que vous seul pouvez faire (un compte, un paiement, un accès, une zone DNS dont il n'a pas le jeton, une décision) arrive dans *Pour vous*, marqué *Serveurs*, jamais mêlé aux demandes du Studio.
+
+**Un premier déploiement qui n'a pas abouti** repart au prochain *Démarrer* (Studio, ou *Reprendre* d'une mission) ou avec *Relancer le premier déploiement* dans l'onglet *Déploiement*, avec le plan tel qu'il est alors : l'agent installe sur les serveurs ce dont ce plan a besoin.
+
+**Dans Studio.** Le *plan des serveurs* montre le travail sur les serveurs comme le plan du projet montre ses jalons : serveurs préparés, premier déploiement, chaque version mise en ligne (ou en échec, et pourquoi), puis le prochain déploiement. Il est sur *Suivi*, sous *Maintenant*, et sur l'onglet *Déploiement*, à côté des *Réglages du déploiement* (serveurs, adresse, API, plan pour les serveurs avec *Améliorer avec Claude*, moment du déploiement).
+
+**D'où vient le code.** Soit **git** : le serveur va chercher le commit exact sur GitHub avec la clé de déploiement du projet (en lecture seule sur le dépôt, faite par *Créer la clé de déploiement* dans l'onglet *Déploiement*), avec la clé d'hôte de github.com épinglée ; soit une **archive** : Athanor fait un `tar.gz` du commit sur ce PC (`git archive`, ou le résultat de la commande de construction du déploiement lancée dans une copie propre de ce commit, dans un dossier temporaire et dans la même barrière que le pilote ; en mode Windows natif, refusée sauf si le projet est forcé sur sa page *Accès*, et journalisée), l'envoie en SFTP et contrôle son SHA-256. Une archive avec un chemin absolu, un `..` ou un lien qui sort de la version est refusée avant que rien ne soit écrit.
+
+**Ce que seul le propriétaire peut laisser passer.** Un fichier de construction, un fichier compose, un Dockerfile ou un fichier du dossier des manifestes k3s modifié (par rapport au dernier déploiement accepté par le propriétaire) rend le déploiement destructif : il attend le propriétaire même avec une règle *Ne plus demander*, après un jalon ou à la livraison. Sans l'accord du propriétaire pour ce déploiement-là, une configuration Compose (lue par `docker compose config --format json` sur le serveur) qui demande `privileged`, `cap_add`, `devices`, `security_opt`, l'espace réseau, PID, IPC, utilisateurs ou cgroup de l'hôte, ou un chemin de l'hôte hors de la version est refusée avant tout démarrage ; de même pour des manifestes k3s avec un `hostPath`, `hostNetwork`/`hostPID`/`hostIPC`, un conteneur privilégié ou une base distante.
+
+## Ce qu'Athanor écrit sur un serveur (méthodes statique, compose, k3s)
+
+```
+/srv/athanor/<projet>-site/            (<projet>-dev, -staging ou -prod pour un projet d'avant la 3.0)
+  releases/<AAAAMMJJ-hhmmss>-<sha7>/   un dossier par version (les 5 plus récentes sont gardées)
+  current  -> releases/…               la version servie, basculée d'un coup
+  previous -> releases/…               la version d'avant, pour revenir en arrière
+/etc/caddy/sites/<hôte>.caddy          le fichier Caddy du site (Caddyfile : import sites/*)
+/etc/athanor/deploy/<projet>           la clé de déploiement (source git), 0600 root, effacée juste après le fetch
+/etc/athanor/tls/                      le certificat d'origine (Cloudflare), root et Caddy seulement
+```
+
+Les étapes, en code Go, jamais un script shell écrit par un agent : préparer la version (récupérer ou recevoir, contrôler) → construire si demandé → basculer `current` et `previous` d'un coup (`ln -sfn` puis `mv -T`) → `caddy validate`, puis recharger Caddy → **vérification externe**. Un échec avant la bascule laisse le site tel qu'il était ; une vérification en échec après elle marque le déploiement *Échec* et devient un incident (plus bas), où vous choisissez la suite. Un seul déploiement à la fois par site. Quand un fichier de build (`package.json`, lockfiles, `Makefile`, scripts nommés par la commande) a changé depuis le dernier déploiement que vous avez accordé, Athanor vous demande l'accord, même pour les déploiements qu'il lance seul ; cet accord ne devient jamais une règle. Pour Compose, le `.env` de la version est écrit `0600 root` à partir des entrées *code* du coffre accordées au projet, envoyé sur l'entrée standard, jamais sur une ligne de commande.
+
+**La vérification externe**, depuis ce PC : statut HTTP 2xx ou 3xx, un certificat valide et ses jours restants, les en-têtes de sécurité (HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` ou une CSP `frame-ancestors`) et, pour un site protégé, qu'il refuse un visiteur sans identifiant (401 pour le mot de passe, une redirection vers Cloudflare Access).
+
+## Retour arrière et historique
+
+L'historique des déploiements d'un projet (commit, méthode, version, état, vérification, qui l'a lancé, dates) est gardé dans le dossier d'Athanor (`modules/servers/deploiements/<projet>-site.json`) et montré dans *Déploiements*, dans son onglet *Déploiement*. *Revenir à la version d'avant* sert sur chaque serveur la version notée avant de commencer (`current` pointe sur elle ; `compose up` / `kubectl apply` de celle-ci), recharge et revérifie ; si un serveur ou la vérification échoue, chaque serveur est remis sur la version qu'il quittait. *Réessayer* un retour raté vise la même version. Une version qui rate sa vérification après la bascule reste en ligne jusqu'à votre décision (l'incident plus bas) ; seul un projet d'avant la 3.0 réglé pour se déployer automatiquement revient encore de lui-même, jamais sur son site de production, et la cloche le dit. Un déploiement raté avant sa bascule n'a rien changé : *Revenir* n'est pas proposé.
+
+## Santé et incidents
+
+Toutes les 15 minutes par défaut (*Santé des sites déployés* sur la page *Serveurs* : de 5 à 60 minutes, ou désactivé), pour chaque site déployé : la vérification externe, le certificat (une alerte sous 14 jours, un incident sous 3), le disque et la mémoire de ses serveurs (au-delà de 90 %). Un déploiement en échec, ou un site trouvé mal en point deux fois de suite, fait sonner la cloche et les téléphones appairés en mots simples (ce qui a échoué, ce qui a été tenté) avec trois actions : *Réessayer* (le dernier déploiement à nouveau), *Revenir à la version d'avant*, *Je prends la main* (arrête les déploiements automatiques de ce site jusqu'à ce que vous les remettiez, et ouvre la fiche du serveur).
+
+## Durcir un serveur neuf
+
+*Durcir ce serveur*, sur la fiche d'un serveur où Athanor se connecte avec une clé (pas proposé tant qu'il se connecte par mot de passe), est un plan fixe écrit par le code d'Athanor, montré étape par étape et exécuté une fois accepté : un utilisateur non root avec sudo et la clé d'Athanor, les clés SSH seules, `PermitRootLogin no` (contrôlé par `sshd -t`, avec un retour arrière programmé), ufw qui refuse tout sauf 22, 80 et 443 (avec un retour arrière programmé), `unattended-upgrades`, `systemd-timesyncd`, Caddy depuis son dépôt officiel. Une étape déjà en place est sautée.
+
+## Ce qui n'atteint jamais l'IA
+
+La clé SSH du serveur, la clé de déploiement, le jeton Cloudflare, la clé privée du certificat d'origine, le mot de passe du proxy et les valeurs du `.env` du projet restent au coffre. Le moteur d'Athanor s'en sert lui-même, en mémoire ; les agents et le pilote reçoivent des outils qui s'en servent, jamais les valeurs, et ces valeurs sont tenues hors des réponses des outils, de la cloche, des notifications, du journal d'audit, des variables d'environnement des sessions et des fichiers de ce PC (`app/deploiements_temoin_test.go` le vérifie). Le kubeconfig de k3s (`/etc/rancher/k3s/k3s.yaml`) fait partie des fichiers que l'agent ne peut pas lire. Chaque déploiement, accord et retour arrière est inscrit au journal d'audit.

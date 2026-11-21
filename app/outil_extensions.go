@@ -495,22 +495,35 @@ func construireMCP(kit string, choix map[string][]string, fichier, dossier, prin
 	} else {
 		os.Remove(fichier + ".sauvegarde.md")
 	}
+	// the hub's tools: the main pilot only (a worker has a principal; the merge drops it, mcpSansHub)
+	if h := serveurMCPHub(kit, fichier); h != nil && principal == "" && !serveurs.a(nomMCPHub) {
+		serveurs.mettre(nomMCPHub, *h)
+	}
 	if len(serveurs.cles) > 0 {
-		neuf := fichier + ".neuf"
-		os.Remove(neuf)
-		var r objetJSON
-		r.mettre("mcpServers", serveurs)
-		var b bytes.Buffer
-		e := json.NewEncoder(&b)
-		e.SetEscapeHTML(false)
-		e.SetIndent("", "  ")
-		if e.Encode(r) == nil && os.WriteFile(neuf, bytes.TrimRight(b.Bytes(), "\n"), 0o600) == nil {
-			_ = os.Rename(neuf, fichier)
-		}
+		_ = ecrireMCP(fichier, serveurs)
 	} else {
 		os.Remove(fichier)
 	}
 	return serveurs.cles, notes
+}
+
+// ecrireMCP: {"mcpServers": serveurs} into fichier (0600), replaced in one move.
+func ecrireMCP(fichier string, serveurs objetJSON) error {
+	neuf := fichier + ".neuf"
+	os.Remove(neuf)
+	var r objetJSON
+	r.mettre("mcpServers", serveurs)
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	e.SetIndent("", "  ")
+	if err := e.Encode(r); err != nil {
+		return err
+	}
+	if err := os.WriteFile(neuf, bytes.TrimRight(b.Bytes(), "\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(neuf, fichier)
 }
 
 // copierDossier: a copy of src in dst without .git and __pycache__; suivre: links followed (a broken one

@@ -35,3 +35,24 @@ func TestStatiqueVersionne(t *testing.T) {
 		t.Fatalf("unchanged app.css: %d", w.Code)
 	}
 }
+
+// TestPageLancement: the page carries this launch's id (the animation plays once per id, splash.js),
+// on by default; empty once turned off in Settings; splash.js versioned like the other files.
+func TestPageLancement(t *testing.T) {
+	s := &Serveur{csrf: "jeton"}
+	mux := http.NewServeMux()
+	s.routesInterface(mux)
+	page := func() string {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+		return w.Body.String()
+	}
+	p := page()
+	if idLancement == "" || !strings.Contains(p, `<meta name="lancement" content="`+idLancement+`">`) || !strings.Contains(p, `"splash.js?v=`) || !strings.Contains(p, `id="splash"`) {
+		t.Fatalf("launch id or splash missing:\n%.600s", p)
+	}
+	s.config.PasAnimation = true
+	if !strings.Contains(page(), `<meta name="lancement" content="">`) {
+		t.Fatal("animation turned off but the page still carries the launch id")
+	}
+}

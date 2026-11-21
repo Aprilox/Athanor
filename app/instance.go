@@ -53,6 +53,32 @@ func instanceExistante(action string) bool {
 	return r.StatusCode == http.StatusOK
 }
 
+// verrouInstance: held by the running instance for its whole life (the system lets it go when it ends).
+var verrouInstance *os.File
+
+// attendreInstanceQuiDemarre takes the instance lock. Held by another launch (started a moment before, its
+// instance.json not written yet): wait until that one answers, then the code below joins it as usual.
+// shortcut: after 20 s without an answer this launch starts anyway (a hung first launch must not stop Athanor).
+func attendreInstanceQuiDemarre(terminal bool) {
+	f := fichierInstance()
+	_ = os.MkdirAll(filepath.Dir(f), 0o700)
+	if verrouInstance = verrouFichierGH(f+".verrou", 0); verrouInstance != nil {
+		return
+	}
+	for fin := time.Now().Add(20 * time.Second); time.Now().Before(fin); time.Sleep(250 * time.Millisecond) {
+		if terminal {
+			if _, existe := lienInstanceTerminal(); existe {
+				return
+			}
+		} else if instanceExistante("ping") {
+			return
+		}
+		if verrouInstance = verrouFichierGH(f+".verrou", 0); verrouInstance != nil {
+			return // the other launch stopped before serving
+		}
+	}
+}
+
 // The running instance's side.
 var (
 	jetonInstance   = aleatoire(24)
@@ -65,9 +91,11 @@ func ecrireInstance(port int) {
 	_ = os.MkdirAll(filepath.Dir(f), 0o700)
 	b, _ := json.Marshal(infoInstance{port, jetonInstance, os.Getpid()})
 	_ = os.WriteFile(f, b, 0o600)
+	ecrireAnnonce(port) // hub_annonce.go
 }
 
 func effacerInstance() {
+	effacerAnnonce()
 	b, err := os.ReadFile(fichierInstance())
 	var i infoInstance
 	if err == nil && json.Unmarshal(b, &i) == nil && i.PID == os.Getpid() {
@@ -92,9 +120,19 @@ func (s *Serveur) apiInstance(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusForbidden, "Request refused (origin)")
 		return
 	}
+	// C24 C27: any program of the user can read instance.json, so who called is logged (it can do no more
+	// than the window, whose sensitive actions need hub_preuve.go's proofs)
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "instance.json", Vers: "hub", Action: "instance " + couper(r.PathValue("action"), 32),
+		Resultat: r.RemoteAddr + ", " + couper(r.UserAgent(), 120)})
 	switch r.PathValue("action") {
 	case "montrer":
 		demanderFenetre()
+	case "module-code", "module-demandes", "module-decider": // athanor module appairer (module_sans_fenetre.go)
+		s.apiInstanceModule(w, r)
+		return
+	case "urgence": // athanor arret-urgence
+		s.ecrireJSON(w, s.arretUrgence("terminal"))
+		return
 	case "terminal":
 		// athanor tui while Athanor runs: a single-use address for the terminal (the secret of instance.json,
 		// a file of the user's own, mode 0600, out of reach of Claude's sandbox: as for "montrer")

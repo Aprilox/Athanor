@@ -149,6 +149,12 @@ func profilSeatbelt(maison, outils string, ecriture, lecture []string, existe fu
 		}
 	}
 	b.WriteString("(allow file-read* file-write* " + strings.Join(ecrits, " ") + ")\n")
+	// I4, last so that it wins even over a writable folder containing Athanor's: its settings, hub/, modules/
+	var proteges []string
+	for _, p := range donneesAthanor(kit, true) {
+		proteges = append(proteges, sous(p))
+	}
+	b.WriteString("(deny file-read* file-write* " + strings.Join(proteges, " ") + ")\n")
 	return b.String()
 }
 

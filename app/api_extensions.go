@@ -148,19 +148,14 @@ func lireJSONFichier(chemin string, v any) {
 	}
 }
 
+// ecrireJSONFichier: through ecrireAtomique (its own temporary name, on disk before the rename, retried while a
+// reader holds the file on Windows): a fixed ".tmp" and one rename lost writes (the relay's pause) without a word.
 func ecrireJSONFichier(chemin string, v any, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(chemin), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	t := chemin + ".tmp"
-	if err := os.WriteFile(t, b, mode); err != nil {
-		return err
-	}
-	return os.Rename(t, chemin)
+	return ecrireAtomique(chemin, b, mode)
 }
 
 func lireBiblio(k Kit) Bibliotheque {
@@ -551,10 +546,11 @@ var variablesPlugin = map[string]bool{"CLAUDE_PLUGIN_ROOT": true, "CLAUDE_PLUGIN
 func estNomSecret(nom string) bool {
 	for _, m := range regexp.MustCompile(`[A-Za-z0-9]+`).FindAllString(strings.ToUpper(nom), -1) {
 		switch m {
-		case "KEY", "APIKEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "AUTH", "AUTHORIZATION", "PAT", "BEARER", "CREDENTIAL", "CREDENTIALS":
+		case "KEY", "APIKEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "AUTH", "AUTHORIZATION", "PAT", "BEARER", "CREDENTIAL", "CREDENTIALS",
+			"PASS", "PASSPHRASE", "PIN", "COOKIE", "DSN", "SALT", "JWT":
 			return true
 		}
-		if strings.HasSuffix(m, "KEY") || strings.HasSuffix(m, "TOKEN") || strings.HasSuffix(m, "SECRET") {
+		if strings.HasSuffix(m, "KEY") || strings.HasSuffix(m, "TOKEN") || strings.HasSuffix(m, "SECRET") || strings.HasSuffix(m, "PASSWORD") {
 			return true
 		}
 	}

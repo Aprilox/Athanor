@@ -46,20 +46,32 @@ function Faire($f) {
   $s.TargetPath = $env:ATHANOR_CIBLE
   $s.WorkingDirectory = $env:ATHANOR_DOSSIER
   $s.IconLocation = $env:ATHANOR_CIBLE + ',0'
-  $s.Description = 'Athanor'
+  $s.Description = 'Athanor Hub'
   $s.Save()
 }
 Faire $env:ATHANOR_LNK
 if ($env:ATHANOR_MENU) { try { Faire $env:ATHANOR_MENU } catch {} }`
 
+// renommerAncienLnk: the shortcut's path in dossier, "Athanor Hub.lnk"; an older "Athanor.lnk" there is
+// renamed to it first (never a second shortcut), and one already renamed is simply rewritten.
+func renommerAncienLnk(dossier string) string {
+	neuf := filepath.Join(dossier, "Athanor Hub.lnk")
+	if _, err := os.Stat(neuf); err != nil {
+		_ = os.Rename(filepath.Join(dossier, "Athanor.lnk"), neuf)
+	} else {
+		_ = os.Remove(filepath.Join(dossier, "Athanor.lnk"))
+	}
+	return neuf
+}
+
 // delaiRaccourciWindows: PowerShell never keeps the window waiting longer than this.
 var delaiRaccourciWindows = 60 * time.Second
 
 func creerRaccourciSysteme(dossier, exe, kit string) ([]string, error) {
-	lnk := filepath.Join(dossier, "Athanor.lnk")
+	lnk := renommerAncienLnk(dossier)
 	menu := ""
 	if m := dossierConnuWindows(windows.FOLDERID_Programs); m != "" {
-		if x := filepath.Join(m, "Athanor.lnk"); !strings.EqualFold(x, lnk) {
+		if x := renommerAncienLnk(m); !strings.EqualFold(x, lnk) {
 			menu = x
 		}
 	}

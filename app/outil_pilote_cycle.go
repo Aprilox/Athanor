@@ -334,7 +334,8 @@ func (p *pilote) envClaude() []string {
 	var out []string
 	for _, e := range os.Environ() {
 		k, _, _ := strings.Cut(e, "=")
-		if strings.EqualFold(k, "PATH") || strings.EqualFold(k, "MSYS2_ARG_CONV_EXCL") {
+		// a user's variable named like a secret never reaches the pilot (I1); Claude's own connection is set below
+		if strings.EqualFold(k, "PATH") || strings.EqualFold(k, "MSYS2_ARG_CONV_EXCL") || EstSecret(k) {
 			continue
 		}
 		out = append(out, e)
@@ -583,8 +584,10 @@ boucleSurveillance:
 			}
 		}
 		if motif == "" && p.relayContextK > 0 && relaisOK && !cadrage && jalonVu == 0 && maintenant-dernierCtx >= 60 {
-			dernierCtx = maintenant
 			ctx := p.relaisContexte(journal)
+			if ctx > 0 { // a session that has not answered yet is read again at the next tick: its log is still tiny
+				dernierCtx = maintenant
+			}
 			if ctx >= p.relayContextK*1000 {
 				if relaisVu == 0 {
 					relaisVu = maintenant
@@ -610,8 +613,7 @@ boucleSurveillance:
 				p.log("Windows session unlocked: the programs draw again.")
 			}
 		}
-		reglesQuota := filepath.Join(p.kit, "logs", "quota-arret.json")
-		if motif == "" && tailleFichierPilote(reglesQuota) > 0 && maintenant-dernierQuota >= 60 {
+		if motif == "" && maintenant-dernierQuota >= 60 { // (seuilQuota: nothing without a rule, the kit's or the project's)
 			dernierQuota = maintenant
 			lq := p.seuilQuota()
 			if strings.HasPrefix(lq, "maintenant\t") {
@@ -672,6 +674,15 @@ fluxTermine:
 	return 124
 }
 
+// livraisonANoter (M315): the delivery mark is missing or older than the report that says DONE. A start on a
+// project already delivered leaves its mark: rewritten, the app would take the next saved work for a delivery and
+// put it online before it is finished (relais_jalon.go, noterLivraison).
+func livraisonANoter(etat string) bool {
+	m, errM := os.Stat(filepath.Join(etat, "done", ".last-delivery"))
+	r, errR := os.Stat(filepath.Join(etat, "FINAL_REPORT.md"))
+	return errM != nil || errR != nil || r.ModTime().After(m.ModTime())
+}
+
 func fichierRegulierPilote(chemin string) bool {
 	st, err := os.Stat(chemin)
 	return err == nil && st.Mode().IsRegular()
@@ -694,7 +705,15 @@ func (p *pilote) rangerSolutions(fichier, quoi string) {
 	_ = lancerSolutions([]string{"ranger", fichier, quoi})
 }
 
+// prendreReglagesProjet: the models of the cycle that starts, the project's own (Manage › Working mode › Models,
+// its .athanor/.env: modeles_projet.go) over the ones of Settings; read once per cycle, a change during a cycle
+// waits for the next one.
+func (p *pilote) prendreReglagesProjet() {
+	p.appliquerModelesProjet(false)
+}
+
 func (p *pilote) preparerEquipe() {
+	p.prendreReglagesProjet()
 	dossierAgents := filepath.Join(p.prive, "agents")
 
 	for _, l := range equipeImporter(p.kit, p.projet) {
@@ -830,6 +849,8 @@ func (p *pilote) demarrerEveil() {
 			}
 		}
 		cmd := commande(exeAthanor, "--eveil", argEveil)
+		// never the project's folder: it outlives the pilot by up to 25 s and would hold it (no rename, no removal)
+		cmd.Dir = p.kit
 		if !p.natif && dossierExistePilote("/mnt/c") {
 			cmd.Dir = "/mnt/c"
 		}
@@ -1168,7 +1189,9 @@ func (p *pilote) preparerCycle() {
 		_ = cmdMap.Run()
 	}
 
-	if p.natif || interopWindows() {
+	// a task made by an older version runs powershell.exe: its console window opens (in Windows Terminal) and takes
+	// the focus at every run; the health check asks for Repair (one UAC prompt), until then the cycle leaves it alone
+	if (p.natif || interopWindows()) && tacheAdminAJour(p.kit) {
 		sch := "schtasks.exe"
 		if runtime.GOOS == "windows" {
 			sch = "schtasks"
@@ -1813,7 +1836,7 @@ func trouverBashNatifPilote() string {
 		racine := filepath.Dir(filepath.Dir(g))
 		candidats = append(candidats, filepath.Join(racine, "bin", "bash.exe"))
 	}
-	if b, err := exec.LookPath("bash.exe"); err == nil {
+	if b, err := exec.LookPath("bash.exe"); err == nil && !bashWSL(b) {
 		candidats = append(candidats, b)
 	}
 	for _, c := range candidats {
@@ -1822,6 +1845,12 @@ func trouverBashNatifPilote() string {
 		}
 	}
 	return ""
+}
+
+// bashWSL: the bash.exe of WSL (WindowsApps alias, System32), which runs Linux, not Git Bash.
+func bashWSL(chemin string) bool {
+	d := strings.ToLower(strings.ReplaceAll(chemin, `\`, "/"))
+	return strings.HasSuffix(d, "/windowsapps/bash.exe") || strings.HasSuffix(d, "/system32/bash.exe")
 }
 
 func cheminNatifPilote(s string) string {
@@ -2589,7 +2618,9 @@ func lancerPilote(args []string) int {
 			p.log("Delivery reopened: what was built in the fast mode is verified as a whole first (full check, tester, critic, every fix), then .athanor/FAST_DEBT is deleted.")
 		}
 		if p.estTermine() {
-			_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)
+			if livraisonANoter(p.etat) {
+				_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)
+			}
 			codeGH := p.githubPousser()
 			if codeGH == 4 && fichierRegulierPilote(filepath.Join(p.etat, "SECRETS_FOUND.md")) {
 				fRep := filepath.Join(p.etat, "FINAL_REPORT.md")
@@ -2601,6 +2632,7 @@ func lancerPilote(args []string) int {
 			} else if !p.prochaineDemande() && !p.rouvrirApresLivraison() {
 				noterLivraison(p.projet) // what this delivery was made against: the next start compares with it
 				_ = os.Remove(filepath.Join(p.etat, "auto"))
+				p.etatPhase = "termine" // M275b: ended on its own after a cycle (not "entre_cycles"): the hub and the missions read it
 				p.terminer("DONE: the deliverable and FINAL_REPORT.md are in the project folder. To go on: add a request or a note, then start again.")
 			}
 		}
@@ -2653,6 +2685,7 @@ func lancerPilote(args []string) int {
 		p.cycle++
 		_ = os.WriteFile(filepath.Join(p.prive, "cycle"), []byte(strconv.Itoa(p.cycle)+"\n"), 0o644)
 		p.fichierLog = filepath.Join(p.etat, "logs", fmt.Sprintf("cycle-%s-%04d.jsonl", time.Now().Format("20060102-150405"), p.cycle))
+		purgerJournauxCycle(filepath.Join(p.etat, "logs")) // a pilot that runs for weeks does not fill the project's disk
 		avant := p.gitHead(p.projet)
 		cochesCycleDebut := p.cochesPlan()
 
@@ -3345,7 +3378,7 @@ func analyserJournalCycle(chemin string) (texteResultat string, enErreur bool, r
 					if c != nil && c["type"] == "tool_use" {
 						if nom, ok := c["name"].(string); ok && strings.HasPrefix(nom, "mcp__") {
 							parts := strings.Split(nom, "__")
-							if len(parts) >= 2 && parts[1] != "" {
+							if len(parts) >= 2 && parts[1] != "" && parts[1] != nomMCPHub { // the hub keeps nothing to save
 								mcpSet[parts[1]] = true
 							}
 						}
@@ -3372,4 +3405,20 @@ func analyserJournalCycle(chemin string) (texteResultat string, enErreur bool, r
 		serveursMCP = serveursMCP[:10]
 	}
 	return
+}
+
+// maxJournauxCycle: the cycle logs a project keeps (the newest); each is a whole stream of Claude's (tool outputs,
+// files read, images), and only the newest ones are read again (the current cycle, the quota).
+const maxJournauxCycle = 200
+
+// purgerJournauxCycle: the oldest cycle-*.jsonl of dossier beyond maxJournauxCycle removed.
+func purgerJournauxCycle(dossier string) {
+	fs, _ := filepath.Glob(filepath.Join(dossier, "cycle-*.jsonl"))
+	if len(fs) <= maxJournauxCycle {
+		return
+	}
+	sort.Strings(fs) // cycle-<date>-<n>: their names sort by date
+	for _, f := range fs[:len(fs)-maxJournauxCycle] {
+		_ = os.Remove(f)
+	}
 }

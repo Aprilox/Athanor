@@ -304,6 +304,7 @@ type hubEquipe struct {
 	vus      map[string]vuNoeud
 	arret    chan struct{}
 	essaisIP map[string]int
+	essaisLe time.Time                  // as magasinClients: the attempts per address count over fenetreEssaisIP
 	demandes map[string]*demandeDirecte // secret → a computer that gave the right code, waiting for the master
 	// the master's role handed over (equipe_passation.go): in progress, done (the new master's address), failed
 	passation       *passationEnCours
@@ -346,7 +347,7 @@ func (s *Serveur) demarrerMaitre(p Projet) error {
 	h := &hubEquipe{projet: p, etat: "demarrage", vus: map[string]vuNoeud{}, arret: make(chan struct{}), essaisIP: map[string]int{}, demandes: map[string]*demandeDirecte{}}
 	hubs[p.Nom] = h
 	directMu.Unlock()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := ecouterLocal(0)
 	if err != nil {
 		s.arreterMaitre(p.Nom)
 		return err
@@ -563,12 +564,18 @@ func (s *Serveur) hubAppairer(h *hubEquipe, w http.ResponseWriter, r *http.Reque
 	}
 	ip := ipAppel(r)
 	h.mu.Lock()
+	if time.Since(h.essaisLe) > fenetreEssaisIP {
+		h.essaisIP, h.essaisLe = map[string]int{}, time.Now()
+	}
 	h.essaisIP[ip]++
 	trop := h.essaisIP[ip] > 20
 	bon := h.code != "" && time.Now().Before(h.codeFin) && h.essais < essaisCodeMax &&
 		subtle.ConstantTimeCompare([]byte(strings.TrimSpace(c.Code)), []byte(h.code)) == 1
 	if !bon && h.code != "" {
 		h.essais++
+	}
+	if bon && !trop {
+		delete(h.essaisIP, ip) // a pairing that went through counts against nobody
 	}
 	if bon {
 		h.code = "" // a code is used once

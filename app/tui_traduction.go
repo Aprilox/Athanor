@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -84,6 +85,14 @@ func lireDicoJS(js, langue string) map[string]string {
 	return d
 }
 
+// tuiPluriel: a count in words, singular or plural (never "task(s)"), like tn() in app.js.
+func tuiPluriel(t func(string, ...any) string, n any, un, plusieurs string) string {
+	if fmt.Sprint(n) == "1" {
+		return t(un, n)
+	}
+	return t(plusieurs, n)
+}
+
 // traduireTUI: key in this language, {0}, {1}… replaced by args.
 func traduireTUI(d map[string]string, cle string, args ...any) string {
 	s := cle
@@ -108,6 +117,8 @@ func traduireTUI(d map[string]string, cle string, args ...any) string {
 			t = strconv.Itoa(x)
 		case int64:
 			t = strconv.FormatInt(x, 10)
+		case *MessageMoteur: // a message inside a message (an alert's reason), said in this language too
+			t = traduireTUI(d, x.Cle, x.Args...)
 		default:
 			b, _ := json.Marshal(x)
 			t = strings.Trim(string(b), `"`)

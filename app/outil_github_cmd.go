@@ -81,7 +81,9 @@ var (
 	reCleIDGH   = regexp.MustCompile(`^[0-9]{1,15}$`)
 	reShaGH     = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
 	reEmailGH   = regexp.MustCompile(`^[^ \t\n\v\f\r<>@"]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$`)
-	reReseauGH  = regexp.MustCompile(`(?i)connection timed out|connection refused|network is unreachable|could not resolve|no route to host|connection reset|operation timed out`)
+	// a ref or index lock held for a moment by another git on the same folder (or Windows' antivirus)
+	reVerrouGH = regexp.MustCompile(`(?i)couldn't set 'refs/|cannot lock ref|unable to create '[^']*\.lock'`)
+	reReseauGH = regexp.MustCompile(`(?i)connection timed out|connection refused|network is unreachable|could not resolve|no route to host|connection reset|operation timed out`)
 )
 
 func depotValideGH(d string) bool {
@@ -900,6 +902,7 @@ func delierGH(args []string, w io.Writer) int {
 	if v != nil {
 		defer v.Close()
 	}
+	retirerCleDeploiementGH(d, r.Depot, w) // before its id goes with the folder
 	l, _ := os.ReadDir(d)
 	for _, e := range l {
 		if e.Name() != "identite" && e.Name() != "compte" { // the commit author stays
@@ -1288,6 +1291,8 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return code, true
 	case "delier":
 		return delierGH(reste, w), true
+	case "cle-deploiement":
+		return cleDeploiementGH(reste, w), true
 	case "suivre":
 		return suivreGH(reste, w), true
 	case "identite":

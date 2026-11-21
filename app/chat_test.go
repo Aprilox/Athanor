@@ -97,3 +97,30 @@ func TestSessionChat(t *testing.T) {
 		t.Fatalf("no commit")
 	}
 }
+
+// M227b: the sober writing instruction is written once and closes every conversation's prompt (project chat and
+// the Studio's "Discuss" through consigneChat, the home chat through consigneAccueil, both modes).
+func TestConsigneSobre(t *testing.T) {
+	for nom, c := range map[string][2]string{
+		"projet question": {consigneChat, consigneQuestion}, "projet modif": {consigneChat, consigneModif},
+		"accueil lecture": {consigneAccueil, consigneLectureAccueil}, "accueil ecriture": {consigneAccueil, consigneEcritureAccueil},
+	} {
+		p := promptChat(c[0], c[1])
+		if strings.Count(p, "no emojis") != 1 || !strings.HasSuffix(p, consigneSobre) || strings.Contains(p, "%s") || !strings.Contains(p, c[1]) {
+			t.Fatalf("%s: %q", nom, p[max(0, len(p)-400):])
+		}
+	}
+	n := 0
+	fichiers, _ := filepath.Glob("*.go")
+	for _, f := range fichiers {
+		if b, _ := os.ReadFile(f); !strings.HasSuffix(f, "_test.go") {
+			n += strings.Count(string(b), "no emojis, no pictograms")
+			if strings.Contains(string(b), `".prompt":`) && !strings.Contains(string(b), "promptChat(gabarit, consigne)") {
+				t.Fatalf("%s writes a chat prompt without promptChat", f)
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatalf("the instruction is written %d times, once expected", n)
+	}
+}

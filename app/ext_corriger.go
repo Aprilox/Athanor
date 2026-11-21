@@ -133,7 +133,7 @@ func programmesTrouves() string {
 		v := ""
 		if n == "node" || n == "python3" || n == "uv" || n == "docker" {
 			ctx, fin := context.WithTimeout(context.Background(), 5*time.Second)
-			if b, err := exec.CommandContext(ctx, p, "--version").CombinedOutput(); err == nil {
+			if b, err := commandeContexte(ctx, p, "--version").CombinedOutput(); err == nil {
 				v = " " + strings.TrimSpace(strings.SplitN(string(b), "\n", 2)[0])
 			}
 			fin()

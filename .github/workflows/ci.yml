@@ -28,10 +28,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
+      - name: Format
+        if: runner.os == 'Linux'
+        # the vendored third_party code keeps its upstream formatting
+        run: |
+          f="$(gofmt -l . | grep -v third_party || true)"
+          if [ -n "$f" ]; then echo "::error::not formatted by gofmt: $f"; exit 1; fi
       - name: Vet
         run: go vet .
       - name: Tests
         shell: bash
+        # nobody to ask on a runner: the real mDNS socket and the real Keychain / Secret Service are tested here
+        # (skipped on a developer's computer, where they would open a firewall or keychain prompt)
+        env:
+          ATHANOR_TEST_RESEAU: "1"
+          ATHANOR_TEST_TROUSSEAU_REEL: "1"
         # the failures also go into the run's annotations (readable without opening the whole log)
         run: |
           set +e   # the step's shell stops at the first failure otherwise (-e, pipefail): the annotations below would never be written
@@ -108,3 +119,108 @@ jobs:
       - name: Every build target
         working-directory: app
         run: go run . construire --all
+
+  two-instances:
+    # two real Athanor executables in separate folders (app/deux_instances_test.go): paired by a 6-digit code
+    # and the owner's accord, the hub reads the other's state and pauses its project's pilot at the end of
+    # its cycle; a client never paired is refused
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Two instances
+        # a skip would pass silently: the PASS line is required
+        run: |
+          go test -count=1 -timeout 4m -run '^TestDeuxInstances$' -v . | tee deux.log
+          grep -q -- '--- PASS: TestDeuxInstances' deux.log
+
+  servers-ssh:
+    # the Servers module against a real sshd (app/testdata/serveur-ssh, never a real server): an agent's MCP
+    # route adds it, reads its sheet, changes it only by an accepted plan, is refused destructive or masked
+    # commands, and an unconfirmed firewall rule is undone by the server itself (app/serveurs_ci_test.go);
+    # Caddy serves its default page on the published HTTP port, before and after a reload over SSH;
+    # the sample site end to end: dev behind the fake Cloudflare, v1, v2, back to v1, prod only with the accord,
+    # an incident in the bell, no witness value anywhere an agent reads (app/deploiements_temoin_test.go);
+    # a deployment whose folder, build commands and method the agent chose (app/deploiements_outils_test.go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Test SSH server
+        # free ports chosen by Docker, on 127.0.0.1 only (SSH and Caddy's HTTP); NET_ADMIN for ufw
+        run: |
+          docker build -q -t athanor-serveur-ssh testdata/serveur-ssh
+          docker run -d --name athanor-serveur-ssh --cap-add NET_ADMIN -p 127.0.0.1::22 -p 127.0.0.1::80 athanor-serveur-ssh
+          port="$(docker port athanor-serveur-ssh 22/tcp | head -n1 | sed 's/.*://')"
+          echo "ATHANOR_SSH_HTTP=127.0.0.1:$(docker port athanor-serveur-ssh 80/tcp | head -n1 | sed 's/.*://')" >> "$GITHUB_ENV"
+          for _ in $(seq 1 50); do  # ready once sshd shows its banner
+            if timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/$port && head -c 4 <&3" 2>/dev/null | grep -q SSH; then
+              echo "ATHANOR_SSH_TEST=127.0.0.1:$port" >> "$GITHUB_ENV"; exit 0
+            fi
+            sleep 0.2
+          done
+          echo "::error::test SSH server unreachable"; docker logs athanor-serveur-ssh | tail -n 20; exit 1
+      - name: Servers tests on the container
+        # a skip (ATHANOR_SSH_TEST lost) would pass silently: the PASS line is required
+        run: |
+          go test -count=1 -timeout 10m -run '^(TestServeursCIConteneur|TestCaddyConteneur|TestDeploiementStatiqueConteneur|TestDeploiementGitConteneur|TestDeploiementComposeConteneur|TestDeploiementK3sConteneur|TestDeploiementAgentConteneur|TestRelaisJalonConteneur|TestDurcirConteneur|TestTerminalConteneur|TestSiteExempleTemoinConteneur)$' -v . | tee ci.log
+          grep -q -- '--- PASS: TestServeursCIConteneur' ci.log
+          grep -q -- '--- PASS: TestCaddyConteneur' ci.log
+          grep -q -- '--- PASS: TestTerminalConteneur' ci.log
+          grep -q -- '--- PASS: TestDeploiementStatiqueConteneur' ci.log
+          grep -q -- '--- PASS: TestDeploiementGitConteneur' ci.log
+          grep -q -- '--- PASS: TestDeploiementComposeConteneur' ci.log
+          grep -q -- '--- PASS: TestDeploiementK3sConteneur' ci.log
+          grep -q -- '--- PASS: TestDeploiementAgentConteneur' ci.log
+          grep -q -- '--- PASS: TestRelaisJalonConteneur' ci.log
+          grep -q -- '--- PASS: TestDurcirConteneur' ci.log
+          grep -q -- '--- PASS: TestSiteExempleTemoinConteneur' ci.log
+
+  vuln:
+    # known vulnerabilities of the Go standard library and of the modules, in the code Athanor really calls
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: govulncheck
+        # pinned: a new release of the tool never changes the result of an old commit
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  secrets:
+    # no secret committed anywhere in the history (.gitleaks.toml, .gitleaksignore); gitleaks pinned and checked
+    # against its published SHA-256: no third-party action, no licence key
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -e
+          f="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -sSfL -o "$f" "https://github.com/gitleaks/gitleaks/releases/download/v$VERSION/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "$SHA256  $f" | sha256sum -c -
+          tar -xzf "$f" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose .

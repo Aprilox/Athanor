@@ -1,0 +1,2 @@
+body { font-family: system-ui, sans-serif; margin: 0; display: grid; place-items: center; min-height: 100vh; background: #1f2a33; color: #f4f1ea; }
+.version { font-size: 2rem; font-weight: bold; color: #e8a33d; }

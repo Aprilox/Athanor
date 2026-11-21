@@ -93,6 +93,14 @@ func (a *appTUI) touche(ev evenementTUI) {
 		a.allerPage(int(k[0] - '1'))
 	case "0":
 		a.allerPage(9)
+	case "H":
+		a.allerPage(pAccueil)
+	case "echap": // back home, unless it clears the log's filter
+		if a.page == pJournal && a.recherche.texte() != "" {
+			a.touchePage(ev, k)
+		} else {
+			a.allerPage(pAccueil)
+		}
 	case "tab":
 		a.allerPage(a.page + 1)
 	case "stab", "maj+tab":
@@ -125,6 +133,8 @@ func (a *appTUI) touche(ev evenementTUI) {
 		a.ouvrirFenetre()
 	case "M":
 		a.gererProjet()
+	case "!":
+		a.arretUrgenceTUI()
 	default:
 		a.touchePage(ev, k)
 	}
@@ -167,6 +177,10 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 		}
 	}
 	switch a.page {
+	case pAccueil:
+		if k == "entree" {
+			a.ouvrirHash("#global") // the Projects page, every module's elements
+		}
 	case pSuivi:
 		if k == "$" && a.vue != nil && a.vue.Depense != nil {
 			a.compterDepense()
@@ -427,6 +441,7 @@ func (a *appTUI) formulaire(titre, aide string, champs []champTUI, fn func([]str
 
 const aideFormulaireMulti = "Tab: next field or button · Enter: new line · F2 (or Ctrl+S): save · Esc: cancel"
 const aideFormulaireLigne = "Tab: next field or button · Enter: save · Esc: cancel"
+const aideDeverrouiller = "Tab: next field or button · Enter: unlock · Esc: cancel"
 
 // ----------------------------------------------------------------------------- the pilot
 
@@ -1016,20 +1031,27 @@ func (a *appTUI) demanderMotDePasse() {
 	if a.form != nil || a.verrouDemande {
 		return
 	}
-	a.verrouDemande = true
-	a.formulaire(a.t("Athanor is locked"), a.t(aideFormulaireLigne), []champTUI{{lib: a.t("Password"), h: 1, s: &saisieT{masque: true}}}, func(v []string) {
+	// only while the password is sent: Escape closes the form and the next refresh asks again
+	a.formulaire(a.t("Athanor is locked"), a.t(aideDeverrouiller), []champTUI{{lib: a.t("Password"), h: 1, s: &saisieT{masque: true}}}, func(v []string) {
+		a.verrouDemande = true
 		c := *a.c
 		go func() {
-			err := c.appel("POST", "deverrouiller", map[string]string{"mot_de_passe": v[0]}, nil)
+			var r struct {
+				ChangerMdp bool `json:"changer_mdp"`
+			}
+			err := c.appel("POST", "deverrouiller", map[string]string{"mot_de_passe": v[0]}, &r)
 			a.majs <- func(a *appTUI) {
 				a.verrouDemande = false
 				if err != nil {
 					a.annoncer(a.texteErreur(err), true)
+				} else if r.ChangerMdp { // a 2.x password: the window asks for a new one as soon as it opens
+					a.annoncer(a.t("Your password is shorter than 12 characters: open Athanor's window to choose a new one."), true)
 				}
 				a.derniere["etat"] = time.Time{}
 			}
 		}()
 	})
+	a.form.bouton = a.t("Unlock")
 }
 
 // ouvrirFenetre: Athanor's window as well (a computer with a screen).

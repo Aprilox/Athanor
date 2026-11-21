@@ -65,6 +65,8 @@ type DistanceConfig struct {
 	TunnelID string `json:"tunnel_id,omitempty"`
 	// Athanor's key for the push services (distance_push.go: notifications on the devices)
 	Vapid string `json:"vapid,omitempty"`
+	// Terminal: the Servers terminal and SFTP allowed from a paired device (off by default: a shell is the strongest right)
+	Terminal bool `json:"terminal,omitempty"`
 }
 
 type cleContexte string
@@ -275,7 +277,8 @@ func interditDistance(r *http.Request) bool {
 	case p == "/api/distance" && r.Method == http.MethodGet, strings.HasPrefix(p, "/api/distance/appareils/"):
 		return false
 	case strings.HasPrefix(p, "/api/distance"), strings.HasPrefix(p, "/api/instance"),
-		p == "/api/mot-de-passe", p == "/api/ouvrir":
+		p == "/api/mot-de-passe", p == "/api/ouvrir", strings.HasPrefix(p, "/api/mcp"), // the hub's MCP and its pairing: local only
+		p == "/api/clients", p == "/api/annonce", p == "/api/instances", p == "/api/distants": // MCP clients, the instances of this PC: the computer only
 		return true
 	case p == "/api/env" && r.URL.Query().Get("secrets") != "":
 		return true
@@ -283,6 +286,48 @@ func interditDistance(r *http.Request) bool {
 		return true
 	case p == "/api/extensions/corrections/appliquer": // writes into a folder of the computer
 		return true
+	case p == "/api/options/rappels-natif", p == "/api/options/verrou-auto": // native mode's reminders, the auto-lock: the computer only
+		return true
+	case p == "/api/sante/agent-serveurs": // B63: Docker, the vault and a real session, forced without the password
+		return true
+	case strings.HasPrefix(p, "/api/projets/") && (strings.HasSuffix(p, "/environnements") || strings.HasSuffix(p, "/deploiement") || strings.HasSuffix(p, "/preparer-deploiement")) && r.Method != http.MethodGet:
+		return true // a project's environments: read from a device, changed at the computer only
+	case strings.HasPrefix(p, "/api/projets/") && strings.HasSuffix(p, "/cle-deploiement") && r.Method != http.MethodGet:
+		return true // B68: a vault key registered on GitHub with this PC's connection
+	}
+	return false
+}
+
+// prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
+// a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
+var prefixesHub = []string{"/api/hub", "/api/machine", "/api/coffre", "/api/acces", "/api/serveurs", "/api/missions", "/api/mentions"}
+
+// autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
+var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/machine": true, "GET /api/coffre": true, "GET /api/acces": true,
+	"GET /api/coffre/categories": true,                                       // M287: the names of the owner's categories (made, renamed, removed on the PC)
+	"GET /api/hub/audit":         true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
+	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone
+	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
+	"GET /api/hub/chat":     true,                                 // M199: the home conversation, read only (sent, powers, folders, cards: the computer only)
+	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
+	"GET /api/serveurs/{id}/taches": true,                                                                    // a server's tasks, read only (plans are decided by the approval card)
+	"GET /api/missions":             true, "GET /api/missions/{id}": true, "DELETE /api/missions/{id}": true, // the old missions: read, deleted as an approval is decided (an unlocked device)
+	"GET /api/mentions": true} // the @ list of the home bar: names and types, never a value
+
+// refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
+func refuseHubDistance(r *http.Request) bool {
+	for _, p := range prefixesHub {
+		if strings.HasPrefix(r.URL.Path, p) {
+			chemin := r.URL.Path
+			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && !strings.Contains(id, "/") {
+				chemin = "/api/missions/{id}"
+			} else if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
+				chemin = "/api/serveurs/{id}"
+			} else if id, ok := strings.CutSuffix(id, "/taches"); ok && id != "" && !strings.Contains(id, "/") {
+				chemin = "/api/serveurs/{id}/taches"
+			}
+			return !autorisesDistance[r.Method+" "+chemin]
+		}
 	}
 	return false
 }
@@ -298,6 +343,10 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		if r.Method == http.MethodPost && r.URL.Path == "/api/mcp" && s.clientAthanor(r) { // a paired remote hub (hub_distants.go)
+			mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cleContexte(cleTunnel), true)))
+			return
+		}
 		id := s.appareilValide(r)
 		if id == "" { // without a key: counted per address (distance_limite.go)
 			if ok, attente := s.autoriserSansCle(r); !ok {
@@ -309,6 +358,11 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 			// its form names where it comes from (with "no-referrer", browsers send "Origin: null")
 			w.Header().Set("Referrer-Policy", "same-origin")
 			s.appairer(w, r)
+			return
+		}
+		if r.Method == http.MethodPost && (r.URL.Path == "/api/mcp/appairer" || r.URL.Path == "/api/mcp/appairer/statut") {
+			// another Athanor pairs with this one through its tunnel (sorte athanor only: apiAppairerClient)
+			mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cleContexte(cleTunnel), true)))
 			return
 		}
 		if id == "" && fichiersPublicsDistance[r.URL.Path] {
@@ -323,7 +377,7 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 			s.pageDistance(w, http.StatusUnauthorized, "inconnu")
 			return
 		}
-		if interditDistance(r) {
+		if interditDistance(r) || refuseHubDistance(r) && !(routeShellDistance(r.URL.Path) && s.shellDistanceAutorise()) {
 			s.erreur(w, http.StatusForbidden, "Not available from a remote device")
 			return
 		}
@@ -387,16 +441,15 @@ func (s *Serveur) ouvrirEcouteDistance(mux http.Handler) error {
 	var e net.Listener
 	var err error
 	// right after an update the previous Athanor may still hold it a moment: the tunnel kept since then points there
-	for i := 0; port > 0 && i < 20; i++ {
-		if e, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err == nil {
-			break
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	if e == nil {
-		if e, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+	for i := 0; i < 20; i++ {
+		if e, err = ecouterLocal(port); err != nil {
 			return err
 		}
+		if port <= 0 || e.Addr().(*net.TCPAddr).Port == port || i == 19 {
+			break
+		}
+		_ = e.Close() // another free port: the kept tunnel's one may be released in a moment
+		time.Sleep(500 * time.Millisecond)
 	}
 	nouveau := e.Addr().(*net.TCPAddr).Port
 	if nouveau != port {
@@ -421,6 +474,7 @@ func (s *Serveur) fermerEcouteDistance() {
 	d.deverrouilles = map[string]bool{}
 	d.code = ""
 	d.mu.Unlock()
+	s.finSessionsCoffre()
 	if srv != nil {
 		_ = srv.Close()
 	}
@@ -694,6 +748,7 @@ func (s *Serveur) retirerAppareilDistance(id, pourquoi string) (bool, error) {
 	delete(d.deverrouilles, id)
 	delete(d.essaisMdp, id)
 	d.mu.Unlock()
+	s.finSessionsCoffre()
 	if trouve && pourquoi == "mdp" {
 		titre, texte := texteAppareilRetireMdp(langue, nom)
 		go notifier(titre, texte)

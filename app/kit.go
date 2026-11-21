@@ -232,7 +232,39 @@ type LigneStat struct {
 	RTKEconomise int64   `json:"rtk_economise,omitempty"` // the tokens of those RTK did not pass on to Claude
 }
 
+// cacheStats: a project's statistics read again only when stats.tsv or pilot.log changed (each refresh of the page
+// asked for them, both files growing for months).
+var cacheStats = struct {
+	sync.Mutex
+	m map[string]statsLues
+}{m: map[string]statsLues{}}
+
+type statsLues struct {
+	cle string
+	l   []LigneStat
+}
+
 func (p Projet) LireStats() []LigneStat {
+	cle := ""
+	for _, f := range []string{p.StatsTSV(), p.PiloteLog()} {
+		if fi, err := os.Stat(f); err == nil {
+			cle += fi.ModTime().String() + "/" + strconv.FormatInt(fi.Size(), 10) + ";"
+		}
+	}
+	cacheStats.Lock()
+	c, ok := cacheStats.m[p.StatsTSV()]
+	cacheStats.Unlock()
+	if ok && c.cle == cle {
+		return c.l
+	}
+	l := p.lireStats()
+	cacheStats.Lock()
+	cacheStats.m[p.StatsTSV()] = statsLues{cle, l}
+	cacheStats.Unlock()
+	return l
+}
+
+func (p Projet) lireStats() []LigneStat {
 	b, err := os.ReadFile(p.StatsTSV())
 	if err != nil {
 		return nil
@@ -327,14 +359,18 @@ var reCle = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func EstSecret(cle string) bool {
 	c := strings.ToUpper(cle)
-	return strings.Contains(c, "TOKEN") || strings.Contains(c, "KEY") || strings.Contains(c, "SECRET") || strings.Contains(c, "PASSWORD") || strings.Contains(c, "MOT_DE_PASSE")
+	return strings.Contains(c, "TOKEN") || strings.Contains(c, "KEY") || strings.Contains(c, "SECRET") || strings.Contains(c, "PASSWORD") || strings.Contains(c, "PASSWD") || strings.Contains(c, "CREDENTIAL") || strings.Contains(c, "MOT_DE_PASSE")
 }
 
 func LireEnv(chemin string) []LigneEnv {
 	b, _ := os.ReadFile(chemin)
 	var lignes []LigneEnv
 	var aide []string
-	for _, l := range strings.Split(string(b), "\n") {
+	if len(b) == 0 {
+		return nil
+	}
+	// the final newline ends the last line: kept as an empty line, every rewrite would add one more
+	for _, l := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
 		l = strings.TrimRight(l, "\r")
 		if i := strings.Index(l, "="); i > 0 {
 			cle := strings.TrimSpace(l[:i])
@@ -382,7 +418,12 @@ func EcrireEnv(chemin string, valeurs map[string]string) error {
 	if err := os.WriteFile(tmp, []byte(sb.String()), 0o600); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, chemin); err != nil {
+	err := os.Rename(tmp, chemin)
+	for i := 0; err != nil && i < 25; i++ { // Windows refuses it while a reader holds .env open: a moment later it goes
+		time.Sleep(20 * time.Millisecond)
+		err = os.Rename(tmp, chemin)
+	}
+	if err != nil {
 		_ = os.Remove(tmp)
 		return os.WriteFile(chemin, []byte(sb.String()), 0o600)
 	}
@@ -634,6 +675,55 @@ func decouperJalon(ligne string) Jalon {
 // LirePlan: the plan's milestones, the archived ones first (the pilot moves the oldest done milestones to
 // archives/PLAN_TERMINE.md to keep PLAN.md short: they are still part of the project's plan).
 func (p Projet) LirePlan() []Jalon {
+	// cached by path, size and mtime of both files: the pages ask every 1.5 s for every project
+	archive := filepath.Join(p.Atelier(), "archives", "PLAN_TERMINE.md")
+	cle := [2]etatFichierPlan{lireEtatFichierPlan(p.Plan()), lireEtatFichierPlan(archive)}
+	planCacheMu.Lock()
+	c, ok := planCache[p.Plan()]
+	planCacheMu.Unlock()
+	if ok && c.cle == cle {
+		return append([]Jalon(nil), c.jalons...)
+	}
+	v := p.lirePlanSansCache()
+	// a file changed within its mtime granularity (2 s on FAT) could change again with the same key: not cached yet
+	if time.Since(cle[0].mtime) < 3*time.Second || time.Since(cle[1].mtime) < 3*time.Second {
+		return v
+	}
+	planCacheMu.Lock()
+	for f := range planCache { // C5: a project removed, renamed or moved is never asked again: forget it
+		if _, err := os.Stat(f); err != nil {
+			delete(planCache, f)
+		}
+	}
+	planCache[p.Plan()] = planEnCache{cle, v}
+	planCacheMu.Unlock()
+	return append([]Jalon(nil), v...)
+}
+
+type etatFichierPlan struct {
+	taille int64
+	mtime  time.Time
+}
+
+type planEnCache struct {
+	cle    [2]etatFichierPlan
+	jalons []Jalon
+}
+
+var (
+	planCacheMu sync.Mutex
+	planCache   = map[string]planEnCache{}
+)
+
+func lireEtatFichierPlan(f string) etatFichierPlan {
+	st, err := os.Stat(f)
+	if err != nil {
+		return etatFichierPlan{taille: -1}
+	}
+	return etatFichierPlan{st.Size(), st.ModTime()}
+}
+
+func (p Projet) lirePlanSansCache() []Jalon {
 	b, err := os.ReadFile(p.Plan())
 	if err != nil {
 		return nil

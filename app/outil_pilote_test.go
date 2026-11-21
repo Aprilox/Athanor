@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -77,14 +78,28 @@ func TestPriveDePiloteParite(t *testing.T) {
 	}
 }
 
+// dossierEssaiPilote: on Windows, under the repository's logs/ (ignored by git in every checkout) rather than
+// t.TempDir(): the copied Athanor.exe never lands in the owner's %TEMP% (no popup, Defender, remark of 2026-11-13 23h21).
 func dossierEssaiPilote(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS != "windows" {
 		return t.TempDir()
 	}
-	base := filepath.Join("..", "logs")
-	_ = os.MkdirAll(base, 0o755)
-	d, err := os.MkdirTemp(base, "test-pilote-*")
+	abs := nouveauDossierEssai(t, "test-pilote-*")
+	t.Cleanup(func() {
+		if err := supprimerEssaiPilote(abs); err != nil {
+			t.Errorf("test folder left behind (a program of the test still running?): %v", err)
+		}
+	})
+	return abs
+}
+
+var purgeEssais sync.Once
+
+// nouveauDossierEssai: a new folder under ../logs.
+func nouveauDossierEssai(t *testing.T, motif string) string {
+	t.Helper()
+	d, err := os.MkdirTemp(baseEssais(), motif)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +107,37 @@ func dossierEssaiPilote(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(abs) })
 	return abs
+}
+
+// baseEssais: ../logs, once its test-pilote-* folders older than 3 hours are gone (left by an interrupted
+// run: check.sh killed on timeout, ^C).
+func baseEssais() string {
+	base := filepath.Join("..", "logs")
+	_ = os.MkdirAll(base, 0o755)
+	purgeEssais.Do(func() {
+		anciens, _ := filepath.Glob(filepath.Join(base, "test-pilote-*"))
+		for _, d := range anciens {
+			if st, err := os.Stat(d); err == nil && time.Since(st.ModTime()) > 3*time.Hour {
+				_ = os.RemoveAll(d)
+			}
+		}
+	})
+	return base
+}
+
+// supprimerEssaiPilote: the programs run from the folder first (the pilot's "Athanor.exe --eveil" outlives it by
+// up to 25 s and holds the kit's exe and the project folder), then a few tries: Windows frees a file late.
+func supprimerEssaiPilote(d string) error {
+	var err error
+	for i := 0; i < 10; i++ {
+		arreterProgrammesSous(d)
+		if err = os.RemoveAll(d); err == nil {
+			return nil
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return err
 }
 
 // preparerKitEssaiPilote creates a self-contained copy of the kit with the compiled Athanor binary.
@@ -117,6 +161,7 @@ func preparerKitEssaiPilote(t *testing.T, binAthanor string) string {
 	}
 	b, err := os.ReadFile(binAthanor)
 	if err != nil {
+		sautSiDefender(t, err.Error())
 		t.Fatalf("read binary: %v", err)
 	}
 	dstBin := filepath.Join(kit, nomBin)
@@ -265,7 +310,7 @@ if [ "$n" = 1 ]; then
   trap 'exit 0' TERM INT
   echo "Step 1 done, step 2 remaining" > "$ETAT/HANDOFF.md"
   printf '{"type":"assistant","message":{"usage":{"input_tokens":160000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":500},"content":[{"type":"text","text":"Working on M1, context is now 160k tokens"}]}}\n'
-  sleep 15 & wait $!
+  sleep 15 > /dev/null 2>&1 & wait $! # never the cycle log as output: it would outlive the relay and hold the file
   exit 0
 fi
 
@@ -515,9 +560,32 @@ func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv 
 	cmd.Env = append(env, extraEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		sautSiDefender(t, err.Error()) // the quarantine can also strike at a later launch, not only at the build
 		t.Fatalf("pilot failed: %v\nOutput:\n%s", err, string(out))
 	}
 	return string(out)
+}
+
+// sautSiDefender skips when Windows Defender quarantined the bench's executable (an intermittent false
+// positive on this PC, out of the test's reach); the Linux and macOS CI still run the bench.
+// shortcut: a quarantine in the middle of a run still fails (code 127), sign the exe if it gets frequent.
+func sautSiDefender(t *testing.T, msg string) {
+	if runtime.GOOS == "windows" && strings.Contains(msg, "virus") {
+		t.Skip("Windows Defender quarantined the test executable (false positive): " + strings.TrimSpace(msg))
+	}
+}
+
+// sautSiQuarantaine is called before reporting a failed check: a quarantine of the bench's executable during a
+// pilot run can make that run stop early without an error of its own, and only the next launch shows it.
+func sautSiQuarantaine(t *testing.T, bin string) {
+	f, err := os.Open(bin)
+	if err == nil {
+		_, err = f.Read(make([]byte, 1))
+		f.Close()
+	}
+	if err != nil {
+		sautSiDefender(t, err.Error())
+	}
 }
 
 func TestBancPilote(t *testing.T) {
@@ -529,7 +597,9 @@ func TestBancPilote(t *testing.T) {
 		binTemp += ".exe"
 	}
 	if _, err := exec.LookPath("go"); err == nil {
-		if out, err := exec.Command("go", "build", "-o", binTemp, ".").CombinedOutput(); err != nil {
+		// stripped like the release builds: Windows Defender quarantines some unstripped builds (false positive)
+		if out, err := exec.Command("go", "build", "-ldflags=-s -w", "-o", binTemp, ".").CombinedOutput(); err != nil {
+			sautSiDefender(t, string(out))
 			t.Fatalf("go build failed: %v\n%s", err, string(out))
 		}
 	} else {
@@ -577,12 +647,13 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
 		}
 		verifier(strings.Join(etatsStats, ",") == "1:ok,2:ok,3:ok,4:ok", "stats.tsv cycles/states: %v", etatsStats)
-		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE") && etat.Cycle == 4 && etat.DemandesEnAttente == 0, "STATE.json: %+v", etat)
+		verifier(etat.Phase == "termine" && strings.HasPrefix(etat.Etat, "DONE") && etat.Cycle == 4 && etat.DemandesEnAttente == 0, "STATE.json: %+v", etat)
 		verifier(len(commits) >= 3 && commits[0] == "M3: extra request delivered", "git commits: %v", commits)
 		verifier(strings.TrimSpace(string(helloB)) == "Hello Athanor\nExtra feature", "hello.txt: %q", helloB)
 		verifier(strings.Contains(string(rapB), "STATUS: DONE"), "FINAL_REPORT.md: %q", rapB)
@@ -632,6 +703,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -640,7 +712,7 @@ func TestBancPilote(t *testing.T) {
 		verifier(strings.Join(modelesStats, ",") == "opus-principal,opus-principal,sonnet-secours", "stats models: %v", modelesStats)
 		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "relay_seen")), "relay notes not passed to cycle 2")
 		verifier(strings.TrimSpace(string(fbB)) == "sonnet-secours", "fallback model not used on cycle 3: %q", fbB)
-		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		verifier(etat.Phase == "termine" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}
@@ -668,6 +740,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -719,6 +792,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -771,6 +845,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -808,6 +883,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -852,6 +928,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -891,6 +968,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}

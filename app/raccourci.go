@@ -2,7 +2,7 @@ package main
 
 // A shortcut to the installed Athanor (the copy kept in Athanor's folder, embarque.go), wherever the user
 // wants it: the downloaded file installs Athanor and can be thrown away; the shortcut opens the installed
-// one, which updates itself. Windows: an Athanor.lnk (the Desktop by default); Linux: an athanor.desktop
+// one, which updates itself. Windows: an "Athanor Hub.lnk" (an older Athanor.lnk renamed) (the Desktop by default); Linux: an athanor.desktop
 // (the desktop by default, and always the applications menu); macOS: an Athanor.app that opens the
 // installed Athanor (Applications by default).
 //
@@ -144,7 +144,7 @@ func echapperExecDesktop(p string) string {
 
 // entreeDesktop: Athanor's .desktop entry.
 func entreeDesktop(exe, kit, icone string) string {
-	e := "[Desktop Entry]\nType=Application\nName=Athanor\nGenericName=Claude Code, project after project\nComment=Claude Code building whole projects\n" +
+	e := "[Desktop Entry]\nType=Application\nName=Athanor Hub\nGenericName=Claude Code, project after project\nComment=Claude Code building whole projects\n" +
 		"Exec=" + echapperExecDesktop(exe) + "\nPath=" + kit + "\nTerminal=false\nCategories=Development;\nStartupNotify=true\n"
 	if icone != "" {
 		e += "Icon=" + icone + "\n"

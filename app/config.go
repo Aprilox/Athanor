@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
+	"testing"
 )
 
 type Config struct {
@@ -19,19 +21,34 @@ type Config struct {
 	BureauVirtuel             bool     `json:"bureau_virtuel"`
 	ProgrammesSupplementaires string   `json:"programmes_supplementaires"`
 	MotDePasseHash            string   `json:"mot_de_passe_hash,omitempty"`
-	Sel                       string   `json:"sel,omitempty"`
-	Port                      int      `json:"port"`
-	Langue                    string   `json:"langue"` // "" = never chosen (welcome wizard)
-	Theme                     string   `json:"theme"`  // interface palette (see themesConnus)
-	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
-	BienvenueVue              bool     `json:"bienvenue_vue"`
+	// M271: Settings › Permissions, the default mode by use ("assistant": a server's terminal assistant, "missions")
+	PermissionsUsage map[string]string `json:"permissions_usage,omitempty"`
+	Sel              string            `json:"sel,omitempty"`
+	Port             int               `json:"port"`
+	Langue           string            `json:"langue"` // "" = never chosen (welcome wizard)
+	Theme            string            `json:"theme"`  // interface palette (see themesConnus)
+	Accent           string            `json:"accent"` // interface accent color (see accentsConnus)
+	BienvenueVue     bool              `json:"bienvenue_vue"`
+	HubVu            bool              `json:"hub_vu,omitempty"` // the one-line hub tour was dismissed
+	// the modules whose tour was shown (Module.Tutoriel: once, then from the Guide)
+	Tours map[string]bool `json:"tours,omitempty"`
 	// native Windows mode: the pilot is Athanor.exe and Claude Code the Windows program, without
 	// WSL nor sandbox (natif_windows.go)
 	ModeNatif bool `json:"mode_natif"`
+	// native Windows mode: no reminder nor password before forcing a Servers task (the owner's choice,
+	// logged at each forcing; infra entries, prod and destructive steps keep their own decision)
+	SansRappelsNatif bool   `json:"sans_rappels_natif,omitempty"`
+	VerrouAuto       string `json:"verrou_auto,omitempty"` // auto-lock: 15m | 1h ("" = 1h) | 8h | fermeture | jamais
 	// the programs on Claude's desktop are heard while a pilot runs (bureau_calme_windows.go; muted by default)
 	EntendreBureauClaude bool `json:"entendre_bureau_claude,omitempty"`
+	// the pilot's hidden console is shown, minimised and never activated (console_windows.go; off by default)
+	TerminalPilote bool `json:"terminal_pilote,omitempty"`
 	// no look for a new version of Athanor when it opens (maj.go; on by default)
 	PasVerifierMaj bool `json:"pas_verifier_maj,omitempty"`
+	// no launch animation before the home page (statique.go; on by default)
+	PasAnimation bool `json:"pas_animation,omitempty"`
+	// local network discovery (hub_mdns.go): off by default, turned on by the owner only
+	MDNS bool `json:"mdns,omitempty"`
 	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
 	FinsVues map[string]string `json:"fins_vues,omitempty"`
 	// remote access: on or off, its local port, the trusted devices (distance.go; hashes of keys only)
@@ -54,6 +71,11 @@ func cheminConfig() string {
 	if runtime.GOOS != "windows" {
 		nom = "athanor-config-" + runtime.GOOS + ".json"
 	}
+	if testing.Testing() {
+		// next to the test binary, it made that folder an "old installation" (dossierAthanor) for every later
+		// test of the process, whatever their own LocalAppData (B52, M214): the data folder instead
+		return filepath.Join(dossierAthanorDefaut(), nom)
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nom
@@ -62,15 +84,16 @@ func cheminConfig() string {
 }
 
 // configNeuve: no configuration file yet (a first launch): native Windows is then the default mode, since
-// it needs nothing installed, unless this kit already has its WSL installation (nouveauServeur).
-var configNeuve bool
+// it needs nothing installed, unless this kit already has its WSL installation (nouveauServeur). The last
+// read decides: a test that read no file must not turn the next ones into first launches.
+var configNeuve atomic.Bool
 
 func lireConfig() Config {
 	c := configDefaut()
-	if b, err := os.ReadFile(cheminConfig()); err == nil {
+	b, err := os.ReadFile(cheminConfig())
+	configNeuve.Store(os.IsNotExist(err))
+	if err == nil {
 		_ = json.Unmarshal(b, &c)
-	} else if os.IsNotExist(err) {
-		configNeuve = true
 	}
 	// folders saved by older versions with a final dot or space ("montre3."): Windows drops it, Linux keeps
 	// it, so the pilot would have worked in another folder than the one shown in Explorer
@@ -103,6 +126,7 @@ func ecrireConfig(c Config) error {
 	}
 	// written aside then renamed: a crash never leaves half a file (the project list would be lost)
 	f := cheminConfig()
+	_ = os.MkdirAll(filepath.Dir(f), 0o700) // under tests, a data folder not made yet
 	t, err := os.CreateTemp(filepath.Dir(f), ".athanor-config-*.tmp")
 	if err != nil {
 		return err

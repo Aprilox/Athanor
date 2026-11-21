@@ -1,0 +1,46 @@
+@@sudo
+@@os
+NAME="Alpine Linux"
+ID=alpine
+VERSION_ID=3.20.3
+PRETTY_NAME="Alpine Linux v3.20"
+@@uname
+petit
+6.6.54-0-virt
+aarch64
+@@cpu
+1
+@@memoire
+MemTotal:         493212 kB
+MemFree:          301220 kB
+@@disque
+/dev/sda3              3955128    612340   3120564  16% /
+@@allume
+512.00 480.11
+@@ports-netstat
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      -
+tcp        0      0 :::22                   :::*                    LISTEN      -
+tcp        0      0 0.0.0.0:2019            0.0.0.0:*               LISTEN      2214/caddy
+udp        0      0 0.0.0.0:123             0.0.0.0:*                           -
+@@logiciels
+docker|
+k3s|
+kubectl|
+nginx|
+caddy|/usr/sbin/caddy|v2.8.4 h1:q3pe0wpBj1OcHFZ3n/1nl4V4bxBrYoSoab7rL9BMYNk=
+ufw|
+compose|
+@@pare-feu
+@@services-openrc
+Runlevel: default
+ caddy                                                             [  started  ]
+ chronyd                                                           [  started  ]
+ crond                                                             [  stopped  ]
+ sshd                                                              [  started  ]
+Dynamic Runlevel: hotplugged
+Dynamic Runlevel: needed/wanted
+ sysfs                                                             [  started  ]
+@@conteneurs
+@@fin

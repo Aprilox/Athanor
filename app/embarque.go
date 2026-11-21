@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // kitEmbarque: this executable carries the kit's files (a build of "athanor construire" or a release).
@@ -49,6 +50,9 @@ func ecrireAtomique(dest string, contenu []byte, mode os.FileMode) error {
 		return err
 	}
 	_, err = t.Write(contenu)
+	if err == nil {
+		err = t.Sync() // on disk before the rename: a power cut never leaves dest (the vault, the config) empty
+	}
 	if e := t.Close(); err == nil {
 		err = e
 	}
@@ -56,7 +60,13 @@ func ecrireAtomique(dest string, contenu []byte, mode os.FileMode) error {
 		err = os.Chmod(t.Name(), mode)
 	}
 	if err == nil {
-		if err = os.Rename(t.Name(), dest); err != nil && runtime.GOOS == "windows" {
+		err = os.Rename(t.Name(), dest)
+		// Windows refuses the rename while a reader holds dest open (a page polling it): retry briefly
+		for i := 0; err != nil && runtime.GOOS == "windows" && i < 20; i++ {
+			time.Sleep(25 * time.Millisecond)
+			err = os.Rename(t.Name(), dest)
+		}
+		if err != nil && runtime.GOOS == "windows" {
 			ancien := dest + ".ancien"
 			_ = os.Remove(ancien)
 			if os.Rename(dest, ancien) == nil {
@@ -485,9 +495,9 @@ func texteFermerAvantMiseAJour(ancienne string) (string, string) {
 
 func texteEchecInstallation(d string, err error) (string, string) {
 	if langueSysteme() == "fr" {
-		return "Athanor", fmt.Sprintf("Impossible de préparer le dossier d'Athanor :\n\n    %s\n\n%v", d, err)
+		return "Athanor Hub", fmt.Sprintf("Impossible de préparer le dossier d'Athanor :\n\n    %s\n\n%v", d, err)
 	}
-	return "Athanor", fmt.Sprintf("Athanor's folder could not be prepared:\n\n    %s\n\n%v", d, err)
+	return "Athanor Hub", fmt.Sprintf("Athanor's folder could not be prepared:\n\n    %s\n\n%v", d, err)
 }
 
 func texteMiseAJourReportee(projets []string) (string, string) {

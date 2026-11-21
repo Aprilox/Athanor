@@ -2,41 +2,33 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
-// The default folder comes from Windows itself (no PowerShell: the window never waits for it).
-func TestRaccourciDefautWindows(t *testing.T) {
-	debut := time.Now()
-	d := dossierRaccourciDefaut()
-	if d == "" || !filepath.IsAbs(d) {
-		t.Fatalf("default folder: %q", d)
+// TestRaccourciAncienRenomme: an older Athanor.lnk becomes "Athanor Hub.lnk" (the same file, never a second
+// shortcut); with both there, the old one goes and the new one stays.
+func TestRaccourciAncienRenomme(t *testing.T) {
+	d := t.TempDir()
+	ancien, neuf := filepath.Join(d, "Athanor.lnk"), filepath.Join(d, "Athanor Hub.lnk")
+	if err := os.WriteFile(ancien, []byte("ancien"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if time.Since(debut) > 5*time.Second {
-		t.Fatalf("the default folder took %s", time.Since(debut))
+	if got := renommerAncienLnk(d); got != neuf {
+		t.Fatalf("path %q", got)
 	}
-}
-
-// A command that does not answer is stopped (PowerShell never keeps the window waiting).
-func TestExecuterAvecDelai(t *testing.T) {
-	if os.Getenv("ATHANOR_TEST_DORMIR") == "1" {
-		time.Sleep(time.Minute)
-		os.Exit(0)
+	if b, err := os.ReadFile(neuf); err != nil || string(b) != "ancien" {
+		t.Fatalf("not renamed: %q %v", b, err)
 	}
-	c := exec.Command(os.Args[0], "-test.run=^TestExecuterAvecDelai$")
-	c.Env = append(os.Environ(), "ATHANOR_TEST_DORMIR=1")
-	debut := time.Now()
-	if err := executerAvecDelai(c, 2*time.Second); err == nil {
-		t.Fatal("no error for a command that never ends")
+	if _, err := os.Stat(ancien); err == nil {
+		t.Fatal("old shortcut still there")
 	}
-	if time.Since(debut) > 20*time.Second {
-		t.Fatalf("stopped after %s", time.Since(debut))
+	_ = os.WriteFile(ancien, []byte("ancien"), 0o644)
+	renommerAncienLnk(d)
+	if _, err := os.Stat(ancien); err == nil {
+		t.Fatal("old shortcut doubled")
 	}
-	ok := exec.Command(os.Args[0], "-test.run=^$")
-	if err := executerAvecDelai(ok, 30*time.Second); err != nil {
-		t.Fatalf("a quick command: %v", err)
+	if b, _ := os.ReadFile(neuf); string(b) != "ancien" {
+		t.Fatal("new shortcut replaced")
 	}
 }

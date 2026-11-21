@@ -1,6 +1,6 @@
 package main
 
-// athanor hook fichiers ALLOWED… [--lecture=DIR…] | hook bash: the PreToolUse hooks of Claude's tools
+// athanor hook fichiers ALLOWED... [--lecture=DIR...] [--sans-secrets] | hook bash: the PreToolUse hooks of Claude's tools
 // (replace system/guard.py and system/bash_guard.py, same decisions and messages). Exit code 2 = the
 // action is refused and Claude reads why on stderr; any unreadable input lets the call through, as the
 // scripts did (a hook never blocks Claude by accident).
@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -277,8 +278,11 @@ var reLecteurWindows = regexp.MustCompile(`^[A-Za-z]:[\\/]`)
 // gardeFichiers: "" when the call may go on, else the reason it is refused.
 func gardeFichiers(args []string, entree []byte) string {
 	var racines, lecture []string
+	sansSecrets := false // the chat: never a secrets file (.env, .env.*, secrets.env), even to read it
 	for _, r := range args {
-		if strings.HasPrefix(r, "--lecture=") {
+		if r == "--sans-secrets" {
+			sansSecrets = true
+		} else if strings.HasPrefix(r, "--lecture=") {
 			lecture = append(lecture, propreGarde(windowsGarde(strings.TrimPrefix(r, "--lecture="))))
 		} else {
 			racines = append(racines, propreGarde(windowsGarde(r)))
@@ -311,8 +315,18 @@ func gardeFichiers(args []string, entree []byte) string {
 	if len(candidats) == 0 && (outil == "Glob" || outil == "Grep") {
 		candidats = append(candidats, base)
 	}
+	if sansSecrets && (outil == "Glob" || outil == "Grep") {
+		for _, cle := range []string{"glob", "path", "pattern"} {
+			if v, ok := param[cle].(string); ok && (cle != "pattern" || outil == "Glob") && viseSecretsGarde(v) {
+				return "Refused by the guard: a search never targets a secrets file (.env, secrets.env) or .athanor in the chat."
+			}
+		}
+	}
 	for _, c := range candidats {
 		chemin := normaliserGarde(c, base)
+		if n := strings.ToLower(chemin[strings.LastIndexAny(chemin, `/\`)+1:]); sansSecrets && (n == ".env" || strings.HasPrefix(n, ".env.") || strings.HasPrefix(n, "secrets.env")) {
+			return "Refused by the guard: a secrets file is never read in the chat."
+		}
 		if !outilsEcriture[outil] && dedansGarde(chemin, lecture) {
 			continue
 		}
@@ -332,6 +346,43 @@ func gardeFichiers(args []string, entree []byte) string {
 		}
 	}
 	return ""
+}
+
+// viseSecretsGarde: a search path or glob pattern (Grep's glob and path, Glob's pattern) aimed at a secrets
+// file or at .athanor: a part naming one ("*.env", "secrets.*", ".ath*", "{a,.env}"); a part made of wildcards
+// only ("*", "**") aims at nothing in particular.
+func viseSecretsGarde(motif string) bool {
+	m := strings.ToLower(motif)
+	if strings.Contains(m, ".env") || strings.Contains(m, "secrets.env") || strings.Contains(m, ".athanor") {
+		return true
+	}
+	for _, v := range accoladesGarde(m) {
+		for _, partie := range strings.FieldsFunc(v, func(r rune) bool { return r == '/' || r == '\\' }) {
+			if strings.Trim(partie, "*?") == "" {
+				continue
+			}
+			for _, n := range []string{".env", ".env.local", "secrets.env", "secrets.env.old", ".athanor"} {
+				if ok, _ := path.Match(partie, n); ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// accoladesGarde: "a{b,c}d" → "abd", "acd" (glob braces, nested ones by recursion).
+func accoladesGarde(m string) []string {
+	i := strings.Index(m, "{")
+	j := strings.Index(m[max(i, 0):], "}") + max(i, 0)
+	if i < 0 || j <= i {
+		return []string{m}
+	}
+	var r []string
+	for _, choix := range strings.Split(m[i+1:j], ",") {
+		r = append(r, accoladesGarde(m[:i]+choix+m[j+1:])...)
+	}
+	return r
 }
 
 // ---------------------------------------------------------------- the Bash tool (bash_guard.py)
@@ -405,7 +456,7 @@ func gardeBash(entree []byte) string {
 
 func lancerHook(args []string) int {
 	if len(args) == 0 || (args[0] != "fichiers" && args[0] != "bash") {
-		fmt.Fprintln(os.Stderr, "usage: athanor hook fichiers ALLOWED... [--lecture=DIR...] | hook bash  (PreToolUse input on stdin)")
+		fmt.Fprintln(os.Stderr, "usage: athanor hook fichiers ALLOWED... [--lecture=DIR...] [--sans-secrets] | hook bash  (PreToolUse input on stdin)")
 		return 2
 	}
 	entree, err := io.ReadAll(io.LimitReader(os.Stdin, 64<<20))

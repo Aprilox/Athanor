@@ -118,7 +118,7 @@ func DemarrageWindows(actif bool) error {
 		}
 		return os.WriteFile(f, []byte(agentLancementMac(exe)), 0o644)
 	}
-	entree := "[Desktop Entry]\nType=Application\nName=Athanor\nComment=Claude Code building whole projects\nExec=\"" +
+	entree := "[Desktop Entry]\nType=Application\nName=Athanor Hub\nComment=Claude Code building whole projects\nExec=\"" +
 		strings.ReplaceAll(exe, `"`, `\"`) + "\"\nPath=" + filepath.Dir(exe) + "\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
 	return os.WriteFile(f, []byte(entree), 0o644)
 }

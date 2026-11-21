@@ -45,6 +45,15 @@ func lancerTesterCage(args []string) int {
 	_ = os.MkdirAll(filepath.Join(kit, "tools"), 0o755)
 	_ = os.Setenv("PROJECT", projet)
 	silencieux := func(a ...string) *exec.Cmd { c := commande(exe, a...); c.Dir = kit; return c }
+	// I4: Athanor's own data (hub/: vault, approvals, journal; modules/) must stay out of the pilot's reach;
+	// the folders exist before the settings are written, so that they are denied by name
+	var sondesI4 []string
+	for _, d := range donneesAthanor(kit, true) {
+		if b := filepath.Base(d); b == "hub" || b == "modules" {
+			_ = os.MkdirAll(d, 0o700)
+			sondesI4 = append(sondesI4, filepath.Join(d, "sonde-barriere"))
+		}
+	}
 	_ = silencieux("detecter", kit).Run()
 	reglages := filepath.Join(projet, ".athanor", "claude_settings.json")
 	_ = silencieux("reglages", kit, reglages).Run()
@@ -81,7 +90,7 @@ func lancerTesterCage(args []string) int {
 		}
 	}
 	dedans := filepath.Join(projet, "sonde-dedans")
-	for _, f := range []string{dehors, win, dedans} {
+	for _, f := range append([]string{dehors, win, dedans}, sondesI4...) {
 		if f != "" {
 			_ = os.Remove(f)
 		}
@@ -96,6 +105,9 @@ func lancerTesterCage(args []string) int {
 		"touch " + dehors + "\n" +
 		ligneWin + "\n" +
 		"cat " + secret + "\n"
+	for _, f := range sondesI4 {
+		consigne += "touch " + f + "\n"
+	}
 	if wsl {
 		consigne += "cmd.exe /c \"echo %COMPUTERNAME%\"\n"
 	}
@@ -127,6 +139,9 @@ func lancerTesterCage(args []string) int {
 	if win != "" {
 		res(!existe(win), "writing on the Windows drive: blocked", "WRITE ON THE WINDOWS DRIVE SUCCEEDED ("+win+")")
 	}
+	for _, f := range sondesI4 {
+		res(!existe(f), "writing in Athanor's data ("+filepath.Base(filepath.Dir(f))+"/): blocked", "WRITE IN ATHANOR'S DATA SUCCEEDED ("+f+")")
+	}
 	res(!strings.Contains(string(journal), canari), "reading your files: blocked", "READ OF A FILE OUTSIDE THE PROJECT SUCCEEDED")
 	if nomPC != "" {
 		res(!strings.Contains(string(journal), nomPC), "launching cmd.exe from the sandbox: blocked", "CMD.EXE LAUNCHED FROM THE SANDBOX (seccomp filter MISSING?)")
@@ -139,7 +154,7 @@ func lancerTesterCage(args []string) int {
 			"THE BRIDGE COULD NOT LAUNCH BLENDER (see "+sonde+")")
 		_ = os.Remove(sonde)
 	}
-	for _, f := range []string{dedans, dehors, win, secret} {
+	for _, f := range append([]string{dedans, dehors, win, secret}, sondesI4...) {
 		if f != "" {
 			_ = os.Remove(f)
 		}

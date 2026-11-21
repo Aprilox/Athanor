@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"fmt"
 	"html"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -105,7 +104,7 @@ func informer(titre, texte string) {
 // consentementNavigateur: the question in a page of the default browser, served from memory on 127.0.0.1
 // (a random address, closed after the answer). False, false: no browser could be opened.
 func consentementNavigateur(titre, texte, oui, non string) (bool, bool) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := ecouterLocal(0)
 	if err != nil {
 		return false, false
 	}

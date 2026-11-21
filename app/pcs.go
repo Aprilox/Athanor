@@ -195,6 +195,10 @@ func gitDistantGH(d, miroir string, r reglagesGH, args ...string) (string, error
 			a = append(a, x)
 		}
 		out, e := gmGH(miroir, nil, a...).CombinedOutput()
+		for essai := 1; e != nil && essai < 4 && reVerrouGH.Match(out); essai++ {
+			time.Sleep(time.Duration(essai) * 300 * time.Millisecond)
+			out, e = gmGH(miroir, nil, a...).CombinedOutput()
+		}
 		sortie, err = strings.TrimRight(string(out), "\n"), e
 		if err == nil || !reReseauGH.MatchString(sortie) {
 			break

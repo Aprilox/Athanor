@@ -17,12 +17,26 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    # the tag is the version the executables say they are (app/commandes.go): otherwise every Athanor that
+    # updates to it would still read an older version than the latest release and offer the same update again
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag is the code's version
+        run: |
+          code=$(sed -n 's/^const versionAthanor = "\(.*\)"$/\1/p' app/commandes.go)
+          if [ -z "$code" ] || [ "v$code" != "$GITHUB_REF_NAME" ]; then
+            echo "::error title=Tag and version differ::tag $GITHUB_REF_NAME, versionAthanor \"$code\" in app/commandes.go"
+            exit 1
+          fi
+
   checks:
     # the whole CI on the tagged commit, on the three systems
     uses: ./.github/workflows/ci.yml
 
   build:
-    needs: checks
+    needs: [version, checks]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,7 +137,7 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: Athanor ${{ env.VERSION }}
+          name: Athanor Hub ${{ env.VERSION }}
           generate_release_notes: true
           body_path: release.md
           files: |
@@ -137,7 +151,7 @@ jobs:
   cancel:
     # a check, the build, the Mac's signature or the publishing failed (or the run was cancelled): no version
     # stays behind, neither the release nor its tag
-    needs: [checks, build, mac, publish]
+    needs: [version, checks, build, mac, publish]
     if: ${{ failure() || cancelled() }}
     runs-on: ubuntu-latest
     env:

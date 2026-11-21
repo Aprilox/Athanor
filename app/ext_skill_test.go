@@ -14,7 +14,7 @@ func kitSkillEssai(t *testing.T) (kit, d string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("bash and python3 as on Linux")
 	}
-	for _, p := range []string{"bash", "python3", "git"} {
+	for _, p := range []string{"bash", "python3", "node", "git"} {
 		if trouverProgramme(p) == "" {
 			t.Skip(p)
 		}

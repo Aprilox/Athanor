@@ -215,13 +215,20 @@ func construireReglages(kitArg, sortie string) error {
 	sandbox.mettre("autoAllowBashIfSandboxed", true)
 	sandbox.mettre("allowUnsandboxedCommands", false)
 	sandbox.mettre("excludedCommands", exclus)
-	var fs objetJSON
-	fs.mettre("allowWrite", []string{tools})
-	fs.mettre("denyRead", []string{"~/", "/mnt"})
 	// and the kit's executable: Claude's own commands (athanor screenshots, map, todo…) run it in the sandbox
-	fs.mettre("allowRead", append(append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...), joinOS(kit, "athanor")))
-	sandbox.mettre("filesystem", fs)
-	sandbox.mettre("network", map[string]any{"allowedDomains": []string{"*"}})
+	// A8: the other projects' secrets.env, readable otherwise when they sit outside ~/ and /mnt
+	var autres []string
+	for _, p := range lireConfig().Projets {
+		if d := realpathPython(cheminReglages(p.Dossier)); p.Dossier != "" && !ensemble[d] && d != projet {
+			autres = append(autres, joinOS(d, ".athanor", "secrets.env"))
+		}
+	}
+	sandbox.mettre("filesystem", filesystemBarriere(kit, tools, append(append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...), joinOS(kit, "athanor")), autres...))
+	reseau := map[string]any{"allowedDomains": []string{"*"}}
+	if runtime.GOOS == "darwin" { // Seatbelt: without it curl and git cannot check a TLS certificate (curl exit 60)
+		reseau["allowMachLookup"] = []string{"com.apple.TrustEvaluationAgent"}
+	}
+	sandbox.mettre("network", reseau)
 	var creds []map[string]string
 	for _, v := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"} {
 		creds = append(creds, map[string]string{"mode": "deny", "name": v})
@@ -365,11 +372,22 @@ func reglagesChat(projet, sortie string) error { return reglagesChatInternet(pro
 
 // reglagesChatInternet: the chat's settings; internet: WebSearch and WebFetch let through (the user switched
 // Internet on for this message).
-func reglagesChatInternet(projet, sortie string, internet bool) error {
-	commande := ligneShell(exeHook(), "hook", "fichiers", projet)
-	if runtime.GOOS == "windows" {
-		commande = ligneShell(exeHook(), "hook", "fichiers", strings.ReplaceAll(projet, "\\", "/"))
+func reglagesChatInternet(projet, sortie string, internet bool, dossiers ...DossierChat) error {
+	// the files guard: the project, the folders pointed read and write; the others read only; never a secrets file
+	gardes := []string{"hook", "fichiers", "--sans-secrets", projet}
+	for _, d := range dossiers {
+		if d.Ecriture {
+			gardes = append(gardes, d.Chemin)
+		} else {
+			gardes = append(gardes, "--lecture="+d.Chemin)
+		}
 	}
+	if runtime.GOOS == "windows" {
+		for i := range gardes {
+			gardes[i] = strings.ReplaceAll(gardes[i], "\\", "/")
+		}
+	}
+	commande := ligneShell(append([]string{exeHook()}, gardes...)...)
 	var h objetJSON
 	h.mettre("type", "command")
 	h.mettre("timeout", 10)
@@ -382,6 +400,8 @@ func reglagesChatInternet(projet, sortie string, internet bool) error {
 	if internet {
 		interdits = []string{"Bash", "NotebookEdit"}
 	}
+	// the secrets files stay out of reach of every reading tool too (Grep, Glob), whatever the folder
+	interdits = append(interdits, "Read(**/.env)", "Read(**/.env.*)", "Read(**/secrets.env)", "Read(**/secrets.env.*)")
 	r.mettre("permissions", map[string]any{"deny": interdits})
 	r.mettre("hooks", map[string]any{"PreToolUse": []objetJSON{c}})
 	r.mettre("includeCoAuthoredBy", false)
@@ -422,4 +442,22 @@ func lancerChatOutil(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// filesystemBarriere: the files Claude's sandbox (bubblewrap in WSL and Linux, Seatbelt on macOS) lets the
+// pilot write and read: tools/ (and the project, its folder), never the home nor the Windows drives, except
+// the folders it reads.
+func filesystemBarriere(kit, tools string, lectures []string, interdits ...string) objetJSON {
+	var fs objetJSON
+	fs.mettre("allowWrite", []string{tools})
+	// I4: Athanor's data stays out of reach even if a project or tools/ were to contain it (the pilot reads its
+	// own hub-jeton only through its MCP relay, which runs outside the sandbox).
+	// shortcut: allowRead wins over denyRead, so a project folder containing Athanor's folder could still read (not write) it; refuse such a project if users pick one.
+	proteges := donneesAthanor(kit, false)
+	if len(proteges) > 0 {
+		fs.mettre("denyWrite", proteges)
+	}
+	fs.mettre("denyRead", append(append([]string{"~/", "/mnt"}, proteges...), interdits...))
+	fs.mettre("allowRead", lectures)
+	return fs
 }

@@ -3,22 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Athanor</title>
+<title>Athanor Hub</title>
 <meta name="csrf" content="__CSRF__">
+<meta name="lancement" content="__LANCEMENT__">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icone-180.png">
 <meta name="theme-color" content="#121a24">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Athanor">
+<meta name="apple-mobile-web-app-title" content="Athanor Hub">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<!-- launch animation: shown by splash.js once per launch of Athanor, skipped by a click or a key -->
+<div id="splash" class="splash" hidden aria-hidden="true">
+  <svg class="splash-logo" viewBox="0 0 256 256" width="112" height="112">
+    <rect class="splash-tuile" x="8" y="8" width="240" height="240" rx="56"/>
+    <path class="splash-anneau" pathLength="100" d="M 186 79 A 76 76 0 1 0 204 128"/>
+    <path class="splash-fleche" d="M 184 136 L 224 136 L 204 104 Z"/>
+    <path class="splash-a" pathLength="100" d="M 92 168 L 128 86 L 164 168"/>
+    <path class="splash-barre" pathLength="100" d="M 109 138 L 147 138"/>
+  </svg>
+  <div class="splash-nom">Athanor <b>Hub</b></div>
+</div>
+<script src="splash.js"></script>
 <header id="fenetre-barre" class="fb" hidden>
   <div class="fb-glisser">
     <img src="logo.svg" width="16" height="16" alt="" class="fb-logo" draggable="false">
-    <span class="fb-nom">Athanor</span>
+    <span class="fb-nom">Athanor Hub</span>
     <span class="fb-projet" id="fb-projet"></span>
   </div>
   <div class="fb-actions" id="fb-actions"></div>
@@ -32,56 +45,49 @@
   <div class="barre-mobile" id="barre-mobile">
     <button type="button" class="btn-menu" id="btn-menu" aria-label="Menu" aria-controls="nav-tiroir" aria-expanded="false"><span></span><span></span><span></span></button>
     <img src="logo.svg" width="24" height="24" alt="" class="marque-logo">
-    <span class="bm-titre" id="bm-titre">Athanor</span>
+    <span class="bm-titre" id="bm-titre">Athanor Hub</span>
   </div>
   <div class="voile-menu" id="voile-menu"></div>
   <aside class="nav" id="nav-tiroir">
     <div class="marque">
       <img src="logo.svg" width="30" height="30" alt="" class="marque-logo">
-      <div><div class="marque-nom">Athanor <button type="button" class="marque-version" id="nav-version" data-maj="ouvrir"></button></div><div class="marque-sous" id="nav-sous">—</div></div>
+      <div><div class="marque-nom">Athanor Hub <button type="button" class="marque-version" id="nav-version" data-maj="ouvrir"></button></div><div class="marque-sous" id="nav-sous">—</div></div>
     </div>
-    <nav id="nav-global">
-      <a href="#global" data-page="global">All projects</a>
-    </nav>
-    <div class="selecteur">
-      <button id="sel-projet" class="sel-projet" type="button" aria-haspopup="listbox"></button>
-      <div id="menu-projets" class="menu-projets" hidden></div>
-    </div>
-    <div class="nav-titre" id="nav-titre-projet">Project</div>
-    <nav id="nav-liens">
-      <a href="#suivi" data-page="suivi">Overview</a>
-      <a href="#equipe" data-page="equipe">Team</a>
-      <a href="#demandes" data-page="demandes">Requests</a>
-      <a href="#chat" data-page="chat">Chat</a>
-      <a href="#pourvous" data-page="pourvous">For you</a>
-      <a href="#journal" data-page="journal">Log</a>
-    </nav>
-    <div class="nav-titre" id="nav-titre-outil">Tool</div>
-    <nav id="nav-outil">
-      <a href="#extensions" data-page="extensions">Skills &amp; MCP</a>
-      <a href="#sante" data-page="sante">Setup &amp; health</a>
-      <a href="#distance" data-page="distance">Remote</a>
-      <a href="#reglages" data-page="reglages">Settings</a>
-      <a href="#guide" data-page="guide">Guide</a>
+    <!-- the one-level menu, rendered from /api/hub (Home, Projects and Settings only until it answers) -->
+    <nav id="nav-menu" aria-label="Menu">
+      <a href="#accueil" data-page="accueil" data-module="hub"><span class="ico ico-accueil" aria-hidden="true"></span><span class="nav-lib" data-libelle="Home">Home</span></a>
+      <a href="#global" data-page="global" data-module="hub"><span class="ico ico-projets" aria-hidden="true"></span><span class="nav-lib" data-libelle="Projects">Projects</span><span class="nb"></span></a>
     </nav>
     <div class="nav-pied">
-      <button id="btn-verrou" class="btn-fantome" type="button">🔒 Lock</button>
-      <div class="nav-kit" id="nav-kit"></div>
+      <nav id="nav-bas" aria-label="Settings"><a href="#reglages" data-module="reglages"><span class="ico ico-reglages" aria-hidden="true"></span><span class="nav-lib" data-libelle="Settings">Settings</span></a></nav>
+      <button id="btn-verrou" class="btn-fantome" type="button">Lock</button>
+      <span id="verrou-reste" class="muet petit verrou-reste" aria-live="off" hidden></span>
+      <button id="btn-urgence" class="btn-fantome btn-urgence" type="button">Emergency stop</button>
     </div>
   </aside>
 
   <main class="principal">
+    <!-- the module's pages: one line of tabs (Dev: with its project selector) -->
+    <div class="barre-onglets" id="barre-onglets" hidden>
+      <div class="selecteur" id="selecteur" hidden>
+        <button id="sel-projet" class="sel-projet" type="button" aria-haspopup="listbox"></button>
+        <div id="menu-projets" class="menu-projets" hidden></div>
+      </div>
+      <nav class="onglets-module" id="onglets-module"></nav>
+    </div>
+    <p class="bloc erreur coupure" id="coupure" role="alert" hidden></p>
     <header class="bandeau" id="bandeau"></header>
     <section class="page" id="page"></section>
-    <div class="toast" id="toast" hidden></div>
+    <div class="toast" id="toast" role="status" hidden></div>
   </main>
-  <div class="notifs" id="notifs" hidden></div>
+  <div class="notifs" id="notifs" hidden role="dialog" aria-labelledby="notifs-titre"></div>
 
   <div class="assistant" id="assistant" hidden></div>
   <div class="dialogue" id="dialogue" hidden role="dialog" aria-modal="true" aria-labelledby="dialogue-texte">
     <div class="dialogue-carte">
       <h3 id="dialogue-titre" hidden></h3>
       <p id="dialogue-texte"></p>
+      <input type="password" id="dialogue-mdp" class="champ-mdp" autocomplete="current-password" hidden>
       <div class="dialogue-boutons">
         <button type="button" class="btn" id="dialogue-annuler"></button>
         <button type="button" class="btn btn-primaire" id="dialogue-ok"></button>
@@ -99,11 +105,12 @@
     <div class="dialogue-carte">
       <h3 id="choix-titre" hidden></h3>
       <p id="choix-texte"></p>
+      <label class="case petit" id="choix-case" hidden><input type="checkbox"> <span></span></label>
       <div class="dialogue-boutons" id="choix-boutons"></div>
     </div>
   </div>
   <div class="visite-voile" id="visite-voile" hidden></div>
-  <div class="visite" id="visite" hidden></div>
+  <div class="visite" id="visite" hidden role="dialog" aria-labelledby="visite-titre"></div>
   <div class="dialogue dialogue-fermeture" id="fermeture" hidden role="alertdialog" aria-modal="true" aria-labelledby="fermeture-titre">
     <div class="dialogue-carte">
       <h3 id="fermeture-titre"></h3>
@@ -125,7 +132,18 @@
   </div>
   <div class="verrou" id="verrou" hidden>
     <div class="verrou-carte">
-      <div class="verrou-cadenas">🔒</div>
+      <div class="verrou-cadenas"><span class="cadenas" aria-hidden="true"></span></div>
+      <!-- second part of the opening scene (splash.js): the athanor waits for the password; decorative only -->
+      <svg class="verrou-scene" viewBox="0 0 256 256" width="112" height="112" aria-hidden="true">
+        <circle class="vs-lueur" cx="128" cy="128" r="70"/>
+        <rect class="splash-tuile" x="8" y="8" width="240" height="240" rx="56"/>
+        <path class="vs-anneau" d="M 186 79 A 76 76 0 1 0 204 128"/>
+        <path class="vs-fleche" d="M 184 136 L 224 136 L 204 104 Z"/>
+        <path class="vs-anse" pathLength="100" d="M 106 122 L 106 102 A 22 22 0 0 1 150 102 L 150 122"/>
+        <path class="vs-corps" pathLength="100" d="M 102 122 H 154 A 10 10 0 0 1 164 132 V 166 A 10 10 0 0 1 154 176 H 102 A 10 10 0 0 1 92 166 V 132 A 10 10 0 0 1 102 122 Z"/>
+        <path class="vs-trou" pathLength="100" d="M 128 142 L 128 156"/>
+      </svg>
+      <div class="splash-nom verrou-nom">Athanor <b>Hub</b></div>
       <h1 id="verrou-titre">Application locked</h1>
       <p id="verrou-etat"></p>
       <form id="verrou-form">

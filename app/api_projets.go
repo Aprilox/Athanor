@@ -11,28 +11,37 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type ProjetVue struct {
-	Nom      string  `json:"nom"`
-	Dossier  string  `json:"dossier"`
-	Existe   bool    `json:"existe"`
-	Actif    bool    `json:"actif"`
-	Phase    string  `json:"phase"`
-	Jalon    string  `json:"jalon"`
-	Attente  int     `json:"attente"`
-	PourVous int     `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
-	Courant  bool    `json:"courant"`
-	Fin      *FinVue `json:"fin,omitempty"`
-	Archive  bool    `json:"archive,omitempty"`
+	Nom     string `json:"nom"`
+	Dossier string `json:"dossier"`
+	Existe  bool   `json:"existe"`
+	Actif   bool   `json:"actif"`
+	Phase   string `json:"phase"`
+	Arret   string `json:"arret,omitempty"` // M315: stopped by the owner, and how (pause | arret | jalon)
+	Jalon   string `json:"jalon"`
+	// the title of the milestone in progress, when the plan has it (Jalon is what the pilot wrote)
+	JalonTitre  string   `json:"jalon_titre,omitempty"`
+	Attente     int      `json:"attente"`
+	PourVous    int      `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
+	idsPourVous []string // their ids, for the bell (hub_dev.go)
+	Courant     bool     `json:"courant"`
+	Fin         *FinVue  `json:"fin,omitempty"`
+	Archive     bool     `json:"archive,omitempty"`
 	// milestones unticked by the folder check, waiting for their files
 	AVerifier bool `json:"a_verifier,omitempty"`
 	// the plan's progress (the All projects page): milestones done, out of all of them
 	Faits  int `json:"faits,omitempty"`
 	Jalons int `json:"jalons,omitempty"`
+	// why the project needs the user, "" if it does not (besoinProjet, hub_dev.go)
+	Besoin string `json:"besoin,omitempty"`
+	// the grants of its current environment (the badge next to Start), current project only
+	Acces *ResumeAcces `json:"acces,omitempty"`
 	// a large request cut into stages: the stage under way, out of how many (etapesPlan)
 	Etape  int `json:"etape,omitempty"`
 	Etapes int `json:"etapes,omitempty"`
@@ -54,7 +63,7 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 		vues[k] = x
 	}
 	s.mu.Unlock()
-	v := []ProjetVue{}
+	v, relais := []ProjetVue{}, lireRelais()
 	for _, p := range projets {
 		pv := ProjetVue{Nom: p.Nom, Dossier: p.Dossier, Existe: p.Existe(), Actif: p.PiloteActif(), Courant: p.Nom == courant, Archive: p.Archive}
 		if p.Archive {
@@ -72,16 +81,24 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 				pv.Fin = &FinVue{Cle: e.Maj, Livre: projetLivre(p), Message: e.Etat}
 			}
 		}
+		if !pv.Actif && pv.Phase != "termine" { // a project that ended on its own since is finished, not stopped
+			pv.Arret = relais[p.Nom].Arret
+		}
 		pv.Attente = len(p.LireFileAttente())
-		pv.PourVous = p.PourVous()
+		pv.idsPourVous = p.IDsPourVous()
+		pv.PourVous = len(pv.idsPourVous)
 		plan := p.LirePlan()
 		for _, j := range plan {
 			pv.Jalons++
 			if j.Fait {
 				pv.Faits++
 			}
+			if pv.Jalon != "" && pv.JalonTitre == "" && (pv.Jalon == j.ID || strings.HasPrefix(pv.Jalon, j.ID+" ")) {
+				pv.JalonTitre = j.Titre
+			}
 		}
 		pv.Etape, pv.Etapes = etapesPlan(plan)
+		pv.Besoin = besoinProjet(pv)
 		s.surveillerRelance(p, pv.Actif) // "restart after the cycle" works for every project
 		s.changementsEnAttente(p, pv.Actif)
 		v = append(v, pv)
@@ -94,10 +111,13 @@ type EtatVue struct {
 	KitInstalle bool                  `json:"kit_installe"`
 	Kit         string                `json:"kit"`
 	Verrouille  bool                  `json:"verrouille"`
+	VerrouDans  int                   `json:"verrou_dans"` // seconds before the window locks itself, -1 = no timer
 	MotDePasse  bool                  `json:"mot_de_passe"`
+	ChangerMdp  bool                  `json:"changer_mdp,omitempty"` // unlocked with a password shorter than longueurMinMdp
 	Projets     []ProjetVue           `json:"projets"`
 	Projet      *ProjetVue            `json:"projet"`
 	Actif       bool                  `json:"actif"`
+	TacheActive bool                  `json:"tache_active"` // a Servers task runs: the lock screen says the work goes on
 	Etat        *Etat                 `json:"etat"`
 	Contexte    int64                 `json:"contexte"`
 	Plan        []Jalon               `json:"plan"`
@@ -111,6 +131,8 @@ type EtatVue struct {
 	Theme       string                `json:"theme"`
 	Accent      string                `json:"accent"`
 	Bienvenue   bool                  `json:"bienvenue"`
+	HubVu       bool                  `json:"hub_vu"`
+	Tours       map[string]bool       `json:"tours"`   // the modules whose tour was shown (config)
 	Version     string                `json:"version"` // Athanor's version (the sidebar, Settings › Options)
 	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
 	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
@@ -119,9 +141,12 @@ type EtatVue struct {
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
 	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
 	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
-	Eco         bool                  `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
-	Rapide      bool                  `json:"rapide,omitempty"` // the project's fast mode (.athanor/.env FAST=1)
-	Gains       *GainsVue             `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
+	Relais      *RelaisJalon          `json:"relais,omitempty"` // the dev deployment after the last milestone (M136)
+	// its work on its servers, step by step, beside its code milestones (nil without a server)
+	JalonsDeploiement []JalonDeploiement `json:"jalons_deploiement,omitempty"`
+	Eco               bool               `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
+	Rapide            bool               `json:"rapide,omitempty"` // the project's fast mode (.athanor/.env FAST=1)
+	Gains             *GainsVue          `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
@@ -147,8 +172,14 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	verrou := s.verrouillePour(r)
 	s.mu.Lock()
 	kit, mdp, courant := s.kitCourant(), s.config.MotDePasseHash != "", s.config.ProjetActif
-	langue, bienvenue := s.config.Langue, !s.config.BienvenueVue
+	changerMdp := s.mdpCourt && mdp && !verrou
+	langue, bienvenue, hubVu := s.config.Langue, !s.config.BienvenueVue, s.config.HubVu
 	theme, accent := s.config.Theme, s.config.Accent
+	verrouDans := secondesReste(s.resteVerrouAuto(horlogeVerrou()))
+	tours := map[string]bool{}
+	for id, vu := range s.config.Tours {
+		tours[id] = vu
+	}
 	if !languesConnues[langue] {
 		langue = "en"
 	}
@@ -156,8 +187,14 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	if nom := r.URL.Query().Get("p"); nom != "" {
 		courant = nom
 	}
-	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, Version: versionAthanor}
+	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, ChangerMdp: changerMdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Tours: tours, Version: versionAthanor}
 	vue.Distant = appareilDe(r) != ""
+	if vue.VerrouDans = -1; !vue.Distant && !verrou {
+		vue.VerrouDans = verrouDans
+	}
+	tachesEnCours.Lock()
+	vue.TacheActive = len(tachesEnCours.m) > 0
+	tachesEnCours.Unlock()
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
 	if !vue.Distant {
 		vue.DernierAppareil = s.dernierAppareil()
@@ -209,6 +246,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		for i := range vue.Projets {
 			if vue.Projets[i].Nom == p.Nom {
 				pv := vue.Projets[i]
+				pv.Acces = s.resumeAccesProjet(p)
 				vue.Projet = &pv
 			}
 		}
@@ -216,6 +254,8 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Plan = p.LirePlan()
 		vue.Attente = len(p.LireFileAttente())
 		vue.PourVous = p.PourVous()
+		vue.Relais = s.etatRelais(p.Nom)
+		vue.JalonsDeploiement = s.jalonsDeploiement(p.Nom)
 		vue.Stats = p.LireStats()
 		vue.Gains = calculerGains(vue.Stats, ponytailDansEnv(kit.Env()))
 		vue.Eco = p.EcoActif()
@@ -244,7 +284,8 @@ func (s *Serveur) apiJournal(w http.ResponseWriter, r *http.Request) {
 	if ev == nil {
 		ev = []Evenement{}
 	}
-	s.ecrireJSON(w, map[string]any{"evenements": ev, "contexte": contexte, "fichier": filepath.Base(fichier)})
+	// a vault value a command or its output showed stays masked, here as in the chat and the audit log (to the phone too)
+	s.ecrireJSONMasque(w, map[string]any{"evenements": ev, "contexte": contexte, "fichier": filepath.Base(fichier)})
 }
 
 // MembreVue: a member of the team that can be called, with its model and who may call it.
@@ -347,23 +388,27 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.PathValue("action") {
 	case "demarrer":
-		marqueAuto(p, true)
-		cle, err := s.demarrerPilote(p)
+		cle, err := s.demarrerPiloteAuto(p)
+		if err == nil || err.Error() == texteLivreRienDeNeuf { // delivered or not: a first deployment that failed goes again
+			s.reprendreDeploiement(p)
+		}
 		if err != nil {
-			if err.Error() == texteLivreRienDeNeuf {
-				marqueAuto(p, false) // nothing to restart when the application starts
+			code := http.StatusInternalServerError
+			if m := err.Error(); m == texteSansClaude || m == texteLivreRienDeNeuf { // a refusal the page explains, not a failure
+				code = http.StatusConflict
 			}
-			s.erreur(w, http.StatusInternalServerError, err.Error())
+			s.erreur(w, code, err.Error())
 			return
 		}
 		s.msg(w, cle)
 		return
-	case "arreter":
+	case "arreter", "pause": // M250: a project's pilot paused is stopped now; Start picks it up where it stopped
+		err = s.arreterProjet(p, r.PathValue("action"))
+	case "arreter-apres-cycle": // M250: "finish the milestone in progress" (a cycle ends with its milestone)
 		marqueAuto(p, false)
-		sortie, err = s.arreterPiloteProjet(p)
-	case "arreter-apres-cycle":
-		marqueAuto(p, false)
-		sortie, err = s.arreterApresCycle(p)
+		if sortie, err = s.demanderArretApresCycle(p); err == nil {
+			noterArret(p.Nom, "jalon")
+		}
 	case "redemarrer-apres-cycle":
 		s.mu.Lock()
 		s.relancer[p.Nom] = true
@@ -374,6 +419,7 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		delete(s.relancer, p.Nom)
 		s.mu.Unlock()
 		err = retirerStop(p)
+		noterArret(p.Nom, "")
 		if err == nil && p.PiloteActif() {
 			marqueAuto(p, true)
 		}
@@ -390,6 +436,8 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("action") {
 	case "arreter":
 		s.msg(w, "The pilot is stopped.")
+	case "pause":
+		s.msg(w, "The pilot is paused: Start picks it up where it stopped.")
 	case "arreter-apres-cycle":
 		s.msg(w, "The pilot will stop at the end of this cycle: nothing is lost.")
 	case "redemarrer-apres-cycle":
@@ -422,66 +470,78 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.Nom, c.Dossier = strings.TrimSpace(c.Nom), strings.TrimSpace(c.Dossier)
-	if !reNomProjet.MatchString(c.Nom) {
-		s.erreur(w, http.StatusBadRequest, "Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
+	p, code, err := s.ajouterProjet(c.Nom, c.Dossier, c.Demande, c.Rejoindre)
+	if err != nil {
+		s.erreur(w, code, err.Error())
 		return
 	}
-	if !filepath.IsAbs(c.Dossier) {
-		s.erreur(w, http.StatusBadRequest, "Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
-		return
+	s.ecrireJSON(w, map[string]any{"message_key": "Project “{0}” added.", "args": []string{p.Nom}, "nom": p.Nom})
+}
+
+// ajouterProjet: a new project nom in folder brut (checked: absolute, not a system or kit folder, not another
+// project's), with demande as its first request when its workshop has none; it becomes the active project.
+// code: the HTTP answer of err. rejoindre: joining the computers of a project (a new or empty folder).
+func (s *Serveur) ajouterProjet(nom, brut, demande string, rejoindre bool) (Projet, int, error) {
+	nom = strings.TrimSpace(nom)
+	dossier, err := s.controlerProjetNeuf(nom, brut)
+	if err != nil {
+		return Projet{}, http.StatusBadRequest, err
 	}
-	dossier := cheminWindowsPropre(filepath.Clean(c.Dossier))
-	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
-		s.erreur(w, http.StatusBadRequest, cle)
-		return
-	}
-	if c.Rejoindre {
-		if e, err := os.ReadDir(dossier); err == nil {
-			for _, x := range e {
-				if n := x.Name(); n != ".athanor" && n != ".DS_Store" && !strings.EqualFold(n, "desktop.ini") && !strings.EqualFold(n, "Thumbs.db") {
-					s.erreur(w, http.StatusBadRequest, "To join a project, choose a new or empty folder: the team's files arrive in it.")
-					return
-				}
-			}
+	if rejoindre {
+		if dossierAvecFichiers(dossier) {
+			return Projet{}, http.StatusBadRequest, errors.New("To join a project, choose a new or empty folder: the team's files arrive in it.")
 		}
-		c.Demande = ""
+		demande = ""
 	}
-	s.mu.Lock()
-	for _, p := range s.config.Projets {
-		if strings.EqualFold(p.Nom, c.Nom) || strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
-			s.mu.Unlock()
-			s.erreur(w, http.StatusBadRequest, "A project with this name or folder already exists")
-			return
-		}
-	}
-	s.mu.Unlock()
-	if err := s.conflitProjets(dossier, ""); err != nil {
-		s.erreur(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	p := Projet{Nom: c.Nom, Dossier: dossier}
+	p := Projet{Nom: nom, Dossier: dossier}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
-		s.erreur(w, http.StatusInternalServerError, "Cannot create the folder: "+err.Error())
-		return
+		return Projet{}, http.StatusInternalServerError, errors.New("Cannot create the folder: " + err.Error())
 	}
-	if strings.TrimSpace(c.Demande) != "" {
+	if strings.TrimSpace(demande) != "" {
 		if b, _ := os.ReadFile(p.Demande()); demandeVide(string(b)) {
-			_ = os.WriteFile(p.Demande(), []byte(s.texteDemande(c.Nom, c.Demande)), 0o644)
+			_ = os.WriteFile(p.Demande(), []byte(s.texteDemande(nom, demande)), 0o644)
 		}
 	}
 	s.mu.Lock()
 	p.MigrerAtelier()
 	s.config.Projets = append(s.config.Projets, p)
 	s.config.ProjetActif = p.Nom
-	err := ecrireConfig(s.config)
+	err = ecrireConfig(s.config)
 	s.mu.Unlock()
 	if err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+		return Projet{}, http.StatusInternalServerError, err
 	}
 	s.apresChangementProjets()
-	s.ecrireJSON(w, map[string]any{"message_key": "Project “{0}” added.", "args": []string{p.Nom}, "nom": p.Nom})
+	return p, 0, nil
+}
+
+// controlerProjetNeuf: the checks of a new project before anything is written (B88: a mission makes them before
+// it is launched); the cleaned folder.
+func (s *Serveur) controlerProjetNeuf(nom, brut string) (string, error) {
+	brut = strings.TrimSpace(brut)
+	if !reNomProjet.MatchString(nom) {
+		return "", errors.New("Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
+	}
+	if !filepath.IsAbs(brut) {
+		return "", errors.New("Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
+	}
+	dossier := cheminWindowsPropre(filepath.Clean(brut))
+	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
+		return "", errors.New(cle)
+	}
+	s.mu.Lock()
+	for _, p := range s.config.Projets {
+		if strings.EqualFold(p.Nom, nom) {
+			s.mu.Unlock()
+			return "", errors.New("A project already has this name: choose another name")
+		}
+		if strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
+			s.mu.Unlock()
+			return "", errors.New("A project already uses this folder: choose another folder")
+		}
+	}
+	s.mu.Unlock()
+	return dossier, s.conflitProjets(dossier, "")
 }
 
 // texteDemande composes the first request of a project (title, date, text, notes section).
@@ -500,14 +560,16 @@ func (s *Serveur) langue() string {
 	return "en"
 }
 
-// apiPreferences saves the language, the theme, the accent and the state of the welcome wizard.
+// apiPreferences saves the language, the theme, the accent, the state of the welcome wizard and of the hub tour.
 // The language is also written into the tool's .env (LANGUAGE) so that Claude works in that language.
 func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Langue       *string `json:"langue"`
-		Theme        *string `json:"theme"`
-		Accent       *string `json:"accent"`
-		BienvenueVue *bool   `json:"bienvenue_vue"`
+		Langue       *string         `json:"langue"`
+		Theme        *string         `json:"theme"`
+		Accent       *string         `json:"accent"`
+		BienvenueVue *bool           `json:"bienvenue_vue"`
+		HubVu        *bool           `json:"hub_vu"`
+		Tours        map[string]bool `json:"tours"` // {"hub": true}: that module's tour was shown
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -521,6 +583,12 @@ func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Unknown theme")
 		return
 	}
+	for id := range c.Tours {
+		if !tutorielConnu(id) {
+			s.erreur(w, http.StatusBadRequest, "Unknown tour")
+			return
+		}
+	}
 	s.mu.Lock()
 	if c.Langue != nil {
 		s.config.Langue = *c.Langue
@@ -533,6 +601,15 @@ func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.BienvenueVue != nil {
 		s.config.BienvenueVue = *c.BienvenueVue
+	}
+	if c.HubVu != nil {
+		s.config.HubVu = *c.HubVu
+	}
+	for id, vu := range c.Tours {
+		if s.config.Tours == nil {
+			s.config.Tours = map[string]bool{}
+		}
+		s.config.Tours[id] = vu
 	}
 	langue := s.config.Langue
 	err := ecrireConfig(s.config)
@@ -567,9 +644,14 @@ func (s *Serveur) apiChoisirProjet(w http.ResponseWriter, r *http.Request) {
 	s.erreur(w, http.StatusNotFound, "Unknown project")
 }
 
-// Removes a project from the list. The folder and its workshop are never deleted here.
+// apiRetirerProjet: DELETE /api/projets/{nom} {dossier}. The project leaves the list; its folder goes to the
+// recycle bin only when dossier is set.
 func (s *Serveur) apiRetirerProjet(w http.ResponseWriter, r *http.Request) {
 	nom := r.PathValue("nom")
+	var c struct {
+		Dossier bool `json:"dossier"`
+	}
+	_ = lireCorps(r, &c) // no body: the list only
 	s.mu.Lock()
 	var p Projet
 	trouve := false
@@ -592,11 +674,11 @@ func (s *Serveur) apiRetirerProjet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.liberer(nom)
-	if err := s.retirerProjet(p); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+	mode := "liste"
+	if c.Dossier {
+		mode = "dossier"
 	}
-	s.msg(w, "Project removed from the list. Its folder is intact; delete its .athanor subfolder to clean it.")
+	s.supprimerProjet(w, p, mode, nil)
 }
 
 // Small folder browser to pick a project's folder.
@@ -604,6 +686,13 @@ func (s *Serveur) apiDossiers(w http.ResponseWriter, r *http.Request) {
 	type entree struct {
 		Nom    string `json:"nom"`
 		Chemin string `json:"chemin"`
+	}
+	if r.URL.Query().Get("neuf") != "" { // S2 (M317): the folder New project proposes its projects in
+		s.mu.Lock()
+		projets := append([]Projet{}, s.config.Projets...)
+		s.mu.Unlock()
+		s.ecrireJSON(w, map[string]string{"chemin": dossierProjetNeuf("", projets)})
+		return
 	}
 	chemin := r.URL.Query().Get("chemin")
 	if chemin == "" {
@@ -650,6 +739,8 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
+	pauserProjet(p.Nom, false) // M298: Start lets the project's deployment go again, even when the pilot has nothing left to do
+	noterArret(p.Nom, "")
 	// delivered, and nothing new since (livraison.go): the pilot would end at once
 	if projetLivre(p) && len(p.LireFileAttente()) == 0 && nouveauDepuisLivraison(p.Dossier).Vide() {
 		return "", errors.New(texteLivreRienDeNeuf)
@@ -658,15 +749,42 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 		return "", errors.New(texteRoot)
 	}
 	finirMiseAJour(s.kitCourant().Racine) // what an update left while pilots ran (embarque.go)
+	// the grants of its environment, in .athanor/secrets.env
+	if _, err := s.injecterAcces(p, nil); err != nil {
+		fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
+	}
+	if !s.kitCourant().Valide() { // nothing to launch (no WSL started, never this very executable in the kit's place)
+		return "", errors.New("Tool folder not found")
+	}
+	if !fichierRegulierPilote(filepath.Join(s.kitCourant().Racine, ".env")) { // the launcher refuses the same way, but detached nobody reads it
+		return "", errors.New(texteSansClaude)
+	}
+	// its hub token for this launch (without it the pilot still runs, its hub tools answer an error)
+	if err := s.creerJetonPilote(p); err != nil {
+		fmt.Fprintln(os.Stderr, "hub token:", p.Nom+":", err)
+	}
 	if err := demarrerKitDetache(s.kitCourant(), "demarrer", optionFond(), p.Dossier); err != nil {
+		s.revoquerJetonProjet(p, "démarrage échoué")
 		return "", err
 	}
 	return "Pilot started: the first cycle (framing) takes a few minutes.", nil
 }
 
+// demarrerPiloteAuto: Start as the button does: the pilot also restarts with the application.
+func (s *Serveur) demarrerPiloteAuto(p Projet) (string, error) {
+	marqueAuto(p, true)
+	cle, err := s.demarrerPilote(p)
+	if err != nil && err.Error() == texteLivreRienDeNeuf {
+		marqueAuto(p, false) // nothing to restart when the application starts
+	}
+	return cle, err
+}
+
 // arreterPiloteProjet: stops the project's pilot now (the current cycle is interrupted).
 func (s *Serveur) arreterPiloteProjet(p Projet) (string, error) {
-	return executerKitArgs(s.kitCourant(), 2*time.Minute, "arreter", p.Dossier)
+	m, err := executerKitArgs(s.kitCourant(), 2*time.Minute, "arreter", p.Dossier)
+	s.revoquerJetonProjet(p, "pilote arrêté")
+	return m, err
 }
 
 // retirerStop: the stop asked for the end of the cycle is withdrawn (the pilot goes on).
@@ -813,6 +931,55 @@ func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, m)
 }
 
+// ecrireMode: the project's working modes and time settings into its .athanor/.env, the one way they are written
+// (POST /api/mode and a mission's new project); a value out of bounds is an erreurEntree. A running pilot reads
+// the modes at its next cycle (changementsEnAttente says so meanwhile).
+func (p Projet) ecrireMode(m ModeVue) error {
+	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
+		m.ParalleleMax = 3
+	}
+	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0"}
+	if m.Parallele {
+		v["PARALLEL"] = "1"
+	}
+	if m.Eco {
+		v["ECO"] = "1"
+	}
+	if m.Rapide {
+		v["FAST"] = "1"
+	}
+	if m.CadrageMax != nil {
+		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
+		if *m.CadrageMax != 0 {
+			if *m.CadrageMax < 10 || *m.CadrageMax > 240 {
+				return erreurEntree("The framing time box is between 10 and 240 minutes.")
+			}
+			v["FRAMING_MAX_MIN"] = strconv.Itoa(*m.CadrageMax)
+		}
+	}
+	if m.DureeMax != nil {
+		switch n := *m.DureeMax; {
+		case n == -1:
+			v["MAX_HOURS"] = "" // back to the global value
+		case n >= 0 && n <= 87600:
+			v["MAX_HOURS"] = strconv.Itoa(n)
+		default:
+			return erreurEntree("The work time limit is between 1 and 87600 hours, or unlimited.")
+		}
+	}
+	for cle, val := range m.Modeles { // the project's own models (modeles_projet.go), "": back to Settings
+		val = strings.TrimSpace(val)
+		if !estCleModeleProjet(cle) || (val != "" && !modeleProjetValide(cle, val)) {
+			return erreurEntree("Unknown model name: letters, digits and . _ - : / @ [ ] only.")
+		}
+		v[cle] = val
+	}
+	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+		return err
+	}
+	return EcrireEnv(p.envProjet(), v)
+}
+
 func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.projetRequis(w, r)
 	if !ok {
@@ -833,54 +1000,12 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if c.Rapide != nil {
 		m.Rapide = *c.Rapide
 	}
-	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
-		m.ParalleleMax = 3
-	}
-	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0"}
-	if m.Parallele {
-		v["PARALLEL"] = "1"
-	}
-	if m.Eco {
-		v["ECO"] = "1"
-	}
-	if m.Rapide {
-		v["FAST"] = "1"
-	}
-	if m.CadrageMax != nil {
-		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
-		if *m.CadrageMax != 0 {
-			if *m.CadrageMax < 10 || *m.CadrageMax > 240 {
-				s.erreur(w, http.StatusBadRequest, "The framing time box is between 10 and 240 minutes.")
-				return
-			}
-			v["FRAMING_MAX_MIN"] = strconv.Itoa(*m.CadrageMax)
+	if err := p.ecrireMode(m); err != nil {
+		code := http.StatusInternalServerError
+		if _, ok := err.(erreurEntree); ok {
+			code = http.StatusBadRequest
 		}
-	}
-	if m.DureeMax != nil {
-		switch n := *m.DureeMax; {
-		case n == -1:
-			v["MAX_HOURS"] = "" // back to the global value
-		case n >= 0 && n <= 87600:
-			v["MAX_HOURS"] = strconv.Itoa(n)
-		default:
-			s.erreur(w, http.StatusBadRequest, "The work time limit is between 1 and 87600 hours, or unlimited.")
-			return
-		}
-	}
-	for cle, val := range m.Modeles {
-		val = strings.TrimSpace(val)
-		if !estCleModeleProjet(cle) || (val != "" && !modeleProjetValide(cle, val)) {
-			s.erreur(w, http.StatusBadRequest, "Unknown model name: letters, digits and . _ - : / @ [ ] only.")
-			return
-		}
-		v[cle] = val // empty: back to Settings
-	}
-	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := EcrireEnv(p.envProjet(), v); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
+		s.erreur(w, code, err.Error())
 		return
 	}
 	// the message tells what this call changed (the modes are independent switches)
@@ -913,6 +1038,48 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 // and the gateways that run outside the sandbox), that would be inside the tool, or that would be a drive
 // root or the home folder (git and Claude would see everything). Returns the message key, or "".
 func dossierInterdit(dossier, kit string) string {
+	const lettre = "Give the full path of the development folder (e.g. D:\\Dev\\my-site)"
+	if runtimeWindows() && strings.HasPrefix(filepath.Clean(dossier), `\\`) {
+		return lettre // UNC, \\?\, \\.\: a drive letter only (and never wait for a network host)
+	}
+	if reste := filepath.Clean(dossier); runtimeWindows() {
+		if len(reste) >= 2 && reste[1] == ':' {
+			reste = reste[2:]
+		}
+		if strings.ContainsAny(reste, `:*?"<>|`) {
+			return "This path holds a character Windows refuses in a folder name: : * ? \" < > |" // a data stream (dossier::$DATA) or a refused character (M258: said as such)
+		}
+	}
+	reel := cheminReel(dossier)
+	if runtimeWindows() && strings.HasPrefix(reel, `\\`) {
+		return lettre
+	}
+	// as typed and as the system opens it (a junction, a link or an 8.3 short name leads elsewhere)
+	if cle := dossierInterditTel(dossier, kit); cle != "" {
+		return cle
+	}
+	return dossierInterditTel(reel, cheminReel(kit))
+}
+
+// cheminReel: the path as the system opens it: its deepest existing part resolved (cheminFinal), the rest appended.
+func cheminReel(c string) string {
+	if c == "" {
+		return ""
+	}
+	c = filepath.Clean(c)
+	reste := ""
+	for d := c; ; d = filepath.Dir(d) {
+		if r, err := cheminFinal(d); err == nil {
+			return filepath.Join(r, reste)
+		}
+		if filepath.Dir(d) == d {
+			return c
+		}
+		reste = filepath.Join(filepath.Base(d), reste)
+	}
+}
+
+func dossierInterditTel(dossier, kit string) string {
 	norm := func(p string) string {
 		p = strings.ToLower(filepath.Clean(p))
 		return strings.TrimRight(p, `\/`) + string(filepath.Separator)
@@ -975,4 +1142,26 @@ func (s *Serveur) apiFinVue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// dossierAvecFichiers: d holds something other than a workshop and the system's own files.
+func dossierAvecFichiers(d string) bool {
+	e, _ := os.ReadDir(d)
+	return slices.ContainsFunc(e, func(x os.DirEntry) bool {
+		n := x.Name()
+		return n != ".athanor" && n != ".DS_Store" && !strings.EqualFold(n, "desktop.ini") && !strings.EqualFold(n, "Thumbs.db")
+	})
+}
+
+// dossierProjetNeuf: where a card's new project goes, next to the most recent project of this PC (in the home
+// folder without one).
+func dossierProjetNeuf(nom string, projets []Projet) string {
+	parent, _ := os.UserHomeDir()
+	for i := len(projets) - 1; i >= 0; i-- {
+		if !projets[i].Archive && filepath.IsAbs(projets[i].Dossier) {
+			parent = filepath.Dir(filepath.Clean(projets[i].Dossier))
+			break
+		}
+	}
+	return filepath.Join(parent, nom)
 }

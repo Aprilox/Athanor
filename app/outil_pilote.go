@@ -277,20 +277,31 @@ func copierDossierModeles(src, dst string) {
 	})
 }
 
+// maxJournalPilote: the private pilot.log turns over past this size (pilot.log.1 keeps the one before). Its published
+// copy is the whole file: it only grows until it turns over, so the page's follower (journal.go, by position) reads
+// each line once; a sliding window of the last lines, rewritten at each line, sent it lines twice or cut them.
+var maxJournalPilote int64 = 512 << 10
+
 func (p *pilote) log(msg string) {
 	m := fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), msg)
 	fmt.Println(m)
 	jPrive := filepath.Join(p.prive, "pilot.log")
+	if fi, err := os.Stat(jPrive); err == nil && fi.Size() > maxJournalPilote {
+		_ = os.Remove(jPrive + ".1")
+		_ = os.Rename(jPrive, jPrive+".1") // a program still writing to it (Unreal, rojo, an MCP) goes on in .1
+	}
 	if f, err := os.OpenFile(jPrive, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		_, _ = f.WriteString(m + "\n")
 		f.Close()
 	}
 	if b, err := os.ReadFile(jPrive); err == nil {
-		lignes := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
-		if len(lignes) > 3000 {
-			lignes = lignes[len(lignes)-3000:]
+		if int64(len(b)) > maxJournalPilote { // the rename refused (a program holds it on Windows): its end only
+			b = b[int64(len(b))-maxJournalPilote:]
+			if i := bytes.IndexByte(b, '\n'); i >= 0 {
+				b = b[i+1:]
+			}
 		}
-		_ = publierFichier(filepath.Join(p.etat, "pilot.log"), []byte(strings.Join(lignes, "\n")+"\n"))
+		_ = publierFichier(filepath.Join(p.etat, "pilot.log"), b)
 	}
 }
 
@@ -416,11 +427,12 @@ func (p *pilote) prochaineDemande() bool {
 	plan := filepath.Join(p.etat, "PLAN.md")
 	if _, err := os.Stat(plan); err == nil {
 		if pf, err := os.OpenFile(plan, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			_, _ = fmt.Fprintf(pf, "\n- [ ] Resume: new request %q (\"Next request\" section of .athanor/REQUEST.md)\n  - Re-read this request, turn it into verifiable milestones appended to this plan (cut into stages if it is too large for 25 milestones, as .athanor/guides/FRAMING.md says), the last one being a new delivery (.athanor/FINAL_REPORT.md with STATUS: DONE).\n", nom)
+			_, _ = fmt.Fprintf(pf, "\n- [ ] Resume: new request %q\n  - Re-read this request (the \"Next request\" section of .athanor/REQUEST.md), turn it into verifiable milestones appended to this plan (cut into stages if it is too large for 25 milestones, as .athanor/guides/FRAMING.md says), the last one being a new delivery (.athanor/FINAL_REPORT.md with STATUS: DONE).\n", nom)
 			pf.Close()
 		}
 	}
 	p.synchroniserDemande()
+	noterLivraison(p.projet) // taken in now: the delivery of this request must not be reopened by the request itself
 	restants := p.compterFileAttente()
 	p.log(fmt.Sprintf("Request done: moving on to %q (queue: %d remaining).", nom, restants))
 	return true
@@ -630,10 +642,12 @@ func (p *pilote) connexionActuelle() connexionClaude {
 // relireConnexion: the connection of .env read again; true when it changed (another token, another key,
 // the other mode): it is used from the next run of Claude on, and what waited on the old one stops waiting.
 func (p *pilote) relireConnexion() bool {
-	if st, err := os.Stat(filepath.Join(p.kit, ".env")); err != nil || st.Size() == 0 {
-		return false // no .env, or one being written (another program's): the connection as it was
+	// read once: on Windows .env cannot be opened for an instant while EcrireEnv renames over it
+	lignes := LireEnv(filepath.Join(p.kit, ".env"))
+	if lignes == nil {
+		return false // no .env, empty, or caught mid-write: the connection as it was
 	}
-	c := lireConnexionClaude(p.kit, p.origineConn)
+	c := connexionDesLignes(lignes, p.origineConn)
 	p.connexionMu.Lock()
 	avant := p.connexion
 	p.connexion = c
@@ -829,8 +843,8 @@ func journalQuotaPilote(chemin string) bool {
 }
 
 func (p *pilote) seuilQuota() string {
-	regles := filepath.Join(p.kit, "logs", "quota-arret.json")
-	if st, err := os.Stat(regles); err != nil || st.Size() == 0 {
+	regles := reglesQuotaProjet(p.projet, filepath.Join(p.kit, "logs", "quota-arret.json"))
+	if len(regles) == 0 {
 		return ""
 	}
 	fs, _ := filepath.Glob(filepath.Join(p.etat, "logs", "*.jsonl"))
@@ -860,7 +874,7 @@ func (p *pilote) seuilQuota() string {
 	}
 	var s string
 
-	s = quotaVerifier(regles, noms)
+	s = quotaVerifierRegles(regles, noms)
 
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

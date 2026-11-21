@@ -3,7 +3,7 @@ package main
 // athanor construire [--all]: builds Athanor from its Go sources (app/), for a copy of the source code
 // instead of a release: Athanor.exe and athanor (this system) into the tool folder, or with --all every
 // target into dist/ (what a release publishes), Athanor.app included. Each executable carries the kit's files (embarque.go),
-// and Athanor.exe the Linux executable of the WSL mode. From the sources: cd app && go run . construire. Go 1.24 or later is needed.
+// and Athanor.exe the Linux executable of the WSL mode. From the sources: cd app && go run . construire. Go 1.27.4 or later is needed (go.mod; Go 1.21+ downloads it by itself).
 // The Windows icon and version info (winres/athanor.rc) are compiled into rsrc_windows_amd64.syso when a
 // resource compiler is present (llvm-windres or x86_64-w64-mingw32-windres); the committed one is used
 // otherwise.
@@ -73,7 +73,7 @@ func lancerConstruire(args []string) int {
 			if filepath.Base(p)[:4] == "llvm" {
 				a = []string{"--target=pe-x86-64", "-i", "winres/athanor.rc", "-o", "rsrc_windows_amd64.syso"}
 			}
-			c := exec.Command(p, a...)
+			c := commande(p, a...)
 			c.Dir = src
 			if c.Run() == nil {
 				fmt.Println("resources compiled with " + rc)
@@ -98,7 +98,7 @@ func lancerConstruire(args []string) int {
 		if goos == "windows" {
 			drapeaux = "-s -w -H windowsgui"
 		}
-		c := exec.Command(goBin, "build", "-trimpath", "-tags", "embarque", "-ldflags", drapeaux, "-o", sortie, ".")
+		c := commande(goBin, "build", "-trimpath", "-tags", "embarque", "-ldflags", drapeaux, "-o", sortie, ".")
 		c.Dir = src
 		c.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 		c.Stdout, c.Stderr = os.Stdout, os.Stderr

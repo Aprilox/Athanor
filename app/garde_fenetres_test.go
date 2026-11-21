@@ -95,3 +95,21 @@ func TestGardeFenetres(t *testing.T) {
 	}
 	noterFenetreKit("", "rien") // no kit: nothing, no panic
 }
+
+// M240l5: the wslhost windows of native mode came from "bash" found in the PATH (WSL's bash.exe in
+// WindowsApps or System32): the pilot's and the detection's bash is never that one.
+func TestBashWSLEcarte(t *testing.T) {
+	for c, wsl := range map[string]bool{
+		`C:\Users\x\AppData\Local\Microsoft\WindowsApps\bash.exe`: true,
+		`C:\Windows\System32\bash.exe`:                            true,
+		`C:\Program Files\Git\bin\bash.exe`:                       false,
+		`C:\Program Files\Git\usr\bin\bash.exe`:                   false,
+	} {
+		if bashWSL(c) != wsl {
+			t.Errorf("bashWSL(%q) = %v", c, !wsl)
+		}
+	}
+	if b := trouverBashNatifPilote(); b != "" && bashWSL(b) {
+		t.Errorf("the pilot's bash is WSL's: %s", b)
+	}
+}

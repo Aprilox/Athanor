@@ -10,8 +10,10 @@ import (
 	"encoding/hex"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var empreintesStatiques sync.Map // path → hash of its content
@@ -32,7 +34,7 @@ func empreinteStatique(sous fs.FS, nom string) string {
 
 // pageVersionnee: index.html with the hash of each of its files in their addresses.
 func pageVersionnee(sous fs.FS, page string) string {
-	for _, f := range []string{"app.css", "i18n.js", "app.js"} {
+	for _, f := range []string{"app.css", "splash.js", "i18n.js", "app.js"} {
 		if e := empreinteStatique(sous, f); e != "" {
 			page = strings.ReplaceAll(page, `"`+f+`"`, `"`+f+`?v=`+e+`"`)
 		}
@@ -48,5 +50,35 @@ func servirStatique(sous fs.FS, fichiers http.Handler) http.Handler {
 			w.Header().Set("ETag", `"`+e+`"`)
 		}
 		fichiers.ServeHTTP(w, r)
+	})
+}
+
+// idLancement changes at each start of Athanor: the launch animation (splash.js) plays once per id,
+// not at a page reload nor when the window is opened again.
+var idLancement = strconv.FormatInt(time.Now().UnixNano(), 36)
+
+// routesInterface serves the interface: the embedded files, and index.html behind the access check.
+func (s *Serveur) routesInterface(mux *http.ServeMux) {
+	sous, _ := fs.Sub(statique, "static")
+	fichiers := servirStatique(sous, http.FileServer(http.FS(sous))) // never the files of a former version
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			fichiers.ServeHTTP(w, r)
+			return
+		}
+		if !s.pageAcces(w, r) {
+			return
+		}
+		b, _ := fs.ReadFile(sous, "index.html")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
+		s.mu.Lock()
+		lancement := idLancement
+		if s.config.PasAnimation {
+			lancement = ""
+		}
+		s.mu.Unlock()
+		_, _ = w.Write([]byte(strings.NewReplacer("__CSRF__", s.csrf, "__LANCEMENT__", lancement).Replace(pageVersionnee(sous, string(b)))))
 	})
 }

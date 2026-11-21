@@ -20,6 +20,7 @@ func serveurChatEssai(t *testing.T) (*Serveur, Projet, string, func(meth, chemin
 	d, _ := filepath.EvalSymlinks(t.TempDir())
 	p := Projet{Nom: "a", Dossier: d}
 	_ = os.MkdirAll(p.Atelier(), 0o755)
+	ecrire(t, filepath.Join(kit, "template", "CLAUDE.md"), "kit") // a valid kit: demarrerPilote refuses any other
 	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "a", Langue: "fr"})
 	s.csrf = "jeton"
 	mux := http.NewServeMux()
@@ -125,6 +126,17 @@ func TestChatMCP(t *testing.T) {
 	if conv := lireConversation(k, p); conv.Messages[1].MCP != "mon-logiciel" {
 		t.Errorf("message not marked: %+v", conv.Messages[1])
 	}
+	// M240l2: a decided card is not played twice, and the addition is in the audit log
+	if c, v := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 1, "nom": "Autre", "config": cfg}); c != 409 || v["erreur_key"] != "This card was already decided." {
+		t.Fatalf("second click: %d %v", c, v)
+	}
+	audite := false
+	for _, l := range lignesAudit(t, dossierJournalAudit()) {
+		audite = audite || strings.Contains(l.Action, "mon-logiciel") && strings.Contains(l.Resultat, "mon-logiciel")
+	}
+	if !audite {
+		t.Error("no audit line for the MCP server added from the chat")
+	}
 	var def objetJSON
 	_ = json.Unmarshal([]byte(`{"config":{"type":"stdio","command":"uv","args":["run","--script","${ATHANOR_MCP_DIR}/server.py"]}}`), &def)
 	srv, raison := serveurMCP(kit, "mon-logiciel", def, objetJSON{}, p.Dossier, "")
@@ -134,6 +146,25 @@ func TestChatMCP(t *testing.T) {
 	j, _ := json.Marshal(srv)
 	if want, _ := json.Marshal(filepath.Join(kit, "tools", "mcp-ecrits", "mon-logiciel") + "/server.py"); !bytes.Contains(j, bytes.Trim(want, `"`)) {
 		t.Errorf("the server's folder: %s", j)
+	}
+	// M240l2: a Windows program outside the cage needs its own confirmation
+	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"config":{"command":"x.exe"}}</mcp>`}}})
+	if c, v := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 0, "nom": "Prog Windows", "config": `{"command":"x.exe"}`, "windows": true}); c != 400 || v["erreur_key"] != "Confirm that this server may run outside the cage, with your rights." {
+		t.Fatalf("windows without confirmation: %d %v", c, v)
+	}
+	if _, ok := lireBiblio(k).MCP["prog-windows"]; ok {
+		t.Error("windows program added without confirmation")
+	}
+	// M240k2: a second card with the same name (case aside) never replaces it: files, keys and library unchanged
+	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"fichiers":{"server.py":"print('autre')"},"config":{"command":"uv"}}</mcp>`}}})
+	if c, v := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 0, "nom": "MON logiciel", "config": `{"command":"node","env":{"API_KEY":"${API_KEY}"}}`}); c != 409 || v["erreur_key"] != errMCPHomonyme.Error() {
+		t.Fatalf("same name: %d %v", c, v)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dossierMCPEcrit(kit, "mon-logiciel"), "server.py")); string(b) != "print('mcp')" {
+		t.Errorf("files overwritten: %q", b)
+	}
+	if x := lireBiblio(k).MCP["mon-logiciel"]; x.Config.Command != "uv" || lireSecrets(k)["mon-logiciel"]["API_KEY"] != "sk-123" {
+		t.Errorf("library replaced: %+v", x)
 	}
 	// hostile files in the proposal: nothing written
 	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"fichiers":{"../evil.py":"x"},"config":{"command":"uv"}}</mcp>`}}})
@@ -169,7 +200,8 @@ demarrer) for a in "$@"; do d="$a"; done; rm -f "$d/.athanor/STOP"; touch "$d/.a
 esac
 `)
 	_ = os.Chmod(filepath.Join(kit, "athanor"), 0o755)
-	t.Setenv("CLAUDE_BIN", "/bin/true") // demarrerPilote, as root in a container
+	ecrire(t, filepath.Join(kit, ".env"), "# connected\n") // Start refuses a kit without one (texteSansClaude)
+	t.Setenv("CLAUDE_BIN", "/bin/true")                    // demarrerPilote, as root in a container
 	attenteCycleChat = 20 * time.Millisecond
 	defer func() { attenteCycleChat = 2 * time.Second }()
 	pid := filepath.Join(p.Atelier(), "pilot.pid")

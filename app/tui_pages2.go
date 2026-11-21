@@ -17,6 +17,7 @@ import (
 func (a *appTUI) chargerPages2() {
 	switch a.page {
 	case pPourVous:
+		a.chargerApprobations()
 		a.charger("pourvous", 3*time.Second, func(c clientTUI) (func(*appTUI), error) {
 			var r struct {
 				Taches []TacheUtilVue `json:"taches"`
@@ -53,6 +54,9 @@ func (a *appTUI) chargerPages2() {
 			if err := c.lire("env", &r); err != nil {
 				return nil, err
 			}
+			if r == nil { // read but empty (a kit without .env.example): not "still loading"
+				r = []LigneEnv{}
+			}
 			return func(a *appTUI) { a.env = r }, nil
 		})
 	}
@@ -62,6 +66,9 @@ func (a *appTUI) raccourcisPages2() []raccourci {
 	t := a.t
 	switch a.page {
 	case pPourVous:
+		if x := a.apprChoisie(); x != nil {
+			return a.raccourcisApprTUI(*x)
+		}
 		return []raccourci{{"Enter", t("Done")}, {"k", t("Skip: find another way")}}
 	case pGitHub:
 		if a.gh == nil {
@@ -83,10 +90,17 @@ func (a *appTUI) raccourcisPages2() []raccourci {
 func (a *appTUI) touchePages2(ev evenementTUI, k string, defiler func(*int, int)) {
 	switch a.page {
 	case pPourVous:
-		switch k {
-		case "entree":
+		appr := a.apprChoisie() != nil
+		switch {
+		case appr && k == "y":
+			a.deciderApprTUI("accepter")
+		case appr && k == "r":
+			a.deciderApprTUI("refuser")
+		case appr && k == "t":
+			a.deciderApprTUI("toujours")
+		case !appr && k == "entree":
 			a.repondreTache(false)
-		case "k":
+		case !appr && k == "k":
 			a.repondreTache(true)
 		default:
 			defiler(&a.selTache, -1)
@@ -179,29 +193,46 @@ func (a *appTUI) pagePourVous(e *ecranT, x, y, l, h int) {
 		hl = max(6, h/2) // a narrow terminal: the list above, the selected task below
 	}
 	ix, iy, il, ih := a.boite(e, x, y, lg, hl, a.t("For you"), true)
+	ap := a.apprAttente() // every project's, first
+	taches := a.taches
 	if a.vue == nil || a.vue.Projet == nil {
+		taches = nil
+	}
+	if len(ap)+len(taches) == 0 {
+		if taches != nil || a.vue != nil && a.vue.Projet != nil {
+			a.texteBloc(e, ix, iy, il, ih, a.t("Nothing for you: what Claude cannot do itself (an account, a payment, a key…) shows up here, with the exact steps."), a.st(p.muet, fond))
+		}
 		return
 	}
-	if len(a.taches) == 0 {
-		a.texteBloc(e, ix, iy, il, ih, a.t("Nothing for you: what Claude cannot do itself (an account, a payment, a key…) shows up here, with the exact steps."), a.st(p.muet, fond))
-		return
-	}
-	a.liste(e, ix, iy, il, ih, len(a.taches), &a.selTache, func(i int, f couleurT) (string, string, styleT, styleT) {
-		t := a.taches[i]
+	a.liste(e, ix, iy, il, ih, len(ap)+len(taches), &a.selTache, func(i int, f couleurT) (string, string, styleT, styleT) {
+		if i < len(ap) {
+			return a.ligneApprTUI(ap[i], f)
+		}
+		t := taches[i-len(ap)]
 		lib, c := a.etatTacheLib(t)
 		return "● " + t.Titre, lib, a.gras(p.encre, f), a.st(c, f)
 	})
 	a.zoneMolette(x, y, lg, hl, func(s int) { a.selTache += s })
-	t := a.taches[min(a.selTache, len(a.taches)-1)]
+	titre := ""
+	if a.selTache < len(ap) {
+		titre = a.titreApprTUI(ap[a.selTache])
+	} else {
+		titre = taches[a.selTache-len(ap)].Titre
+	}
 	var dx, dy, dw, dh int
 	if l >= 110 {
-		dx, dy, dw, dh = a.boite(e, x+lg, y, l-lg, h, t.Titre, false)
+		dx, dy, dw, dh = a.boite(e, x+lg, y, l-lg, h, titre, false)
 	} else {
 		if h-hl < 4 {
 			return
 		}
-		dx, dy, dw, dh = a.boite(e, x, y+hl, l, h-hl, t.Titre, false)
+		dx, dy, dw, dh = a.boite(e, x, y+hl, l, h-hl, titre, false)
 	}
+	if a.selTache < len(ap) {
+		a.detailApprTUI(e, dx, dy, dw, dh, ap[a.selTache])
+		return
+	}
+	t := taches[a.selTache-len(ap)]
 	yy := dy
 	yy += a.texteBloc(e, dx, yy, dw, dh-(yy-dy), t.Details, a.st(p.encre, fond))
 	if t.Attendu != "" {
@@ -233,10 +264,11 @@ func (a *appTUI) pagePourVous(e *ecranT, x, y, l, h int) {
 
 // repondreTache: done (an answer, the values asked for) or skip (Claude finds another way).
 func (a *appTUI) repondreTache(passer bool) {
-	if len(a.taches) == 0 {
+	i := a.selTache - len(a.apprAttente()) // the approvals come first in the list
+	if i < 0 || len(a.taches) == 0 {
 		return
 	}
-	t := a.taches[min(a.selTache, len(a.taches)-1)]
+	t := a.taches[min(i, len(a.taches)-1)]
 	if t.Etat == "close" {
 		return
 	}
@@ -267,7 +299,26 @@ func (a *appTUI) repondreTache(passer bool) {
 			}
 			corps["secrets"] = sec
 		}
-		a.agirFormulaire("POST", "pourvous", corps, func(map[string]any) { a.derniere["pourvous"] = time.Time{} })
+		fini := func(map[string]any) { a.derniere["pourvous"] = time.Time{} }
+		f := a.formValide
+		a.agirAvec("POST", "pourvous", corps, fini, func(err error) {
+			// an infrastructure key answered here goes to the pilot: only once the user confirms it
+			if e, ok := err.(*erreurAPI); ok && e.Confirmer {
+				a.demander(a.t("Infrastructure key"), a.texteErreur(err), []choixTUI{{id: "oui", texte: a.t("Give it to the pilot")}, {id: "", texte: a.t("Cancel")}}, func(id string) {
+					if id == "oui" {
+						corps["confirme"] = true
+						a.agirFormulaire("POST", "pourvous", corps, fini)
+					}
+				})
+				return
+			}
+			if f == nil {
+				a.annoncer(a.texteErreur(err), true)
+				return
+			}
+			f.erreur = a.texteErreur(err)
+			a.form = f
+		})
 	})
 }
 
@@ -324,7 +375,11 @@ func (a *appTUI) pageEquipe(e *ecranT, x, y, l, h int) {
 		if ag.Modele != "" {
 			chiffres = append(chiffres, ag.Modele)
 		}
-		detail := firstNonEmpty(ag.Bulle, firstNonEmpty(ag.Activite, ag.Mission))
+		mission := ag.Mission
+		if ag.Genre == "chef" { // the lead's mission is an app text; the others' are their briefs
+			mission = a.t(mission)
+		}
+		detail := firstNonEmpty(ag.Bulle, firstNonEmpty(ag.Activite, mission))
 		return lignes[i].ind + "● " + nom + "  " + strings.Join(chiffres, " · "), strings.Repeat(" ", len([]rune(lignes[i].ind))+2) + detail, a.gras(c, f), a.st(p.muet, f)
 	})
 	a.zoneMolette(x, y, l, h, func(s int) { a.selAgent += s })
@@ -522,7 +577,11 @@ func (a *appTUI) pageReglages(e *ecranT, x, y, l, h int) {
 	pref := fmt.Sprintf("%s: %s   ·   %s: %s   ·   %s: %s", a.t("Language"), nomLangue(v.Langue), a.t("Palette"), a.t(noms[firstNonEmpty(v.Theme, "ardoise")]), a.t("Accent"), a.t(noms[firstNonEmpty(v.Accent, "sarcelle")]))
 	e.texte(ix, iy, il, pref, a.st(p.encre, fond))
 	if len(a.env) == 0 {
-		e.texte(ix, iy+2, il, a.t("Updating…"), a.st(p.muet, fond))
+		msg := a.t("Updating…")
+		if a.env != nil {
+			msg = a.t("No settings yet (Settings › Claude)")
+		}
+		e.texte(ix, iy+2, il, msg, a.st(p.muet, fond))
 		return
 	}
 	a.liste(e, ix, iy+2, il, ih-2, len(a.env), &a.selReglage, func(i int, f couleurT) (string, string, styleT, styleT) {

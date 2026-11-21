@@ -1,0 +1,17 @@
+# Fake values written in the tests of older commits, already on main (history is never rewritten).
+# Exact fingerprints (commit:file:rule:line): the same lines in any other commit are still reported.
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:14
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:24
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:26
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:111
+e0bbfc6d210371b7809194f966eefc03b83dcef4:app/ext_corriger_test.go:generic-api-key:52
+d91e71cfc2f5ba7044bb05d5a599e8f381e47dd0:app/hub_audit_test.go:stripe-access-token:50
+d91e71cfc2f5ba7044bb05d5a599e8f381e47dd0:app/hub_audit_test.go:stripe-access-token:59
+fb9720a29734b0fd9e209de5982397ab7f84750a:app/static/xterm/xterm.js:generic-api-key:1
+# The same lines for a scan of the files ("gitleaks dir ." from the root of the code, as for the source zip)
+app/connexion_claude_test.go:generic-api-key:14
+app/connexion_claude_test.go:generic-api-key:24
+app/connexion_claude_test.go:generic-api-key:26
+app/connexion_claude_test.go:generic-api-key:111
+app/ext_corriger_test.go:generic-api-key:52
+app/static/xterm/xterm.js:generic-api-key:1

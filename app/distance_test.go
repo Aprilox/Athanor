@@ -214,6 +214,7 @@ func TestDistanceAppairage(t *testing.T) {
 	for _, c := range []struct{ m, p string }{
 		{"POST", "/api/distance"}, {"POST", "/api/distance/domaine"},
 		{"POST", "/api/mot-de-passe"}, {"POST", "/api/ouvrir"}, {"GET", "/api/env?secrets=1"}, {"POST", "/api/instance/montrer"},
+		{"POST", "/api/sante/agent-serveurs"}, // B63: Docker, the vault and a real session
 	} {
 		if w := appelDistance(h, c.m, c.p, cle, "{}", api...); w.Code != http.StatusForbidden {
 			t.Fatalf("%s %s from a device: %d", c.m, c.p, w.Code)
@@ -249,7 +250,7 @@ func TestDistanceMotDePasse(t *testing.T) {
 	api := []string{"X-Athanor", "jeton"}
 	cle := appairerTest(t, s, h)
 	s.config.Sel = "sel"
-	s.config.MotDePasseHash = hacher("sel", "secret")
+	s.config.MotDePasseHash = hacherMotDePasse("secret")
 	if w := appelDistance(h, "GET", "/api/journal", cle, "", api...); w.Code != http.StatusUnauthorized {
 		t.Fatalf("locked device: %d", w.Code)
 	}
