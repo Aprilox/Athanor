@@ -39,7 +39,7 @@ type Serveur struct {
 	mdns         etatMDNS  // local network discovery, on only by the owner (hub_mdns.go)
 	session      string    // session token when a password is set ("" = locked)
 	actifLe      time.Time // the owner's last action in the window (auto-lock, verrou_auto.go)
-	verrouAuto   bool      // the window locked by its timer: the vault stays open for the background (verrou_auto.go)
+	garderCoffre bool      // the window locked (padlock or timer): the vault stays open for the background until a new session
 	attenteMu    sync.Mutex
 	attentes     map[int]attenteInfra // the steps waiting for the infra key (infra_attente.go)
 	attenteN     int
@@ -206,7 +206,7 @@ func (s *Serveur) garde(libre bool, h http.HandlerFunc) http.HandlerFunc {
 
 func (s *Serveur) ouvrirSession(w http.ResponseWriter) {
 	s.session = aleatoire(24)
-	s.actifLe, s.verrouAuto = horlogeVerrou(), false
+	s.actifLe, s.garderCoffre = horlogeVerrou(), false
 	http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 }
 
@@ -724,17 +724,19 @@ func (s *Serveur) apiVerrouiller(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Set a password in Options first")
 		return
 	}
+	// like the timer (verrou_auto.go), the padlock locks the screens only: the vault stays open, so the pilots,
+	// missions, tasks and SSH sessions go on while the owner is away; the emergency stop closes everything
 	d := s.dist()
 	d.mu.Lock()
 	if id := appareilDe(r); id != "" {
 		delete(d.deverrouilles, id) // a device locks itself only
 	} else {
 		d.deverrouilles = map[string]bool{} // the computer locks every device too
-		s.session, s.verrouAuto = "", false // the padlock closes the vault, auto-locked or not
+		s.session, s.garderCoffre = "", true
 		http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: "", Path: "/", MaxAge: -1})
 	}
-	s.fermerCoffreSiPersonne(d)
 	d.mu.Unlock()
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "verrouillage", Resultat: "cadenas"})
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
 

@@ -116,7 +116,8 @@ func TestCoffreServeur(t *testing.T) {
 	}
 	tout(s.coffre, "after the refused removal")
 
-	// locking closes the infra key only; unlocking (window or device) reopens it
+	// 3.1: locking (the padlock like the timer, a device locking itself) never closes the vault, the background goes
+	// on; a vault not open (closed here as at a start) waits for the password, which reopens it (window or device)
 	fermee := func(quand string) {
 		t.Helper()
 		if err := lisible(s.coffre, idInfra, valeurs[idInfra]); !errors.Is(err, errCoffreVerrouille) {
@@ -130,7 +131,9 @@ func TestCoffreServeur(t *testing.T) {
 		}
 	}
 	appelCoffre(t, s.apiVerrouiller, "", "", nil)
-	fermee("after the window locked")
+	ouverte("after the window locked: the background goes on")
+	s.coffre.Verrouiller() // as at a start: the infra key waits for the password
+	fermee("as at a start")
 	// C16: a new name and a value the closed infra key cannot take: 423 and nothing changed
 	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"nom":"SSH_RENOMMEE","valeur":"temoin-infra-9999"}`))
 	r.SetPathValue("id", idInfra)
@@ -156,7 +159,7 @@ func TestCoffreServeur(t *testing.T) {
 	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	ouverte("after the device unlocked")
 	appelCoffre(t, s.apiVerrouiller, "tel", "", nil)
-	fermee("after the device locked itself")
+	ouverte("after the device locked itself: the background goes on")
 
 	w = appelCoffre(t, s.apiDeverrouiller, "", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	var session *http.Cookie
@@ -172,15 +175,15 @@ func TestCoffreServeur(t *testing.T) {
 	appelCoffre(t, s.apiVerrouiller, "tel", "", nil)
 	ouverte("while the window stays unlocked")
 	appelCoffre(t, s.apiVerrouiller, "", "", session)
-	fermee("after the computer locked")
+	ouverte("after the computer locked: the background goes on")
 	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	if _, err := s.retirerAppareilDistance("tel", ""); err != nil {
 		t.Fatal(err)
 	}
-	fermee("after the device was removed")
+	ouverte("after the device was removed: the window's lock keeps the vault")
 	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	s.fermerEcouteDistance()
-	fermee("after remote access was switched off")
+	ouverte("after remote access was switched off: the window's lock keeps the vault")
 
 	// restart: code entries reopen through the keystore, infra waits for the password
 	cfg := lireConfig()

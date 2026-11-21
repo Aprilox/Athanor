@@ -8,8 +8,9 @@ import (
 
 // A step that needs the infra key while the vault is locked waits for the unlock instead of failing (note 12h28
 // §3): the bell says what waits and why, the rest goes on, and the step resumes where it was once unlocked.
-// The automatic lock never closes the vault (verrou_auto.go): once opened by the password, the infra keys serve
-// without asking again; only a vault never opened since the start (or closed by the padlock) makes a step wait.
+// Locking (the padlock or the timer, verrou_auto.go) never closes the vault: once opened by the password, the infra
+// keys serve without asking again; only a vault never opened since the start (or closed by the emergency stop)
+// makes a step wait.
 
 type attenteInfra struct {
 	Module, Element string

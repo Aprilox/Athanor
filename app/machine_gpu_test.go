@@ -89,32 +89,82 @@ func TestGpusAmdgpu(t *testing.T) {
 	}
 }
 
+func TestFamilleGPU(t *testing.T) {
+	for entree, famille := range map[string]string{"AGXAcceleratorG14X": "apple", "AppleParavirtGPU": "apple", "Apple M3 Max": "apple",
+		"AMDRadeonX6000_AMDNavi14GraphicsAccelerator": "amd", "sppci_vendor_amd": "amd", "sppci_vendor_ati": "amd", "ATI Radeon HD 6750M": "amd",
+		"IntelAccelerator": "intel", "sppci_vendor_intel": "intel", "nvAccelerator": "nvidia", "NVIDIA GeForce GT 750M": "nvidia",
+		"IOAcceleratorES": "", "Integrated graphics": ""} {
+		if f := familleGPU(entree); f != famille {
+			t.Errorf("%q → %q, want %q", entree, f, famille)
+		}
+	}
+}
+
+// system_profiler SPDisplaysDataType -json of an Intel Mac (its Intel card first) and of Apple silicon
+const profilerIntelMac = `{"SPDisplaysDataType" : [
+  {"_name" : "Intel UHD Graphics 630", "sppci_model" : "Intel UHD Graphics 630", "spdisplays_vendor" : "sppci_vendor_intel", "spdisplays_vram_shared" : "1536 MB", "sppci_bus" : "spdisplays_builtin"},
+  {"_name" : "AMD Radeon Pro 5500M", "sppci_model" : "AMD Radeon Pro 5500M", "spdisplays_vendor" : "sppci_vendor_amd", "spdisplays_vram" : "8 GB", "sppci_bus" : "spdisplays_pcie_device"}]}`
+const profilerApple = `{"SPDisplaysDataType" : [{"_name" : "Apple M2 Pro", "sppci_model" : "Apple M2 Pro", "spdisplays_vendor" : "sppci_vendor_Apple", "sppci_cores" : "19", "sppci_bus" : "spdisplays_builtin"}]}`
+
+func TestParSystemProfiler(t *testing.T) {
+	c := parSystemProfiler([]byte(profilerIntelMac))
+	if len(c) != 2 || c[0] != (carteMac{famille: "intel", nom: "Intel UHD Graphics 630"}) || c[1] != (carteMac{famille: "amd", nom: "AMD Radeon Pro 5500M", vram: 8 << 30}) {
+		t.Fatalf("Intel Mac: %+v", c)
+	}
+	if c := parSystemProfiler([]byte(profilerApple)); len(c) != 1 || c[0] != (carteMac{famille: "apple", nom: "Apple M2 Pro", coeurs: 19}) {
+		t.Fatalf("Apple silicon: %+v", c)
+	}
+	if c := parSystemProfiler([]byte(`{"SPDisplaysDataType":[{"sppci_model":"X","spdisplays_vram":"4096 MB"}]}`)); len(c) != 1 || c[0].vram != 4<<30 {
+		t.Fatalf("MB: %+v", c)
+	}
+	if parSystemProfiler([]byte("not json")) != nil {
+		t.Fatal("a broken answer gives no card")
+	}
+}
+
+// TestParIoreg: Apple silicon (its unified memory and its cores), an Intel Mac's two cards named from system_profiler
+// though listed in another order (or from their maker before it answered), an old Mac's NVIDIA card.
 func TestParIoreg(t *testing.T) {
-	sortie := `+-o AGXAcceleratorG14X  <class AGXAcceleratorG14X, id 0x1000003a1, registered, matched, active, busy 0 (0 ms), retain 52>
+	apple := `+-o AGXAcceleratorG14X  <class AGXAcceleratorG14X, id 0x1000003a1, registered, matched, active, busy 0 (0 ms), retain 52>
     {
       "IOClass" = "AGXAcceleratorG14X"
       "model" = "Apple M2 Pro"
       "gpu-core-count" = 19
       "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=1622016000,"Tiler Utilization %"=3,"Renderer Utilization %"=11,"Device Utilization %"=12,"SplitSceneCount"=0,"In use system memory"=734003200}
     }
-+-o AMDRadeonX6000_AMDNavi14GraphicsAccelerator  <class AMDRadeonX6000_AMDNavi14GraphicsAccelerator, id 0x100000456>
-    {
-      "PerformanceStatistics" = {"Device Utilization %"=4,"vramUsedBytes"=1073741824,"vramFreeBytes"=3221225472,"GPU Activity(%)"=4}
-    }
 +-o IOAcceleratorES  <class IOAcceleratorES, id 0x100000789>
     {
       "IOClass" = "IOAcceleratorES"
     }
 `
-	g := parIoreg(sortie)
-	if len(g) != 2 {
-		t.Fatalf("%+v", g)
+	g := parIoreg(apple, nil)
+	if len(g) != 1 || g[0] != (GPUVue{Nom: "Apple M2 Pro", Utilisation: 12, Partagee: 734003200, Unifiee: true, Coeurs: 19}) {
+		t.Fatalf("Apple silicon: %+v", g)
 	}
-	if g[0].Nom != "Apple M2 Pro" || g[0].Utilisation != 12 || g[0].Partagee != 734003200 || g[0].VRAMTotal != 0 {
-		t.Errorf("Apple card %+v", g[0])
+	intelMac := `+-o AMDRadeonX6000_AMDNavi14GraphicsAccelerator  <class AMDRadeonX6000_AMDNavi14GraphicsAccelerator, id 0x100000456>
+    {
+      "PerformanceStatistics" = {"Device Utilization %"=4,"vramUsedBytes"=1073741824,"vramFreeBytes"=7516192768,"GPU Activity(%)"=4}
+    }
++-o IntelAccelerator  <class IntelAccelerator, id 0x100000321>
+    {
+      "PerformanceStatistics" = {"Device Utilization %"=9,"In use system memory"=268435456}
+    }
+`
+	g = parIoreg(intelMac, parSystemProfiler([]byte(profilerIntelMac)))
+	if len(g) != 2 || g[0] != (GPUVue{Nom: "AMD Radeon Pro 5500M", Utilisation: 4, VRAMUtil: 1 << 30, VRAMTotal: 8 << 30}) ||
+		g[1] != (GPUVue{Nom: "Intel UHD Graphics 630", Utilisation: 9, Partagee: 256 << 20}) {
+		t.Fatalf("Intel Mac: %+v", g)
 	}
-	if g[1].Nom != "GPU" || g[1].Utilisation != 4 || g[1].VRAMUtil != 1<<30 || g[1].VRAMTotal != 4<<30 {
-		t.Errorf("AMD card of an Intel Mac %+v", g[1])
+	if g = parIoreg(intelMac, nil); len(g) != 2 || g[0].Nom != "AMD Radeon" || g[1].Nom != "Intel Graphics" || g[0].Unifiee || g[1].Unifiee {
+		t.Fatalf("before system_profiler answered: %+v", g)
+	}
+	nvidia := `+-o nvAccelerator  <class nvAccelerator, id 0x100000999>
+    {
+      "PerformanceStatistics" = {"Device Utilization %"=30,"vramUsedBytes"=536870912,"vramFreeBytes"=1610612736}
+    }
+`
+	if g = parIoreg(nvidia, []carteMac{{famille: "nvidia", nom: "NVIDIA GeForce GT 750M", vram: 2 << 30}}); len(g) != 1 || g[0] != (GPUVue{Nom: "NVIDIA GeForce GT 750M", Utilisation: 30, VRAMUtil: 512 << 20, VRAMTotal: 2 << 30}) {
+		t.Fatalf("an old Mac's NVIDIA card: %+v", g)
 	}
 }
 

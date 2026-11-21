@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -15,6 +16,27 @@ import (
 )
 
 func systemeMachine() string { return "macos" }
+
+var (
+	cartesMacUneFois sync.Once
+	cartesMacLues    atomic.Pointer[[]carteMac]
+)
+
+// cartesMac: the cards as system_profiler names them, read once in the background (it takes a second or two): nil
+// until then, the cards keep their maker's name meanwhile.
+func cartesMac() []carteMac {
+	cartesMacUneFois.Do(func() {
+		go func() {
+			b, _ := exec.Command("system_profiler", "SPDisplaysDataType", "-json").Output()
+			l := parSystemProfiler(b)
+			cartesMacLues.Store(&l)
+		}()
+	})
+	if p := cartesMacLues.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
 
 var (
 	machOnce       sync.Once
@@ -56,7 +78,7 @@ func lireMachine() lectureMachine {
 		}
 	}
 	if b, err := exec.Command("ioreg", "-r", "-d", "1", "-w", "0", "-c", "IOAccelerator").Output(); err == nil {
-		l.gpus = parIoreg(string(b)) // machine_gpu.go
+		l.gpus = parIoreg(string(b), cartesMac()) // machine_gpu.go
 	}
 	if n, err := unix.Getfsstat(nil, unix.MNT_NOWAIT); err == nil && n > 0 {
 		fs := make([]unix.Statfs_t, n)

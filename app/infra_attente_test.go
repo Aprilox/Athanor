@@ -144,9 +144,14 @@ func TestVerrouAutoGardeInfra(t *testing.T) {
 		mux.ServeHTTP(w, r)
 		return w.Code
 	}
-	// the padlock, even on the auto-locked window, closes everything
-	if c := appel("/api/verrouiller"); c != 200 || s.etatCoffre().Infra {
-		t.Fatalf("the padlock left the infra key open: %d", c)
+	// the padlock, like the timer, locks the window only (3.1): a task in the background keeps the infra key
+	if c := appel("/api/verrouiller"); c != 200 || !s.etatCoffre().Infra || !s.fenetreVerrouillee() {
+		t.Fatalf("the padlock closed the infra key or left the window open: %d", c)
+	}
+	ctx2, annuler2 := context.WithTimeout(context.Background(), time.Second)
+	defer annuler2()
+	if v, err := s.valeurInfra(ctx2, cle.ID, "missions", "mission02"); err != nil || v != "cle-temoin-verrou" {
+		t.Fatalf("a task did not get the infra key after the padlock: %q %v", v, err)
 	}
 	if j := lireJournalAuditTest(); !strings.Contains(j, "verrouillage automatique") || strings.Contains(j, "cle-temoin-verrou") {
 		t.Fatal("a secret in the audit")

@@ -49,7 +49,7 @@ func (s *Serveur) deverrouillerCoffre(mdp string) {
 // device is unlocked any more; a window locked by its timer still holds it (note 19h03 §3). Called with s.mu
 // and the remote state's lock held.
 func (s *Serveur) fermerCoffreSiPersonne(d *distance) {
-	if s.coffre == nil || s.session != "" || s.verrouAuto {
+	if s.coffre == nil || s.session != "" || s.garderCoffre {
 		return
 	}
 	for _, ok := range d.deverrouilles {

@@ -50,14 +50,14 @@ func (s *Serveur) resteVerrouAuto(t time.Time) time.Duration {
 
 // verifierVerrouAuto locks the window once its delay passed; true when it did. Only the interface locks (note
 // 19h03 §3): the vault and its infra keys stay as they are, so AIs, missions, tasks and SSH sessions go on; the
-// padlock and the emergency stop still close everything.
+// padlock does the same (3.1), only the emergency stop closes everything.
 func (s *Serveur) verifierVerrouAuto(t time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.resteVerrouAuto(t) != 0 {
 		return false
 	}
-	s.session, s.verrouAuto = "", true
+	s.session, s.garderCoffre = "", true
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Action: "verrouillage automatique", Resultat: verrouAutoDe(s.config.VerrouAuto)})
 	return true
 }
