@@ -3,16 +3,22 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
 
 func systemeMachine() string { return "linux" }
+
+// nvidiaSmi: NVIDIA's tool, installed with its driver ("" without one).
+var nvidiaSmi = sync.OnceValue(func() string { p, _ := exec.LookPath("nvidia-smi"); return p })
 
 // lireMachine: /proc for the processors, the memory, the disks' activity and the links; statfs for the space.
 func lireMachine() lectureMachine {
@@ -23,6 +29,14 @@ func lireMachine() lectureMachine {
 	if b, err := os.ReadFile("/proc/meminfo"); err == nil {
 		l.ramTotal, l.ramUtil = memProc(string(b))
 	}
+	if p := nvidiaSmi(); p != "" {
+		ctx, fin := context.WithTimeout(context.Background(), 1500*time.Millisecond) // a driver in trouble can hang it
+		if b, err := exec.CommandContext(ctx, p, "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits").Output(); err == nil {
+			l.gpus = parNvidiaSmi(string(b))
+		}
+		fin()
+	}
+	l.gpus = append(l.gpus, gpusAmdgpu("/")...)
 	stats := map[string][3]uint64{}
 	if b, err := os.ReadFile("/proc/diskstats"); err == nil {
 		stats = disquesProc(string(b))

@@ -1,6 +1,7 @@
 package main
 
-// This computer's load, for the home page (and a paired phone): processors, memory, each disk (space used and, where
+// This computer's load, for the home page (and a paired phone): processors, memory, each graphics card (machine_gpu.go),
+// each disk (space used and, where
 // the system says it, how busy it is) and each network link (Wi-Fi, Ethernet…) in and out. Read by machine_*.go for
 // Windows, Linux and macOS; the rates are the change between two readings, taken every 2 s while someone looks.
 
@@ -19,6 +20,7 @@ type OrdinateurVue struct {
 	Coeurs   int         `json:"coeurs"`
 	RAMTotal uint64      `json:"ram_total"`
 	RAMUtil  uint64      `json:"ram_util"`
+	GPU      []GPUVue    `json:"gpus"` // machine_gpu.go
 	Disques  []DisqueVue `json:"disques"`
 	Reseaux  []ReseauVue `json:"reseaux"`
 	Lu       string      `json:"lu"`
@@ -48,6 +50,7 @@ type lectureMachine struct {
 	cpuTotal  uint64
 	ramTotal  uint64
 	ramUtil   uint64
+	gpus      []GPUVue // already in percent and bytes: each system gives them so
 	disques   []disqueBrut
 	reseaux   []reseauBrut
 	coeurs    int
@@ -91,7 +94,7 @@ func echantillonner() {
 
 // vueMachine: the last two readings turned into percentages and rates.
 func vueMachine(a, b *lectureMachine) OrdinateurVue {
-	v := OrdinateurVue{CPU: -1, Coeurs: b.coeurs, RAMTotal: b.ramTotal, RAMUtil: b.ramUtil, Disques: []DisqueVue{}, Reseaux: []ReseauVue{},
+	v := OrdinateurVue{CPU: -1, Coeurs: b.coeurs, RAMTotal: b.ramTotal, RAMUtil: b.ramUtil, GPU: append([]GPUVue{}, b.gpus...), Disques: []DisqueVue{}, Reseaux: []ReseauVue{},
 		Lu: b.t.UTC().Format(time.RFC3339), Systeme: systemeMachine()}
 	dt := 0.0
 	if a != nil {

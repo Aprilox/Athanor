@@ -2280,7 +2280,7 @@ pages.accueil = async () => {
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}${tuileMachine()}</div>
   </div>`;
 };
-// This computer (machine.go): processors, memory, each disk and each network link, read every 2 s while the home shows
+// This computer (machine.go): processors, memory, each graphics card, each disk and each network link, read every 2 s while the home shows
 const debitLisible = (o) => o >= 1048576 ? t("{0} MB/s", [(o / 1048576).toFixed(1)]) : o >= 1024 ? t("{0} KB/s", [Math.round(o / 1024)]) : t("{0} B/s", [Math.round(o)]);
 const goOctets = (o) => t("{0} GB", [(o / 1073741824).toFixed(o >= 10737418240 ? 0 : 1)]);
 const barreMachine = (pct) => `<span class="quota-ligne ${pct >= 90 ? "plein" : pct >= 70 ? "haut" : ""}"><span class="barre m0"><i style="width:${Math.min(100, Math.round(pct))}%"></i></span></span>`;
@@ -2298,10 +2298,13 @@ function corpsMachine(v) {
   const disques = (v.disques || []).map((d) => { const pct = d.total ? 100 * (d.total - d.libre) / d.total : 0;
     const act = d.activite >= 0 ? t("Activity {0} %", [Math.round(d.activite)]) + (d.lecture >= 0 ? ` · ${t("read")} ${debitLisible(d.lecture)} · ${t("write")} ${debitLisible(d.ecriture)}` : "") : "";
     return ligne(t("Disk {0}", [d.nom]), `${Math.round(pct)} %`, pct, h(t("{0} free of {1}", [goOctets(d.libre), goOctets(d.total)])) + (act ? " · " + h(act) : "")); }).join("");
-  const reseaux = (v.reseaux || []).map((x) => `<div class="machine-ligne ligne m0"><span>${h(x.nom)}</span><span class="espace"></span><span class="petit" title="${h(t("Received"))}">${ic("bas")} ${debitLisible(x.entree)}</span><span class="petit" title="${h(t("Sent"))}">${ic("haut")} ${debitLisible(x.sortie)}</span></div>`).join("");
+  // each graphics card: how busy, then its own memory (VRAM), or the computer's it uses (integrated, Apple)
+  const gpus = (v.gpus || []).map((g) => ligne(g.nom, g.utilisation >= 0 ? `${Math.round(g.utilisation)} %` : "…", g.utilisation >= 0 ? g.utilisation : null,
+    h(g.vram_total >= 536870912 ? t("VRAM {0} used of {1}", [goOctets(g.vram_util), goOctets(g.vram_total)]) : g.partagee ? t("Shared memory {0} used", [goOctets(g.partagee)]) : ""))).join("");
+  const reseaux = (v.reseaux || []).map((x) =>`<div class="machine-ligne ligne m0"><span>${h(x.nom)}</span><span class="espace"></span><span class="petit" title="${h(t("Received"))}">${ic("bas")} ${debitLisible(x.entree)}</span><span class="petit" title="${h(t("Sent"))}">${ic("haut")} ${debitLisible(x.sortie)}</span></div>`).join("");
   return ligne(t("Processors"), v.cpu >= 0 ? `${Math.round(v.cpu)} %` : "…", v.cpu >= 0 ? v.cpu : null, "")
     + ligne(t("Memory"), `${Math.round(ram)} %`, ram, h(t("{0} used of {1}", [goOctets(v.ram_util), goOctets(v.ram_total)])))
-    + disques + (reseaux ? `<h3 class="petit muet m0 mt-1">${t("Network")}</h3>${reseaux}` : "");
+    + gpus + disques + (reseaux ? `<h3 class="petit muet m0 mt-1">${t("Network")}</h3>${reseaux}` : "");
 }
 async function majMachine() {
   const z = $("#machine-corps"); if (!z) return;

@@ -55,6 +55,9 @@ func lireMachine() lectureMachine {
 			l.ramUtil = min(vmStat(string(b)), t)
 		}
 	}
+	if b, err := exec.Command("ioreg", "-r", "-d", "1", "-w", "0", "-c", "IOAccelerator").Output(); err == nil {
+		l.gpus = parIoreg(string(b)) // machine_gpu.go
+	}
 	if n, err := unix.Getfsstat(nil, unix.MNT_NOWAIT); err == nil && n > 0 {
 		fs := make([]unix.Statfs_t, n)
 		if n, err = unix.Getfsstat(fs, unix.MNT_NOWAIT); err == nil {

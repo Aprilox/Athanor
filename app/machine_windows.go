@@ -49,6 +49,7 @@ func lireMachine() lectureMachine {
 	if r, _, _ := pGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&m))); r != 0 {
 		l.ramTotal, l.ramUtil = m.TotalPhys, m.TotalPhys-m.AvailPhys
 	}
+	l.gpus = lireGPU() // machine_gpu_windows.go
 	buf := make([]uint16, 256)
 	if n, err := windows.GetLogicalDriveStrings(uint32(len(buf)), &buf[0]); err == nil {
 		for _, racine := range strings.Split(windows.UTF16ToString(buf[:n]), "\x00") {

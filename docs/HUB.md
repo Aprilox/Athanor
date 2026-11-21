@@ -4,7 +4,7 @@
 
 ## The hub
 
-**Home** is the page Athanor opens on: a conversation with the [home assistant](#the-home-assistant), one tile per module with its state and live figures (Studio: projects running, milestones done today, projects that need you, quota; Servers…), each figure opening its page, a *This computer* tile with its load read live every 2 seconds (processors, memory, each disk's space and activity, each network link in and out: Wi-Fi, Ethernet…; on Windows, Linux and macOS, also from a paired phone), and two lists, *Waiting for your answer* then *In progress*, each with *See all*.
+**Home** is the page Athanor opens on: a conversation with the [home assistant](#the-home-assistant), one tile per module with its state and live figures (Studio: projects running, milestones done today, projects that need you, quota; Servers…), each figure opening its page, a *This computer* tile with its load read live every 2 seconds (processors, memory, each graphics card and its VRAM, each disk's space and activity, each network link in and out: Wi-Fi, Ethernet…; on Windows, Linux and macOS, also from a paired phone), and two lists, *Waiting for your answer* then *In progress*, each with *See all*.
 
 **Projects** lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”), what waits for you and why, a direct link; filters *All*, *Needs me*, *In progress*; *New project*, *Join a project*, the archived projects. The projects of a [remote Athanor](#mcp-and-remote-athanors) come in as `name@instance`.
 

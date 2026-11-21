@@ -50,6 +50,8 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "Shared memory {0} used": "Mémoire partagée : {0} utilisés",
+  "VRAM {0} used of {1}": "VRAM : {0} utilisés sur {1}",
   "Your password is shorter than 12 characters: open Athanor's window to choose a new one.": "Votre mot de passe fait moins de 12 caractères : ouvrez la fenêtre d'Athanor pour en choisir un nouveau.",
   "Password changed.": "Mot de passe changé.",
   "The two passwords are different.": "Les deux mots de passe sont différents.",
@@ -1159,6 +1161,8 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Shared memory {0} used": "Memoria compartida: {0} usados",
+  "VRAM {0} used of {1}": "VRAM: {0} usados de {1}",
   "Your password is shorter than 12 characters: open Athanor's window to choose a new one.": "Su contraseña tiene menos de 12 caracteres: abra la ventana de Athanor para elegir una nueva.",
   "Password changed.": "Contraseña cambiada.",
   "The two passwords are different.": "Las dos contraseñas son diferentes.",
@@ -2236,6 +2240,8 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Shared memory {0} used": "Gemeinsamer Speicher: {0} belegt",
+  "VRAM {0} used of {1}": "VRAM: {0} von {1} belegt",
   "Your password is shorter than 12 characters: open Athanor's window to choose a new one.": "Ihr Passwort hat weniger als 12 Zeichen: Öffnen Sie das Fenster von Athanor, um ein neues zu wählen.",
   "Password changed.": "Passwort geändert.",
   "The two passwords are different.": "Die beiden Passwörter sind verschieden.",
@@ -3307,6 +3313,8 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Shared memory {0} used": "Memoria condivisa: {0} usati",
+  "VRAM {0} used of {1}": "VRAM: {0} usati su {1}",
   "Your password is shorter than 12 characters: open Athanor's window to choose a new one.": "La tua password ha meno di 12 caratteri: apri la finestra di Athanor per sceglierne una nuova.",
   "Password changed.": "Password cambiata.",
   "The two passwords are different.": "Le due password sono diverse.",
@@ -4378,6 +4386,8 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Shared memory {0} used": "Memória compartilhada: {0} usados",
+  "VRAM {0} used of {1}": "VRAM: {0} usados de {1}",
   "Your password is shorter than 12 characters: open Athanor's window to choose a new one.": "A sua palavra-passe tem menos de 12 caracteres: abra a janela do Athanor para escolher uma nova.",
   "Password changed.": "Palavra-passe alterada.",
   "The two passwords are different.": "As duas palavras-passe são diferentes.",
