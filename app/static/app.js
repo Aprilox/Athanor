@@ -8805,7 +8805,7 @@ async function rafraichir() {
     if (!perime && ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent)) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
     if (!perime && !v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) { rendrePage(); chargerMenu(); } }
-    if (v.changer_mdp && !v.verrouille) exigerNouveauMdp("");
+    if (!perime && v.changer_mdp && !v.verrouille) exigerNouveauMdp(""); // a read from before the change must not ask again
     rendreBandeau(v);
     afficherResteVerrou(v.verrou_dans);
     if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }
