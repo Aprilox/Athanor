@@ -322,6 +322,9 @@ func santePonytail(kit string) int {
 		return 1
 	}
 	direSante("Ponytail %s built in and on: the lead, the workers, every sub-agent and the chat get it", versionPonytail)
+	if n := noteAmont(kit, "Ponytail", "dietrichgebert/ponytail", versionPonytail); n != "" {
+		direSante("%s", n)
+	}
 	return 0
 }
 
@@ -332,8 +335,18 @@ func santeRTK(kit string) int {
 		direSante("RTK not installed (optional): Repair downloads it")
 		return 1
 	}
-	if c := executerSante(r, "--version"); c != 0 {
-		return c
+	// the RTK of this version of Athanor, the same on every Athanor (versions_outils.go)
+	inst := versionRTKInstallee(r)
+	if inst == "" {
+		return executerSante(r, "--version")
+	}
+	if "v"+inst != versionRTK {
+		direSante("RTK %s installed, but this version of Athanor uses %s: Repair installs it", inst, strings.TrimPrefix(versionRTK, "v"))
+		return 1
+	}
+	direSante("RTK %s, the version this Athanor uses", inst)
+	if n := noteAmont(kit, "RTK", "rtk-ai/rtk", versionRTK); n != "" {
+		direSante("%s", n)
 	}
 	for _, l := range LireEnv(filepath.Join(kit, ".env")) {
 		if l.Cle == "RTK" && strings.TrimSpace(l.Valeur) == "0" {
@@ -657,7 +670,7 @@ func ajouterPathBashrc(f string) {
 
 // reparerRTK: RTK downloaded when missing, then switched on in Settings when it was off.
 func reparerRTK(kit string) int {
-	if !rtkUtilisable(cheminRTK(kit)) {
+	if !rtkUtilisable(cheminRTK(kit)) || "v"+versionRTKInstallee(cheminRTK(kit)) != versionRTK {
 		if err := installerRTK(kit); err != nil {
 			direSante("RTK download FAILED: %v", err)
 			return 1

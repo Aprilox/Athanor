@@ -24,7 +24,7 @@
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#la-sécurité-en-bref"><b>Sécurité</b></a> ·
   <a href="docs/FAQ.fr.md"><b>FAQ</b></a> ·
-  <a href="docs/releases/3.1.6.md"><b>Nouveautés</b></a> ·
+  <a href="docs/releases/3.1.7.md"><b>Nouveautés</b></a> ·
   <a href="README.md"><b>English</b></a>
 </p>
 
@@ -217,7 +217,7 @@ Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
 ## Remerciements
 
 - [Claude Code](https://claude.com/claude-code), qui fait le vrai travail.
-- [Ponytail](https://github.com/dietrichgebert/ponytail) de Dietrich Gebert (MIT), dont Athanor embarque les règles (`app/ponytail.go`), et [RTK](https://github.com/rtk-ai/rtk), téléchargé à l'installation, qui compresse les sorties de commandes.
+- [Ponytail](https://github.com/dietrichgebert/ponytail) de Dietrich Gebert (MIT), dont Athanor embarque les règles (`app/ponytail.go`), et [RTK](https://github.com/rtk-ai/rtk) (Apache 2.0), téléchargé à l'installation, qui compresse les sorties de commandes.
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage : solution de secours quand le bureau « Claude » ne peut pas être créé (fenêtres déplacées sur un bureau virtuel).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, [purego](https://github.com/ebitengine/purego) (Apache 2.0) pour l'icône du Dock sur le Mac, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
 - [cloudflared](https://github.com/cloudflare/cloudflared) (Apache 2.0), téléchargé au premier usage, pour le tunnel de l'accès à distance, et [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause) pour ses QR codes.

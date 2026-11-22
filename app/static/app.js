@@ -2799,6 +2799,7 @@ pages.suivi = async () => {
       <div class="chiffre" title="${h(t("What Claude read at each turn: the whole conversation of the cycle again (the code, the plan, the tools' results), mostly from its cache. Most of the cost is there: what Claude writes is a small part."))}"><b>${fmtTokens(somme("entree_tokens") + somme("cache_lu") + somme("cache_ecrit"))}</b><span>${t("tokens read")}</span></div>
       <div class="chiffre" title="${h(t("What Claude wrote: its answers, the code, the tools it called. Each token written costs more than one read, but there are far fewer of them."))}"><b>${fmtTokens(somme("sortie_tokens"))}</b><span>${t("tokens produced")}</span></div>
       <div class="chiffre"><b>${fmtTokens(somme("contexte_max") / stats.length)}</b><span>${t("average peak context")}</span></div>
+      ${(() => { const a = stats.filter((s) => s.seuil_relais_k > 0); return a.length ? `<div class="chiffre" title="${h(t("RELAY_CONTEXT_K=auto: the context past which a fresh session takes the milestone over, chosen for this project at each cycle from its own milestones."))}"><b>${fmtTokens(a.reduce((x, s) => x + s.seuil_relais_k, 0) / a.length * 1000)}</b><span>${t("relay threshold (auto), on average")}</span></div>` : ""; })()}
     </div>
     ${lignesGains(g)}
     <div class="tableau mt-2"><table class="tab"><thead><tr><th>${t("Cycle")}</th><th>${t("Time")}</th><th>${t("Model")}</th><th>${t("State")}</th><th>${t("Minutes")}</th><th>${t("Turns")}</th><th>${t("Cost $")}</th><th>${t("Peak context")}</th></tr></thead><tbody>
@@ -4793,8 +4794,23 @@ async function majSante() {
   await rendreSortie();
 }
 
+// the tools of tools/ no project used for 30 days (outils_usage.go): offered, removed only on a click
+async function majOutilsInutilises() {
+  const r = await api("sante/outils-inutilises").catch(() => null);
+  const el = $("#st-outils"); if (!el || !r) return;
+  const l = r.outils || [];
+  el.hidden = false;
+  el.innerHTML = `<div class="ligne"><h2 class="m0">${t("Shared tools")}</h2><span class="espace"></span><button class="btn btn-petit" data-ouvrir="tools">${t("Open the folder")}</button></div>
+    <p class="muet petit mt-1"><code>${h(r.dossier || "")}</code></p>
+    ${l.length ? `<h3 class="mt-2">${t("Unused tools")}</h3><p class="intro petit">${t("Shared by your projects in tools/: no project used these for 30 days. Removing one frees its space; it is downloaded again the day a project needs it.")}</p>
+    <div class="tableau mt-1"><table class="tab"><thead><tr><th>${t("Name")}</th><th>${t("Size")}</th><th>${t("Not used since")}</th><th></th></tr></thead><tbody>
+    ${l.map((o) => `<tr><td><b>${h(o.nom)}</b></td><td>${h(goOctets(o.taille))}</td><td>${h(new Date(o.depuis * 1000).toLocaleDateString())}</td><td class="droite"><button class="btn btn-petit" data-supprimer-outil="${h(o.nom)}">${t("Remove")}</button></td></tr>`).join("")}
+    </tbody></table></div>` : `<p class="muet petit">${t("No tool of 1 GB or more has gone unused for 30 days.")}</p>`}`;
+}
+
 pages.sante = async () => {
   const verifs = await api("sante");
+  setTimeout(majOutilsInutilises, 0); // once the page is drawn: its list may take a while (sizes of tens of gigabytes)
   etat.santeListe = listeSante(verifs); etat.sortieSig = "";
   const v = etat.vue || {}, modes = modesSysteme(v);
   const actuel = modes.find((m) => m.actuel) || modes[0];
@@ -4815,6 +4831,7 @@ pages.sante = async () => {
   </div>
   ${v.windows && v.natif ? `<p class="petit attention mt-1" id="st-exception-natif">${t("Native Windows mode: no sandbox keeps Claude away from Athanor's data (settings, vault, modules). The chained audit journal shows any change (Verify), and approvals ask for your password.")}</p>` : ""}
   <div class="bloc bloc-liste">${listeSante(verifs)}</div>
+  <div class="bloc" id="st-outils" hidden></div>
   <div class="bloc"><h2>${t("Ask Claude")}</h2>
     <p class="intro petit">${t("A Claude session in the tool folder, outside the sandbox and without sudo: it installs, fixes, then summarizes. Whatever needs sudo or Windows is written to logs\\TODO_FOR_YOU.md.")}</p>
     <div class="ligne"><input type="text" id="st-libre" class="croit" placeholder="${h(t("e.g. install Godot 4 · why does the pilot stop?"))}"><button class="btn" id="st-libre-btn">${t("Send")}</button></div>
@@ -4872,7 +4889,7 @@ const DETAILS_REGLAGES = {
   CHEAP_MODEL: ["Used by the executor sub-agent for mechanical work (long outputs, searches, edits repeated over many files): the cheapest model is enough.", "Empty: the same model as the other sub-agents, which uses more quota for the same work."],
   EFFORT: ["Higher (high, xhigh, max): Claude thinks longer before acting; better on hard problems, slower, and it uses more quota.", "Lower (low, medium): faster and cheaper, enough for simple or well-planned work. Empty: the model's normal effort."],
   CLOSE_AFTER_MILESTONE: ["On: the pilot closes the cycle a few minutes after a milestone's commit, and the next milestone starts with a fresh, light context (cheaper turns).", "Off: the session ends when Claude stops on its own, which costs more if it lingers."],
-  RELAY_CONTEXT_K: ["Lower: a fresh session takes over more often; cheaper turns, but each new session rereads its notes.", "Higher: longer sessions that keep more in mind, but every turn costs more as the context grows. 0: never; Claude Code may then compact the context by itself and blur the thread."],
+  RELAY_CONTEXT_K: ["Lower: a fresh session takes over more often; cheaper turns, but each new session rereads its notes.", "Higher: longer sessions that keep more in mind, but every turn costs more as the context grows. 0: never; Claude Code may then compact the context by itself and blur the thread.", "auto: Athanor picks it for each project from its own finished milestones (what three in four of them needed, plus a margin, between 110k and 300k), and shows it in the project's Usage."],
   MAX_HOURS: ["Only the time the pilot works counts: a pause, a quota wait, a stopped pilot or Athanor closed do not count. Past the limit, the pilot stops, whatever the project's state.", "Unlimited (0, the default): the pilot works until the project is delivered, which stops it by itself, or until you stop it.", "A limit only caps what a project can use (720 = 30 days of work). A project can have its own: Manage › Working mode."],
   CYCLE_MAX_MIN: ["Lower: a cycle that drags is cut sooner (the work done stays, the milestone resumes), but a long milestone (a big build, a game engine) may be cut before its end.", "Higher: more patience for long milestones; a stuck cycle wastes more time."],
   IDLE_MAX_MIN: ["A cycle with no activity for this long is stopped, then resumed.", "Lower: a frozen session is caught sooner, but a long silent command (a build, tests) may be cut. Higher: the opposite."],
@@ -4910,6 +4927,7 @@ function champReglage(l, modeles) {
   if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
   if (l.cle === "MAX_HOURS") return choix(["72", "168", "336", "720", "0"], (m) => libelleDuree(Number(m)));
   if (l.cle === "CLAUDE_AUTH") return choix(["subscription", "api"], (m) => t(m === "api" ? "API key (paid per use)" : "Claude subscription (token)"));
+  if (l.cle === "RELAY_CONTEXT_K") return choix(["auto", "110", "200", "300"], (m) => m === "auto" ? t("auto (per project)") : fmtTokens(Number(m) * 1000));
   if (l.cle === "KEEP_AWAKE") return choix(["1", "screen", "0"], (m) => t({ "1": "PC awake", screen: "PC and screen awake", "0": "no" }[m]));
   if (["RTK", "PONYTAIL", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
   return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
@@ -8843,6 +8861,12 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.dataset.ongletSante) { etat.ongletSante = b.dataset.ongletSante; return rendrePage(); }
     const ligne = b.closest(".verif"); const id = ligne && ligne.dataset.id;
     if (b.id === "st-tout") { await action(api("sante/verifier", "POST", { id: "tout" })); return rendrePage(); }
+    if (b.dataset.supprimerOutil) {
+      const n = b.dataset.supprimerOutil;
+      if (await choisir(t("Remove {0} from tools/? A project that needs it again downloads it again.", [n]), [{ id: "non", texte: t("Cancel") }, { id: "ok", texte: t("Remove"), danger: true }]) !== "ok") return;
+      if (await action(api("sante/outils-inutilises/supprimer", "POST", { nom: n }))) majOutilsInutilises();
+      return;
+    }
     if (b.id === "st-installer") return action(api("sante/installer", "POST"));
     if (b.id === "st-recompiler") { const r = await action(api("sante/recompiler", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-mcp-hub") { const r = await action(api("sante/mcp-hub", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }

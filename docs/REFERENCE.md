@@ -30,7 +30,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `CHEAP_MODEL` | model of the `executor` sub-agent (default `haiku`) |
 | `FRAMING_MODEL` / `WORKER_MODEL` | model of the framing cycle (empty = `MODEL`), model of the parallel workers (default `sonnet`, empty = `MODEL`) |
 | `FRAMING_MAX_MIN` | time box of the framing, in minutes (default 25) |
-| `RELAY_CONTEXT_K` | context, in thousands of tokens, past which a fresh session takes over the milestone (default 110, 0 = never) |
+| `RELAY_CONTEXT_K` | context, in thousands of tokens, past which a fresh session takes over the milestone (default 200, 0 = never; `auto`: chosen for each project at each cycle from its own finished milestones, between 110 and 300, and shown in its *Usage*) |
 | `EFFORT` | reasoning effort, `low` to `max` |
 | `LANGUAGE` | language Claude works and documents in (set by the app) |
 | `MAX_HOURS` | work time limit, in hours: only the time the pilot works counts (not its waits, nor the time it is stopped); 0 = unlimited, the default, the pilot stopping by itself at the delivery; a project can have its own: *Manage → Working mode* |
@@ -122,7 +122,7 @@ Inside each project, `.athanor/` holds REQUEST.md, PLAN.md, LOG.md, queue/, done
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](../.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v3.1.6 && git push origin v3.1.6
+git tag v3.1.7 && git push origin v3.1.7
 ```
 
 Keep the version in [`app/winres/athanor.rc`](../app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](../app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](releases/2.31.0.md)): it opens the release page.

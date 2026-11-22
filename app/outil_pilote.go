@@ -90,11 +90,15 @@ type pilote struct {
 	parallelMax    int
 	eco            bool   // the eco mode (ECO=1 in .athanor/.env): every lever but the model and the effort set for the quota
 	optionsCycle   string // what the current cycle runs with, for stats.tsv: "ponytail,eco,fast,rtk"
-	rtkBin         string // RTK, when Claude's commands go through it (its measures: mesureRTK)
-	ecoAnnonce     string // "1"/"0": the eco state last logged
-	rapide         bool   // the fast mode (FAST=1 in .athanor/.env): quick checks only, the whole verification at the end
-	rapideAnnonce  string // "1"/"0": the fast state last logged
-	refusRapide    int    // deliveries reopened by this run because the fast mode's verification was owed
+	relaisAuto     bool   // RELAY_CONTEXT_K=auto: the threshold worked out for the project at each cycle (seuilRelaisAuto)
+	seuilCycleK    int    // that threshold for the current cycle, for stats.tsv (0: a fixed setting)
+	// the slowest commands of the last cycle, for the next one's "Where things stand" (point_cycle.go)
+	lentesDernierCycle []commandeLente
+	rtkBin             string // RTK, when Claude's commands go through it (its measures: mesureRTK)
+	ecoAnnonce         string // "1"/"0": the eco state last logged
+	rapide             bool   // the fast mode (FAST=1 in .athanor/.env): quick checks only, the whole verification at the end
+	rapideAnnonce      string // "1"/"0": the fast state last logged
+	refusRapide        int    // deliveries reopened by this run because the fast mode's verification was owed
 	// what this pilot read, told to the app in STATE.json (reglages_pris.go): the tool's settings at its start,
 	// the project's working modes at the start of its cycle
 	empreinteReglages string
@@ -458,7 +462,7 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 	}
 	statsPrive := filepath.Join(p.prive, "stats.tsv")
 	if st, err := os.Stat(statsPrive); err != nil || st.Size() == 0 {
-		_ = os.WriteFile(statsPrive, []byte("horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\testimation\toptions\trtk_entree\trtk_economise\n"), 0o644)
+		_ = os.WriteFile(statsPrive, []byte("horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\testimation\toptions\trtk_entree\trtk_economise\tseuil_relais_k\n"), 0o644)
 	}
 	tarifs := filepath.Join(p.kit, "logs", "tarifs.json")
 	var res map[string]any
@@ -540,10 +544,14 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 	}
 	// what this cycle ran with (ponytail, eco, rtk) and what RTK spared since the last line (its own measures)
 	rtkEntree, rtkEconomise := p.mesureRTK()
-	ligne := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\t%s\t%d\t%d\n",
+	seuil := "" // RELAY_CONTEXT_K=auto only: the threshold the cycle ran with
+	if p.seuilCycleK > 0 {
+		seuil = strconv.Itoa(p.seuilCycleK)
+	}
+	ligne := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\t%s\t%d\t%d\t%s\n",
 		time.Now().Format("2006-01-02T15:04:05"), etiquette, modele, etat,
 		minutes, minutesAPI, tours, coutUSD, entree, cacheLu, cacheEcrit, sortie,
-		pic, commit, estime, p.optionsCycle, rtkEntree, rtkEconomise)
+		pic, commit, estime, p.optionsCycle, rtkEntree, rtkEconomise, seuil)
 	if sf, err := os.OpenFile(statsPrive, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		_, _ = sf.WriteString(ligne)
 		sf.Close()
@@ -1122,6 +1130,7 @@ func (p *pilote) consignesCadrage(fermeture bool, limiteMin string) string {
 		return "\n## This cycle: closing the framing\n\nThe framing cycle ended before the plan was written. Write `.athanor/PLAN.md` now, yourself, from `.athanor/REQUEST.md` and what is already in `.athanor/docs/`: each milestone one line starting with `- [ ] M1 : `. Do not read the attachments again, do not call any sub-agent, write no code. The missing details become milestones of the plan.\n"
 	}
 	guide, _ := os.ReadFile(filepath.Join(p.modeles, "guides", "FRAMING.md"))
+	guide = append(guide, consigneTailleJalons(p.relayContextK)...) // relais_auto.go
 	if limiteMin != "" {
 		return fmt.Sprintf("\n## This cycle: the framing (time box of %s min)\n\nThis cycle only writes the plan, with the steps below: no code, no installation, no test of a tool, no demo content. The pilot stops it after %s minutes and starts the plan as it stands then: have `.athanor/PLAN.md` written within the first half of that time, refine after.\n\n%s", limiteMin, limiteMin, string(guide))
 	}

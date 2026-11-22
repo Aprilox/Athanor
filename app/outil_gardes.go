@@ -451,7 +451,7 @@ func gardeBash(entree []byte) string {
 			"own windows. Roblox: roblox-studio --rebuild closes and reopens only this project's Studio; " +
 			"roblox-studio --screen says whether Studio can draw right now."
 	}
-	return ""
+	return gardeCheckComplet(commande, e) // garde_check.go
 }
 
 func lancerHook(args []string) int {

@@ -519,6 +519,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/sante", s.garde(false, s.apiSante))
 	mux.HandleFunc("POST /api/sante/verifier", s.garde(false, s.apiVerifier))
 	mux.HandleFunc("POST /api/sante/reparer", s.garde(false, s.apiReparer))
+	mux.HandleFunc("GET /api/sante/outils-inutilises", s.garde(false, s.apiOutilsInutilises))          // outils_usage.go
+	mux.HandleFunc("POST /api/sante/outils-inutilises/supprimer", s.garde(false, s.apiSupprimerOutil)) // outils_usage.go
 	mux.HandleFunc("POST /api/sante/claude", s.garde(false, s.apiClaude))
 	mux.HandleFunc("POST /api/sante/libre", s.garde(false, s.apiLibre))
 	mux.HandleFunc("POST /api/sante/barriere", s.garde(false, s.apiBarriere))

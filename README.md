@@ -24,7 +24,7 @@
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#security-in-short"><b>Security</b></a> ·
   <a href="docs/FAQ.md"><b>FAQ</b></a> ·
-  <a href="docs/releases/3.1.6.md"><b>What's new</b></a> ·
+  <a href="docs/releases/3.1.7.md"><b>What's new</b></a> ·
   <a href="README.fr.md"><b>Français</b></a>
 </p>
 
@@ -217,7 +217,7 @@ Issues and pull requests are welcome. Before opening one:
 ## Acknowledgements
 
 - [Claude Code](https://claude.com/claude-code), which does the actual work.
-- [Ponytail](https://github.com/dietrichgebert/ponytail) by Dietrich Gebert (MIT), whose rules Athanor carries (`app/ponytail.go`), and [RTK](https://github.com/rtk-ai/rtk), downloaded at installation, which compresses the command outputs.
+- [Ponytail](https://github.com/dietrichgebert/ponytail) by Dietrich Gebert (MIT), whose rules Athanor carries (`app/ponytail.go`), and [RTK](https://github.com/rtk-ai/rtk) (Apache 2.0), downloaded at installation, which compresses the command outputs.
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes (MIT), compiled on first use: fallback when the "Claude" desktop cannot be created (windows moved to a virtual desktop).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) for the Windows window, [purego](https://github.com/ebitengine/purego) (Apache 2.0) for the Mac's Dock icon, and [bubblewrap](https://github.com/containers/bubblewrap) for the sandbox.
 - [cloudflared](https://github.com/cloudflare/cloudflared) (Apache 2.0), downloaded on first use, for the remote-access tunnel, and [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause) for its QR codes.

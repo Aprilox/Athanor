@@ -30,6 +30,22 @@ jobs:
             echo "::error title=Tag and version differ::tag $GITHUB_REF_NAME, versionAthanor \"$code\" in app/commandes.go"
             exit 1
           fi
+      - name: No GitHub mention in the release notes
+        # an @name outside code in docs/releases/VERSION.md is a mention: GitHub lists that account among the
+        # release's contributors and notifies it (3.0.0 to 3.1.5 named github.com/vps that way)
+        run: |
+          f="docs/releases/${GITHUB_REF_NAME#v}.md"
+          [ -f "$f" ] || exit 0
+          python3 - "$f" <<'PY'
+          import re, sys
+          bad = []
+          for n, l in enumerate(open(sys.argv[1], encoding="utf-8"), 1):
+              for m in re.finditer(r"(?<![\w.+/-])@[A-Za-z0-9][A-Za-z0-9-]*", re.sub(r"`[^`]*`", "", l)):
+                  bad.append(f"line {n}: {m.group(0)}")
+          if bad:
+              print("::error title=GitHub mention in the release notes::" + "; ".join(bad) + " (put it between backticks)")
+              sys.exit(1)
+          PY
 
   checks:
     # the whole CI on the tagged commit, on the three systems

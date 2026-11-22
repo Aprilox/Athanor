@@ -30,7 +30,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `CHEAP_MODEL` | modèle du sous-agent `executor` (par défaut `haiku`) |
 | `FRAMING_MODEL` / `WORKER_MODEL` | modèle du cycle de cadrage (vide = `MODEL`), modèle des ouvriers en parallèle (par défaut `sonnet`, vide = `MODEL`) |
 | `FRAMING_MAX_MIN` | durée maximale du cadrage, en minutes (25 par défaut) |
-| `RELAY_CONTEXT_K` | contexte, en milliers de tokens, au-delà duquel une nouvelle session reprend le jalon (110 par défaut, 0 = jamais) |
+| `RELAY_CONTEXT_K` | contexte, en milliers de tokens, au-delà duquel une nouvelle session reprend le jalon (200 par défaut, 0 = jamais ; `auto` : choisi pour chaque projet à chaque cycle d'après ses propres jalons terminés, entre 110 et 300, et affiché dans son *Consommation*) |
 | `EFFORT` | effort de réflexion, de `low` à `max` |
 | `LANGUAGE` | langue dans laquelle Claude travaille et documente (réglée par l'application) |
 | `MAX_HOURS` | limite de temps de travail, en heures : seul compte le temps où le pilote travaille (ni ses attentes, ni le temps où il est arrêté) ; 0 = illimité, par défaut, le pilote s'arrêtant de lui-même à la livraison ; un projet peut avoir la sienne : *Gérer → Mode de travail* |
@@ -122,7 +122,7 @@ Dans chaque projet, `.athanor/` contient REQUEST.md, PLAN.md, LOG.md, queue/, do
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](../.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`) :
 
 ```bash
-git tag v3.1.6 && git push origin v3.1.6
+git tag v3.1.7 && git push origin v3.1.7
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](../app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](../app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](releases/2.31.0.md)) : elles ouvrent la page de la version.

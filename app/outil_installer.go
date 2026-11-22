@@ -355,8 +355,9 @@ func installerRTK(kit string) error {
 
 func (in *installation) rtk() {
 	in.etape("RTK (command output compression)")
-	if rtkUtilisable(cheminRTK(in.kit)) {
-		in.ok("RTK already present")
+	// the version this Athanor names (versions_outils.go): an older one left by an earlier install is replaced
+	if rtkUtilisable(cheminRTK(in.kit)) && "v"+versionRTKInstallee(cheminRTK(in.kit)) == versionRTK {
+		in.ok("RTK " + versionRTK + " already present")
 		return
 	}
 	if installerRTK(in.kit) == nil {

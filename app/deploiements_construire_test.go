@@ -151,7 +151,8 @@ func TestConstruireDeploiementIsole(t *testing.T) {
 	if a["dist/index.html"] != "v1" || a["site/index.html"] != "v1" || a["package.json"] != "{}" || !strings.Contains(journal.String(), "construit") {
 		t.Fatalf("archive: %v journal %q", a, journal.String())
 	}
-	if ou := a["dist/ou.txt"]; !strings.Contains(ou, "athanor-construire-") || strings.Contains(filepath.ToSlash(ou), filepath.Base(depot)) {
+	// the whole path of the repository: its base alone ("001") also turns up in the folder's random number
+	if ou := a["dist/ou.txt"]; !strings.Contains(ou, "athanor-construire-") || strings.Contains(filepath.ToSlash(ou), filepath.ToSlash(depot)) {
 		t.Errorf("built in %q, not in a temporary folder of its own", ou)
 	}
 	if _, ok := a["intrus.txt"]; ok {

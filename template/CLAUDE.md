@@ -41,6 +41,7 @@ The pilot decides by itself what of the workshop git sees (`.git/info/exclude`, 
 ## Start and end of each cycle
 
 At the start:
+0. Your instructions hold the pilot's **Where things stand**: the next milestone, the last commits, what is not committed, the last full check and the slowest commands of the last cycle. Trust it: never run a command or a check only to find out what it already says (a full check that passed on this exact state is refused by the pilot anyway).
 1. Read `.athanor/REQUEST.md`, `.athanor/PLAN.md`, the end of `.athanor/LOG.md`, `.athanor/BUGS.md`, `.athanor/BLOCKERS.md` and the two solutions files if they exist. To find code or a section of a document, use `.athanor/MAP.md` (rebuilt by the pilot before each cycle: every file with its functions, every document with its headings, and their line numbers): `grep -n word .athanor/MAP.md`, then read only the useful lines. In a large document such as `.athanor/docs/DESIGN.md`, read only the relevant section.
 2. If `.athanor/RESUME.md` exists, the previous session stopped in the middle (or the project ran on another PC): do what it lists first (work not committed yet, a git operation left half done, paths of another PC in the check), then note it in `.athanor/LOG.md` and delete that file. Carry on with the plan where it is, never start it over.
 3. If `.athanor/MERGE_NEEDED.md` exists, work pushed to GitHub from another computer touches the same lines as this folder's and was not merged: make that merge first, as the file says (both sides' work kept), then delete it.

@@ -494,7 +494,7 @@ func (s *Serveur) apiOuvrir(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = lireCorps(r, &c)
 	k := s.kitCourant()
-	chemins := map[string]string{"kit": k.Racine, "logs": k.Journaux(), "a_faire": filepath.Join(k.Journaux(), "TODO_FOR_YOU.md")}
+	chemins := map[string]string{"kit": k.Racine, "logs": k.Journaux(), "tools": filepath.Join(k.Racine, "tools"), "a_faire": filepath.Join(k.Journaux(), "TODO_FOR_YOU.md")}
 	if p, ok := s.projet(r); ok {
 		chemins["projet"] = p.Dossier
 		chemins["atelier"] = p.Atelier()

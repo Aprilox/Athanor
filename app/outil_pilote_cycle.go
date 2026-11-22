@@ -2109,6 +2109,11 @@ func lancerPilote(args []string) int {
 		fmt.Fprintf(os.Stderr, "Invalid setting KEEP_AWAKE (%q): using default 1.\n", keepAwake)
 		keepAwake = "1"
 	}
+	// RELAY_CONTEXT_K=auto: the threshold is worked out for the project at each cycle, 200 until then
+	relaisAuto := strings.EqualFold(strings.TrimSpace(os.Getenv("RELAY_CONTEXT_K")), "auto")
+	if relaisAuto {
+		_ = os.Setenv("RELAY_CONTEXT_K", "200")
+	}
 	entierReglage := func(cle string, def int) int {
 		v := defEnv(cle, strconv.Itoa(def))
 		if !reEntierPilote.MatchString(v) {
@@ -2147,7 +2152,8 @@ func lancerPilote(args []string) int {
 		watchInterval:            entierReglage("WATCH_INTERVAL", 30),
 		secondsPerMinute:         entierReglage("SECONDS_PER_MINUTE", 60),
 		framingMaxMin:            entierReglage("FRAMING_MAX_MIN", 25),
-		relayContextK:            entierReglage("RELAY_CONTEXT_K", 110),
+		relayContextK:            entierReglage("RELAY_CONTEXT_K", 200),
+		relaisAuto:               relaisAuto,
 		closeAfterMilestone:      defEnv("CLOSE_AFTER_MILESTONE", "1"),
 		stayAliveAtEnd:           defEnv("STAY_ALIVE_AT_END", "0"),
 		keepAwake:                keepAwake,
@@ -2770,6 +2776,11 @@ func lancerPilote(args []string) int {
 			opts = append(opts, "cadrage")
 		}
 		p.optionsCycle = strings.Join(opts, ",")
+		p.seuilCycleK = 0
+		if p.relaisAuto {
+			p.relayContextK = seuilRelaisAuto(filepath.Join(p.prive, "stats.tsv"))
+			p.seuilCycleK = p.relayContextK
+		}
 		// the fast mode: what its cycles build is owed a whole verification (consignesRapidePilote); with the
 		// mode off, the lead pays that debt first, alone
 		fDette := filepath.Join(p.etat, detteRapide)
@@ -2878,6 +2889,7 @@ func lancerPilote(args []string) int {
 		if mode == "serie" && !cadrage && tailleFichierPilote(filepath.Join(p.prive, "relais.md")) > 0 {
 			b1, _ := os.ReadFile(consignesCycle)
 			b2, _ := os.ReadFile(filepath.Join(p.prive, "relais.md"))
+			b2 = append(b2, consigneDecoupageRelais(p.relayContextK)...) // relais_auto.go
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.relais.md")
 			_ = os.WriteFile(consignesCycle, append(append(b1, '\n', '\n'), b2...), 0o644)
 			_ = os.Remove(filepath.Join(p.prive, "relais.md"))
@@ -2899,6 +2911,12 @@ func lancerPilote(args []string) int {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.pcs.md")
 			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j, lienAtelierPilote(p.prive))+notesEquipeConsigne(p.etat)...), 0o644)
+		}
+		// what the pilot already knows, and what cost the most time in the last cycle (point_cycle.go)
+		if mode == "serie" && !cadrage {
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.point.md")
+			_ = os.WriteFile(consignesCycle, append(b1, pointDeDepart(p.projet, p.etat, p.lentesDernierCycle)...), 0o644)
 		}
 		// Ponytail (ponytail.go): the smallest complete change; the framing plans, so its lean work
 		if ponytailActif() && mode == "serie" {
@@ -2955,6 +2973,9 @@ func lancerPilote(args []string) int {
 				cArgs = append(cArgs, "--effort", p.effort)
 			}
 			code = p.lancerClaudeSurveille(p.fichierLog, cArgs, cadrage, limiteCycleMin, true)
+			cmds := commandesDuCycle(p.fichierLog)
+			p.lentesDernierCycle = commandesLentes(cmds)
+			noterUsageOutils(filepath.Join(p.kit, "tools"), p.projet, cmds) // outils_usage.go
 		}
 		p.etatPhase = "entre_cycles"
 		if planSeul {
