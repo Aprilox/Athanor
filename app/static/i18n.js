@@ -50,6 +50,7 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "Exit full screen": "Quitter le plein écran",
   "Mission": "Mission",
   "When no Athanor runs, the terminal starts one in the background and shows it: closing the terminal or the SSH connection leaves it running, and `./athanor` shows it again. With Athanor already open, `./athanor tui` shows that same Athanor; *w* opens the window as well.": "Quand aucun Athanor ne tourne, le terminal en lance un en arrière-plan et le montre : fermer le terminal ou la connexion SSH le laisse tourner, et `./athanor` le remontre. Avec Athanor déjà ouvert, `./athanor tui` montre ce même Athanor ; *w* ouvre aussi la fenêtre.",
   "*q* (or Ctrl+C) asks: leave Athanor running in the background (the default) or stop it completely. Stopped, remote access closes; the pilots keep running.": "*q* (ou Ctrl+C) demande : laisser Athanor tourner en arrière-plan (par défaut) ou l'arrêter complètement. Arrêté, l'accès à distance se ferme ; les pilotes continuent.",
@@ -69,7 +70,6 @@ fr: {
   "Connected remotely": "Connectés à distance",
   "No device is connected now.": "Aucun appareil n'est connecté en ce moment.",
   "Full screen": "Plein écran",
-  "Back to the home page": "Revenir à l'accueil",
   "From a paired device you follow and drive the Studio, read the hub, decide approvals and stop everything. What can do more is off until you allow it here.": "Depuis un appareil appairé, vous suivez et pilotez le Studio, lisez le hub, décidez des approbations et arrêtez tout. Ce qui peut faire davantage reste désactivé tant que vous ne l'autorisez pas ici.",
   "Write to the home assistant": "Écrire à l'assistant d'accueil",
   "Its messages, files, powers (Internet, Writing, folders of this computer) and its cards.": "Ses messages, fichiers, pouvoirs (Internet, Écriture, dossiers de cet ordinateur) et ses cartes.",
@@ -1227,6 +1227,7 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Exit full screen": "Salir de la pantalla completa",
   "Mission": "Misión",
   "When no Athanor runs, the terminal starts one in the background and shows it: closing the terminal or the SSH connection leaves it running, and `./athanor` shows it again. With Athanor already open, `./athanor tui` shows that same Athanor; *w* opens the window as well.": "Cuando no funciona ningún Athanor, el terminal inicia uno en segundo plano y lo muestra: cerrar el terminal o la conexión SSH lo deja funcionando, y `./athanor` lo vuelve a mostrar. Con Athanor ya abierto, `./athanor tui` muestra ese mismo Athanor; *w* abre también la ventana.",
   "*q* (or Ctrl+C) asks: leave Athanor running in the background (the default) or stop it completely. Stopped, remote access closes; the pilots keep running.": "*q* (o Ctrl+C) pregunta: dejar Athanor funcionando en segundo plano (por defecto) o detenerlo por completo. Detenido, el acceso a distancia se cierra; los pilotos continúan.",
@@ -1246,7 +1247,6 @@ es: {
   "Connected remotely": "Conectados a distancia",
   "No device is connected now.": "Ningún dispositivo está conectado ahora.",
   "Full screen": "Pantalla completa",
-  "Back to the home page": "Volver al inicio",
   "From a paired device you follow and drive the Studio, read the hub, decide approvals and stop everything. What can do more is off until you allow it here.": "Desde un dispositivo vinculado usted sigue y pilota el Studio, lee el hub, decide las aprobaciones y lo detiene todo. Lo que puede hacer más queda desactivado hasta que lo permita aquí.",
   "Write to the home assistant": "Escribir al asistente de inicio",
   "Its messages, files, powers (Internet, Writing, folders of this computer) and its cards.": "Sus mensajes, archivos, poderes (Internet, Escritura, carpetas de este ordenador) y sus tarjetas.",
@@ -2372,6 +2372,7 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Exit full screen": "Vollbild beenden",
   "Mission": "Mission",
   "When no Athanor runs, the terminal starts one in the background and shows it: closing the terminal or the SSH connection leaves it running, and `./athanor` shows it again. With Athanor already open, `./athanor tui` shows that same Athanor; *w* opens the window as well.": "Läuft kein Athanor, startet das Terminal eines im Hintergrund und zeigt es: Das Schließen des Terminals oder der SSH-Verbindung lässt es weiterlaufen, und `./athanor` zeigt es wieder. Ist Athanor schon offen, zeigt `./athanor tui` dasselbe Athanor; *w* öffnet auch das Fenster.",
   "*q* (or Ctrl+C) asks: leave Athanor running in the background (the default) or stop it completely. Stopped, remote access closes; the pilots keep running.": "*q* (oder Strg+C) fragt: Athanor im Hintergrund weiterlaufen lassen (Standard) oder ganz beenden. Beendet, schließt sich der Fernzugriff; die Piloten laufen weiter.",
@@ -2391,7 +2392,6 @@ de: {
   "Connected remotely": "Per Fernzugriff verbunden",
   "No device is connected now.": "Gerade ist kein Gerät verbunden.",
   "Full screen": "Vollbild",
-  "Back to the home page": "Zurück zur Startseite",
   "From a paired device you follow and drive the Studio, read the hub, decide approvals and stop everything. What can do more is off until you allow it here.": "Von einem gekoppelten Gerät aus verfolgen und steuern Sie das Studio, lesen den Hub, entscheiden Freigaben und stoppen alles. Was mehr kann, bleibt aus, bis Sie es hier erlauben.",
   "Write to the home assistant": "Dem Assistenten der Startseite schreiben",
   "Its messages, files, powers (Internet, Writing, folders of this computer) and its cards.": "Seine Nachrichten, Dateien, Befugnisse (Internet, Schreiben, Ordner dieses Computers) und seine Karten.",
@@ -3511,6 +3511,7 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Exit full screen": "Esci dallo schermo intero",
   "Mission": "Missione",
   "When no Athanor runs, the terminal starts one in the background and shows it: closing the terminal or the SSH connection leaves it running, and `./athanor` shows it again. With Athanor already open, `./athanor tui` shows that same Athanor; *w* opens the window as well.": "Quando nessun Athanor è in esecuzione, il terminale ne avvia uno in background e lo mostra: chiudere il terminale o la connessione SSH lo lascia in esecuzione, e `./athanor` lo mostra di nuovo. Con Athanor già aperto, `./athanor tui` mostra lo stesso Athanor; *w* apre anche la finestra.",
   "*q* (or Ctrl+C) asks: leave Athanor running in the background (the default) or stop it completely. Stopped, remote access closes; the pilots keep running.": "*q* (o Ctrl+C) chiede: lasciare Athanor in esecuzione in background (predefinito) o arrestarlo del tutto. Arrestato, l'accesso a distanza si chiude; i piloti continuano.",
@@ -3530,7 +3531,6 @@ it: {
   "Connected remotely": "Connessi a distanza",
   "No device is connected now.": "Nessun dispositivo è connesso ora.",
   "Full screen": "Schermo intero",
-  "Back to the home page": "Torna alla home",
   "From a paired device you follow and drive the Studio, read the hub, decide approvals and stop everything. What can do more is off until you allow it here.": "Da un dispositivo associato segui e guidi lo Studio, leggi l'hub, decidi le approvazioni e fermi tutto. Ciò che può fare di più resta disattivato finché non lo consenti qui.",
   "Write to the home assistant": "Scrivere all'assistente della home",
   "Its messages, files, powers (Internet, Writing, folders of this computer) and its cards.": "I suoi messaggi, file, poteri (Internet, Scrittura, cartelle di questo computer) e le sue schede.",
@@ -4650,6 +4650,7 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Exit full screen": "Sair do ecrã inteiro",
   "Mission": "Missão",
   "When no Athanor runs, the terminal starts one in the background and shows it: closing the terminal or the SSH connection leaves it running, and `./athanor` shows it again. With Athanor already open, `./athanor tui` shows that same Athanor; *w* opens the window as well.": "Quando nenhum Athanor está a correr, o terminal inicia um em segundo plano e mostra-o: fechar o terminal ou a ligação SSH deixa-o a correr, e `./athanor` volta a mostrá-lo. Com o Athanor já aberto, `./athanor tui` mostra esse mesmo Athanor; *w* abre também a janela.",
   "*q* (or Ctrl+C) asks: leave Athanor running in the background (the default) or stop it completely. Stopped, remote access closes; the pilots keep running.": "*q* (ou Ctrl+C) pergunta: deixar o Athanor a correr em segundo plano (por omissão) ou pará-lo por completo. Parado, o acesso à distância fecha-se; os pilotos continuam.",
@@ -4669,7 +4670,6 @@ pt: {
   "Connected remotely": "Ligados à distância",
   "No device is connected now.": "Nenhum dispositivo está ligado agora.",
   "Full screen": "Ecrã inteiro",
-  "Back to the home page": "Voltar ao início",
   "From a paired device you follow and drive the Studio, read the hub, decide approvals and stop everything. What can do more is off until you allow it here.": "A partir de um dispositivo emparelhado acompanha e pilota o Studio, lê o hub, decide as aprovações e para tudo. O que pode fazer mais fica desligado até o permitir aqui.",
   "Write to the home assistant": "Escrever ao assistente inicial",
   "Its messages, files, powers (Internet, Writing, folders of this computer) and its cards.": "As suas mensagens, ficheiros, poderes (Internet, Escrita, pastas deste computador) e os seus cartões.",

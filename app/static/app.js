@@ -1817,11 +1817,12 @@ pages.chat = async () => {
   // the chat of one project (the Studio's), as a conversation like the home one but its own: it names the project
   // and the folder Claude reads; the home's assistant, one click away, is the one for Athanor as a whole
   const p = (etat.vue || {}).projet || {};
-  return `<div class="bloc chat chat-projet" data-pieces="ct">
+  return `<div class="bloc chat chat-projet${enPlein("ct") ? " plein" : ""}" data-pieces="ct">
     <div class="ligne m0 chat-tete"><div class="croit chat-titre"><h2 class="m0">${h(t("Chat about {0}", [p.nom || ""]))} <button type="button" class="chat-info" id="chat-info" title="${h(t("What the chat can do"))}" aria-label="${h(t("What the chat can do"))}">i</button></h2>
         ${p.dossier ? `<p class="muet petit m0 chat-dossier" title="${h(p.dossier)}">${ic("dossier")} ${h(t("Claude reads this project's folder: {0}", [p.dossier]))}</p>` : ""}</div>
       <a class="btn btn-petit" href="#accueil" title="${h(t("For Athanor as a whole: several projects, your servers, a new mission"))}">${t("General assistant")}</a>
-      <button type="button" class="btn btn-petit" id="chat-nouveau" hidden>${t("New conversation")}</button></div>
+      <button type="button" class="btn btn-petit" id="chat-nouveau" title="${h(t("New conversation"))}" aria-label="${h(t("New conversation"))}" hidden><span class="ic-tel">${ic("actualiser")}</span><span class="lib-ordi">${t("New conversation")}</span></button>
+      ${boutonPlein("ct")}</div>
     <div class="chat-fil" id="chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}"></div>${boutonBas("chat-fil")}
     <div class="composeur">
       <textarea id="chat-texte" class="composeur-champ" rows="2" aria-label="${h(t("Your question or the change you want…"))}" aria-describedby="chat-mode" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
@@ -2333,12 +2334,12 @@ pages.accueil = async () => {
   // the Home is a conversation with the assistant (left), what waits and what works beside it (right, under it on a phone)
   return `<div class="accueil">${bandeauRaccourci()}${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
    <div class="accueil-grille">
-    <form class="bloc accueil-barre accueil-chat${etat.hubPlein ? " plein" : ""}" id="accueil-form" data-pieces="hc">
+    <form class="bloc accueil-barre accueil-chat${enPlein("hc") ? " plein" : ""}" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><h2 class="m0 accueil-titre croit">${t("Assistant")}</h2>
         <button type="button" class="btn btn-petit si-missions" data-nm-nouvelle title="${h(t("A project, its servers and API keys, or servers only, in one form launched in one click."))}" aria-label="${h(t("New mission"))}"><span class="ic-tel">${ic("plus")}</span><span class="lib-ordi">${t("New mission")}</span><span class="lib-tel">${t("Mission")}</span></button>
         <button type="button" class="btn btn-petit si-assistant" id="hub-chat-nouveau" title="${h(t("New conversation"))}" aria-label="${h(t("New conversation"))}" ${(hc.messages || []).length ? "" : "hidden"}><span class="ic-tel">${ic("actualiser")}</span><span class="lib-ordi">${t("New conversation")}</span></button>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
-        ${boutonPleinHub()}</div>
+        ${boutonPlein("hc")}</div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>${boutonBas("hub-chat-fil")}
       <p class="petit muet m0 distant-seul sans-assistant">${t("From this device the conversation is read only. To write to the assistant from here, allow it on the computer: Remote › Permissions.")}</p>
       <div class="composeur si-assistant">
@@ -2626,18 +2627,26 @@ async function changerPouvoirs(change) {
   await majHubChat(true);
   montrerCapacites("hc");
 }
-// on a phone, the conversation can take the whole screen (and give it back): the home's tiles stay under it
-const boutonPleinHub = () => `<button type="button" class="btn btn-petit tel-seul" id="hub-chat-plein" aria-pressed="${etat.hubPlein ? "true" : "false"}" title="${h(t(etat.hubPlein ? "Back to the home page" : "Full screen"))}" aria-label="${h(t(etat.hubPlein ? "Back to the home page" : "Full screen"))}">${ic(etat.hubPlein ? "croix" : "agrandir")}</button>`;
-function pleinHub(oui) {
-  etat.hubPlein = oui;
-  const f = $("#accueil-form"); if (!f) return;
+// on a phone, a conversation can take the whole screen (and give it back): the home's (hc, its tiles stay under
+// it) and a project's chat (ct); [its box, its button's id]
+const PLEIN = { hc: ["#accueil-form", "hub-chat-plein"], ct: [".chat-projet", "chat-plein"] };
+const enPlein = (id) => !!(etat.plein || {})[id];
+const boutonPlein = (id) => { const oui = enPlein(id), lib = h(t(oui ? "Exit full screen" : "Full screen"));
+  return `<button type="button" class="btn btn-petit tel-seul" id="${PLEIN[id][1]}" data-plein="${id}" aria-pressed="${oui}" title="${lib}" aria-label="${lib}">${ic(oui ? "croix" : "agrandir")}</button>`; };
+function basculerPlein(id, oui) {
+  etat.plein = { ...etat.plein, [id]: oui };
+  const f = $(PLEIN[id][0]); if (!f) return;
   f.classList.toggle("plein", oui);
-  $("#hub-chat-plein").outerHTML = boutonPleinHub();
-  $("#hub-chat-plein").focus();
-  const fil = $("#hub-chat-fil"); if (fil) fil.scrollTop = fil.scrollHeight;
+  const b = document.getElementById(PLEIN[id][1]); if (!b) return;
+  b.outerHTML = boutonPlein(id);
+  document.getElementById(PLEIN[id][1]).focus();
+  const fil = f.querySelector(".chat-fil"); if (fil) fil.scrollTop = fil.scrollHeight;
 }
-document.addEventListener("click", (ev) => { if (ev.target.closest("#hub-chat-plein")) pleinHub(!etat.hubPlein); });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.hubPlein && etat.page === "accueil" && !document.querySelector(".dialogue, #accueil-liste:not([hidden])")) pleinHub(false); });
+document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-plein]"); if (b) basculerPlein(b.dataset.plein, !enPlein(b.dataset.plein)); });
+document.addEventListener("keydown", (ev) => {
+  const id = { accueil: "hc", chat: "ct" }[etat.page];
+  if (ev.key === "Escape" && id && enPlein(id) && !document.querySelector(".dialogue:not([hidden]), .liste-mentions:not([hidden]), #modele-menu")) basculerPlein(id, false);
+});
 // a folder from the system's dialog (or Athanor's picker); a dropped folder: the page cannot see its path, the
 // dialog opens to confirm it
 async function ajouterDossierHub(nomGlisse) {
