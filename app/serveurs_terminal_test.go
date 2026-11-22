@@ -649,7 +649,11 @@ func TestPermissionsDistance(t *testing.T) {
 	}
 	assistant := []string{"/api/hub/chat", "/api/hub/chat/pouvoirs", "/api/hub/chat/piece", "/api/hub/chat/arreter", "/api/hub/chat/action", "/api/hub/chat/effacer"}
 	missions := []string{"/api/missions", "/api/missions/m1", "/api/missions/m1/pause"}
-	regler := func(a, m bool) { s.mu.Lock(); s.config.Distance.Assistant, s.config.Distance.Missions = a, m; s.mu.Unlock() }
+	regler := func(a, m bool) {
+		s.mu.Lock()
+		s.config.Distance.Assistant, s.config.Distance.Missions = a, m
+		s.mu.Unlock()
+	}
 	for _, cas := range []struct{ a, m bool }{{false, false}, {true, false}, {false, true}} {
 		regler(cas.a, cas.m)
 		for _, c := range assistant {
