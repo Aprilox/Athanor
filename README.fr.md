@@ -24,7 +24,7 @@
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#la-sécurité-en-bref"><b>Sécurité</b></a> ·
   <a href="docs/FAQ.fr.md"><b>FAQ</b></a> ·
-  <a href="docs/releases/3.1.3.md"><b>Nouveautés</b></a> ·
+  <a href="docs/releases/3.1.4.md"><b>Nouveautés</b></a> ·
   <a href="README.md"><b>English</b></a>
 </p>
 
@@ -129,7 +129,7 @@ Tout ce qui est à lui y va : sa copie de l'exécutable, ses réglages et votre 
 ```bash
 chmod +x Athanor-Linux-x64    # une fois : un fichier téléchargé n'est pas encore exécutable
 ./Athanor-Linux-x64           # l'application, dans une fenêtre d'application de Chrome/Edge/Chromium, sinon votre navigateur
-./Athanor-Linux-x64 tui       # la même application dans le terminal (en SSH ou sans écran : d'elle-même)
+./Athanor-Linux-x64 tui       # un ordinateur sans écran (en SSH : d'elle-même) : son état, et l'appairage du téléphone
 ```
 
 Puis *Installation & santé* → *Tout installer* (Claude Code, la barrière et les outils ; Linux demande votre mot de passe une fois), le jeton dans *Réglages*, un projet et *Démarrer*, comme sous Windows (étapes 3, 5 et 6).

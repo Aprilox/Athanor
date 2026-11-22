@@ -24,7 +24,7 @@
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#security-in-short"><b>Security</b></a> ·
   <a href="docs/FAQ.md"><b>FAQ</b></a> ·
-  <a href="docs/releases/3.1.3.md"><b>What's new</b></a> ·
+  <a href="docs/releases/3.1.4.md"><b>What's new</b></a> ·
   <a href="README.fr.md"><b>Français</b></a>
 </p>
 
@@ -129,7 +129,7 @@ Everything of its own goes there: its copy of the executable, its settings and y
 ```bash
 chmod +x Athanor-Linux-x64    # once: a downloaded file is not executable yet
 ./Athanor-Linux-x64           # the app, in an application window of Chrome/Edge/Chromium, else your browser
-./Athanor-Linux-x64 tui       # the same app in the terminal (through SSH or without a screen: by itself)
+./Athanor-Linux-x64 tui       # a computer without a screen (through SSH: by itself): its state, and pairing your phone
 ```
 
 Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the tools; Linux asks for your password once), the token in *Settings*, a project and *Start*, as on Windows (steps 3, 5 and 6).
