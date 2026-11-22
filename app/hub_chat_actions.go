@@ -851,6 +851,10 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 		} else if appareilDe(r) != "" && carte.Dossier != vue.Dossier {
 			s.erreur(w, http.StatusForbidden, "The folder is chosen on the PC.")
 			return
+		} else if appareilDe(r) != "" && c.Action.Type == "serveur" && !s.permissionsDistance().Missions {
+			// work on servers is a mission's: the Assistant permission alone does not give it
+			s.erreur(w, http.StatusForbidden, "Work on servers is launched from a device once Remote › Permissions allows missions.")
+			return
 		}
 		if carte.Erreur != "" {
 			s.erreur(w, http.StatusBadRequest, carte.Erreur)

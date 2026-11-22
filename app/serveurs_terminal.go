@@ -712,12 +712,31 @@ func (s *Serveur) shellDistanceAutorise() bool {
 // paired device. Allowing needs confirme (the interface asks first) and, once Athanor has a password, that
 // password retyped (C1-7: as the other strong rights); refused from a device (not in the allowlist).
 func (s *Serveur) apiTerminalDistance(w http.ResponseWriter, r *http.Request) {
+	s.changerPermissionDistance(w, r, "terminal")
+}
+
+// apiPermissionDistance: POST /api/distance/permissions {permission, autoriser, confirme, mot_de_passe}: Remote ›
+// Permissions, the same rules as the terminal's (the window only: /api/distance is refused to devices).
+func (s *Serveur) apiPermissionDistance(w http.ResponseWriter, r *http.Request) {
+	s.changerPermissionDistance(w, r, "")
+}
+
+func (s *Serveur) changerPermissionDistance(w http.ResponseWriter, r *http.Request, nom string) {
 	var c struct {
+		Permission string `json:"permission"`
 		Autoriser  bool   `json:"autoriser"`
 		Confirme   bool   `json:"confirme"`
 		MotDePasse string `json:"mot_de_passe"`
 	}
 	if lireCorps(r, &c) != nil || c.Autoriser && !c.Confirme {
+		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if nom == "" {
+		nom = c.Permission
+	}
+	action := map[string]string{"terminal": "remote terminal", "assistant": "remote home assistant", "missions": "remote missions"}[nom]
+	if action == "" {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
@@ -728,7 +747,14 @@ func (s *Serveur) apiTerminalDistance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mu.Lock()
-	s.config.Distance.Terminal = c.Autoriser
+	switch nom {
+	case "terminal":
+		s.config.Distance.Terminal = c.Autoriser
+	case "assistant":
+		s.config.Distance.Assistant = c.Autoriser
+	case "missions":
+		s.config.Distance.Missions = c.Autoriser
+	}
 	err := ecrireConfig(s.config)
 	s.mu.Unlock()
 	resultat := "off"
@@ -738,13 +764,13 @@ func (s *Serveur) apiTerminalDistance(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		resultat += " (config: " + err.Error() + ")"
 	}
-	if !c.Autoriser { // a device's terminal already open closes too
+	if !c.Autoriser && nom == "terminal" { // a device's terminal already open closes too
 		fermerTerminaux(func(t *sessionTerminal) bool { return strings.HasPrefix(t.de, "appareil:") })
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "remote terminal", Resultat: resultat})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: action, Resultat: resultat})
 	if err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"terminal_distance": c.Autoriser})
+	s.ecrireJSON(w, map[string]any{"terminal_distance": s.shellDistanceAutorise(), "permissions": s.permissionsDistance()})
 }

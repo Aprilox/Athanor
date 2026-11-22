@@ -162,6 +162,8 @@ type EtatVue struct {
 	// remote access on, and how many trusted devices are connected now (the sidebar's badge)
 	DistanceActive bool `json:"distance_active,omitempty"`
 	Connectes      int  `json:"connectes,omitempty"`
+	// on a paired device: what Remote › Permissions allows it beyond reading
+	PermisDistance *PermissionsDistance `json:"permis_distance,omitempty"`
 	// the device paired last ("id|name"): the window says so when it changes (Athanor's window only)
 	DernierAppareil string `json:"dernier_appareil,omitempty"`
 	// API mode: the spend, in place of the quota (connexion_claude.go)
@@ -196,6 +198,10 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	vue.TacheActive = len(tachesEnCours.m) > 0
 	tachesEnCours.Unlock()
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
+	if vue.Distant {
+		p := s.permissionsDistance()
+		vue.PermisDistance = &p
+	}
 	if !vue.Distant {
 		vue.DernierAppareil = s.dernierAppareil()
 	}

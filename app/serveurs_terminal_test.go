@@ -637,3 +637,64 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 		})
 	})
 }
+
+// Remote › Permissions: the home assistant and the missions, refused to a device by default, reachable once
+// allowed (each by its own switch), changed from the window only, with the confirmation and the audit log.
+func TestPermissionsDistance(t *testing.T) {
+	s, h, _ := serveurDistance(t)
+	cle := appairerTest(t, s, h)
+	refuse := func(methode, chemin string) bool {
+		w := appelDistance(h, methode, chemin, cle, `{}`, "X-Athanor", "jeton")
+		return w.Code == http.StatusForbidden && strings.Contains(w.Body.String(), "Not available from a remote device")
+	}
+	assistant := []string{"/api/hub/chat", "/api/hub/chat/pouvoirs", "/api/hub/chat/piece", "/api/hub/chat/arreter", "/api/hub/chat/action", "/api/hub/chat/effacer"}
+	missions := []string{"/api/missions", "/api/missions/m1", "/api/missions/m1/pause"}
+	regler := func(a, m bool) { s.mu.Lock(); s.config.Distance.Assistant, s.config.Distance.Missions = a, m; s.mu.Unlock() }
+	for _, cas := range []struct{ a, m bool }{{false, false}, {true, false}, {false, true}} {
+		regler(cas.a, cas.m)
+		for _, c := range assistant {
+			if refuse("POST", c) == cas.a {
+				t.Errorf("assistant %v: POST %s refused %v", cas.a, c, !cas.a)
+			}
+		}
+		for _, c := range missions {
+			if refuse("POST", c) == cas.m {
+				t.Errorf("missions %v: POST %s refused %v", cas.m, c, !cas.m)
+			}
+		}
+		if !refuse("POST", "/api/serveurs/ab12/terminal") || !refuse("POST", "/api/hub/chatx") || !refuse("POST", "/api/coffre") {
+			t.Errorf("a permission opened another route (%v)", cas)
+		}
+	}
+	regler(true, true)
+	if !refuse("POST", "/api/distance/permissions") { // a device never changes its own rights
+		t.Error("Remote › Permissions changed from a device")
+	}
+
+	sl, appel, _ := serveursAjoutTest(t)
+	for _, p := range []string{"assistant", "missions"} {
+		if c, _ := appel("/api/distance/permissions", map[string]any{"permission": p, "autoriser": true}); c != http.StatusBadRequest {
+			t.Fatalf("%s allowed without confirmation: %d", p, c)
+		}
+		c, v := appel("/api/distance/permissions", map[string]any{"permission": p, "autoriser": true, "confirme": true})
+		if pv, _ := v["permissions"].(map[string]any); c != http.StatusOK || pv[p] != true {
+			t.Fatalf("allow %s: %d %v", p, c, v)
+		}
+	}
+	if p := sl.permissionsDistance(); !p.Assistant || !p.Missions || p.Terminal {
+		t.Fatalf("kept: %+v", p)
+	}
+	if c, _ := appel("/api/distance/permissions", map[string]any{"permission": "missions", "autoriser": false}); c != http.StatusOK || sl.permissionsDistance().Missions {
+		t.Fatalf("forbid missions again: %d", c)
+	}
+	if c, _ := appel("/api/distance/permissions", map[string]any{"permission": "coffre", "autoriser": true, "confirme": true}); c != http.StatusBadRequest {
+		t.Fatalf("an unknown permission: %d", c)
+	}
+	sl.config.MotDePasseHash, sl.session = hacherMotDePasse("mdp-test"), "session"
+	if c, _ := appel("/api/distance/permissions", map[string]any{"permission": "missions", "autoriser": true, "confirme": true, "mot_de_passe": "faux"}); c != http.StatusUnauthorized || sl.permissionsDistance().Missions {
+		t.Fatalf("allowed with a wrong password: %d", c)
+	}
+	if j := journalAuditTexte(t); !strings.Contains(j, `"remote home assistant"`) || !strings.Contains(j, `"remote missions"`) {
+		t.Error("permission changes not in the audit log")
+	}
+}

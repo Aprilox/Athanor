@@ -424,6 +424,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/serveurs/{id}/terminal/{session}", s.garde(false, s.apiTerminalFlux))
 	mux.HandleFunc("POST /api/serveurs/{id}/terminal/{session}", s.garde(false, s.apiTerminalAgir))
 	mux.HandleFunc("POST /api/serveurs/terminal-distance", s.garde(false, s.apiTerminalDistance))
+	mux.HandleFunc("POST /api/distance/permissions", s.garde(false, s.apiPermissionDistance)) // Remote › Permissions
 	mux.HandleFunc("GET /api/serveurs/{id}/sftp/{session}", s.garde(false, s.apiSFTPLister))
 	mux.HandleFunc("POST /api/serveurs/{id}/sftp/{session}", s.garde(false, s.apiSFTPAgir))
 	mux.HandleFunc("GET /api/serveurs/{id}/sftp/{session}/fichier", s.garde(false, s.apiSFTPTelecharger))

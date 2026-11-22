@@ -235,7 +235,7 @@ func (moduleHub) Tutoriel() []EtapeTutoriel {
 		{Titre: "Your assistant", Texte: "Ask a question or say what you want done, in your words. It reads only what you give it: your messages, the files you attach and the folders you point.", Cible: "#accueil-form"},
 		{Titre: "What it can do", Texte: "Internet and Writing are off by default, and off again in each new conversation. With Writing on, it changes files only in the folders you set to “read and write”. It never runs a command.", Cible: "#hub-pouvoirs"},
 		{Titre: "What it never sees", Texte: "The vault's values, your secrets files and Athanor's own folders are never given to it. A file or a web page that gives it orders is reported to you, never followed.", Cible: "#hub-chat-fil"},
-		{Titre: "Cards: you decide", Texte: "To act (a project, its pilot, a request, a sub-agent), it proposes a card: what, on what, with which accesses. Nothing runs before you press Launch. From a paired phone the conversation is read only. The “?” above replays these steps.", Cible: "#hub-chat-fil"},
+		{Titre: "Cards: you decide", Texte: "To act (a project, its pilot, a request, a sub-agent), it proposes a card: what, on what, with which accesses. Nothing runs before you press Launch. From a paired phone the conversation is read only, unless Remote › Permissions allows it. The “?” above replays these steps.", Cible: "#hub-chat-fil"},
 		{Titre: "One tile per part", Texte: "Each part of Athanor has its tile with what matters now. Click a figure to open its page.", Cible: ".grille-hub"},
 		{Titre: "The bell", Texte: "Everything that needs you, with why. “View” opens the right page, “Ignore” hides an alert until something changes.", Cible: "[data-notifs]"},
 	}

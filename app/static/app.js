@@ -6,6 +6,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const h = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // M239: a sober icon drawn by a CSS mask in the text colour (no emoji, no symbol font), hidden from screen readers
 const ic = (n) => `<i class="ic ic-${n}" aria-hidden="true"></i>`;
+// what this page may do: everything on the computer; on a paired device, what Remote › Permissions allows
+const permis = (n) => !(etat.vue || {}).distant || !!((etat.vue || {}).permis_distance || {})[n];
 // pilot phase (STATE.json) -> status dot class
 const classePhase = (x) => !x || !x.actif ? "" : ({ travail: "travaille", quota: "quota", budget: "quota", attente_vous: "quota", erreur: "erreur", connexion: "erreur", entre_cycles: "entre_cycles" }[x.phase] || "travaille");
 // escaped text with `code` spans rendered (the plan and requests are Markdown-ish)
@@ -51,7 +53,7 @@ function rendreJalon(j, etatJalon, compact) {
         ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">${ic("haut")}</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">${ic("descendre")}</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
       </div>` : ""}
     </div>` : "";
-  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(titrePlan(j.titre))}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div>${details}</div></li>`;
+  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre"><span class="jalon-texte">${md(titrePlan(j.titre))}</span><span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div>${details}</div></li>`;
 }
 
 // A plan in stages (a large request): "Stage 2/5 · " before its progress, from the project's view.
@@ -687,7 +689,7 @@ function rendreBarre(v) {
   if (!cadre.actif) return;
   const p = v.projet;
   const projet = p ? `<span class="dot ${classePhase(p)}"></span><span>${h(p.nom)}</span>` : "";
-  const b = v.bureau || {}, act = [boutonCloche(v, "fb-action"), boutonGuide("fb-action")];
+  const b = v.bureau || {}, act = [boutonDistance(v, "fb-action"), boutonCloche(v, "fb-action"), boutonGuide("fb-action")];
   if (b.disponible && b.ecran) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's screen")}</button>`);
   else {
     if (b.disponible) act.push(`<button type="button" class="fb-action" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("See the windows Claude opened")}</button>`);
@@ -831,6 +833,42 @@ function boutonCloche(v, classe) {
   const titre = etat.coupe ? t("Athanor no longer answers.") : n ? alertesVous(n) : t("Nothing needs you right now.");
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
+// beside the bell, on the computer only and while a device is connected from afar: how many; a click lists them,
+// and a device opens the Remote page on its line (rename it, remove it)
+function boutonDistance(v, classe) {
+  const n = !v.distant && v.distance_active ? v.connectes || 0 : 0;
+  if (!n) return "";
+  const titre = tn(n, "1 device connected remotely", "{0} devices connected remotely", [n]);
+  return `<button type="button" class="${classe} cloche btn-distants" data-distants aria-haspopup="true" aria-expanded="${etat.distantsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}">${ic("appareil")}<span class="cloche-n">${n}</span></button>`;
+}
+async function rendreDistants() {
+  const m = $("#distants"), b = document.querySelector("[data-distants]");
+  m.hidden = !etat.distantsOuvert || !b;
+  if (m.hidden) return;
+  const d = await api("distance").catch(() => null);
+  if (!etat.distantsOuvert) return;
+  const l = ((d || {}).appareils || []).filter((a) => a.en_ligne);
+  m.innerHTML = `<div class="notifs-titre" id="distants-titre">${t("Connected remotely")}</div>
+    <div class="alertes">${l.map((a) => `<a class="alerte distants-ligne" href="#distance" data-appareil="${h(a.id)}"><span class="point-appareil en-ligne" aria-hidden="true"></span><span class="alerte-texte"><b>${h(a.nom)}</b>${a.lieu ? `<span class="muet petit"> · ${h(a.lieu)}</span>` : ""}</span>${ic("droite")}</a>`).join("")
+      || `<div class="muet petit notifs-vide">${t("No device is connected now.")}</div>`}</div>
+    <a href="#distance" class="menu-nouveau">${t("Remote")} →</a>`;
+  const r = b.getBoundingClientRect();
+  m.style.top = r.bottom + 6 + "px";
+  m.style.right = Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - m.offsetWidth - 8)) + "px";
+}
+function fermerDistants(clavier) {
+  etat.distantsOuvert = false; $("#distants").hidden = true;
+  const b = document.querySelector("[data-distants]"); b?.setAttribute("aria-expanded", "false"); if (clavier) b?.focus();
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-distants]");
+  if (b) { etat.distantsOuvert = !etat.distantsOuvert; b.setAttribute("aria-expanded", String(etat.distantsOuvert)); return rendreDistants(); }
+  if (!etat.distantsOuvert) return;
+  const a = ev.target.closest("#distants [data-appareil]");
+  if (a) etat.appareilVise = a.dataset.appareil;
+  if (a || !ev.target.closest("#distants")) fermerDistants();
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.distantsOuvert) fermerDistants(true); });
 // the Guide: a "?" beside the bell (it is no menu entry any more)
 const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide"${etat.page === "guide" ? ' aria-current="page"' : ""} >${t("Guide")}</a>`;
 // one alert on one line, "Dev, ma-boutique: why", and its actions as the server gives them: a page (View, through
@@ -1002,7 +1040,7 @@ function rendreBandeau(v) {
   if (maj.en_cours === "telechargement") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Downloading the update… {0} %", [maj.avancement || 0])}</button>`);
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
-  if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
+  if (!cadre.actif) boutons.push(boutonDistance(v, "btn"), boutonCloche(v, "btn"), boutonGuide("btn"));
   if (v.natif && !natifCompris()) boutons.unshift(`<span class="puce-natif-groupe"><a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Athanor runs directly on Windows: nothing separates Claude from the files of this PC. To put a barrier between them, switch to WSL in Settings › Options."))}">${t("Native mode: no barrier")}</a><button type="button" class="puce-natif-ok" data-natif-compris title="${h(t("Got it: hide this reminder. Settings › Options still shows the mode."))}">${t("Got it")}</button></span>`);
   rendreBarre(v);
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
@@ -1010,6 +1048,7 @@ function rendreBandeau(v) {
   // rebuilt only when it changed, keeping the focus (the bell, the "?" under the keyboard)
   $("#bandeau").classList.toggle("bandeau-global", global); // C-M218-12: on a phone its title is already in the bar above
   if ($("#bandeau").dataset.html !== html) garderFocus($("#bandeau"), () => { $("#bandeau").innerHTML = html; $("#bandeau").dataset.html = html; });
+  if (etat.distantsOuvert && !document.querySelector("[data-distants]")) fermerDistants(); // the last device left
   // only what changed: a refresh with the same data sends no mutation to the menu
   const ecrire = (el, x, attr = "textContent") => { if (el[attr] !== x) el[attr] = x; };
   ecrire($("#nav-sous"), nbActifs ? (nbActifs === 1 ? t("1 project running") : t("{0} projects running", [nbActifs])) : t("idle"));
@@ -1722,6 +1761,7 @@ async function majChat(force) {
   if (nv) nv.hidden = !d.messages.length;
   if (s) s.hidden = !d.en_cours;
   if (m) m.innerHTML = modeChat();
+  defautCapacites("ct", d.messages.length);
 }
 
 // what Claude may do with the next message: the pilot's state, and the "change the files" switch (at the bottom)
@@ -1772,6 +1812,7 @@ pages.chat = async () => {
   chat.signature = ""; chat.piloteActif = !!d.pilote_actif;
   const modeles = ["", ...chat.modeles];
   if (!modeles.includes(chat.modele)) modeles.push(chat.modele);
+  chat.choixModeles = modeles;
   setTimeout(() => majChat(true), 0);
   // the chat of one project (the Studio's), as a conversation like the home one but its own: it names the project
   // and the folder Claude reads; the home's assistant, one click away, is the one for Athanor as a whole
@@ -1790,13 +1831,14 @@ pages.chat = async () => {
         <button type="button" class="option-chat" data-choisir-pieces="ct" title="${h(t("or drop them here: images, PDF, text, documents, data (50 MB at most each)"))}">${ic("trombone")}<span>${t("Files")}</span></button>
         <label class="option-chat" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}>${ic("globe")}<span>${t("Internet")}</span></label>
         <label class="option-chat" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}>${ic("crayon")}<span>${t("Change the files")}</span></label>
-        <label class="option-chat option-modele" title="${h(t("Model"))}">${ic("etoile")}<select id="chat-modele" aria-label="${h(t("Model"))}">${modeles.map((m) => `<option value="${h(m)}"${chat.modele === m ? " selected" : ""}>${h(m || t("account default"))}</option>`).join("")}</select></label>
+        <button type="button" class="option-chat option-modele" id="chat-modele" aria-haspopup="listbox" aria-expanded="false" title="${h(t("Model"))}" aria-label="${h(t("Model"))}">${ic("etoile")}<span>${h(chat.modele || t("account default"))}</span>${ic("bas")}</button>
+        ${boutonCapacites("ct")}
         <span class="espace"></span>
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
         <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")} ${ic("droite")}</button>
       </div>
+      <p class="petit muet m0 hub-capacites${capRepliee("ct") ? " repliee" : ""}" id="chat-mode">${modeChat()}</p>
     </div>
-    <p class="petit muet m0 hub-capacites" id="chat-mode">${modeChat()}</p>
   </div>`;
 };
 
@@ -1823,6 +1865,7 @@ async function envoyerChat() {
   if (r) {
     zone.value = ""; zone.style.height = ""; etat.pieces.ct = [];
     const ul = $("#ct-liste"); if (ul) ul.innerHTML = "";
+    replierCapacites("ct", true);
     await majChat(true);
   }
 }
@@ -2290,21 +2333,22 @@ pages.accueil = async () => {
   // the Home is a conversation with the assistant (left), what waits and what works beside it (right, under it on a phone)
   return `<div class="accueil">${bandeauRaccourci()}${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
    <div class="accueil-grille">
-    <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
+    <form class="bloc accueil-barre accueil-chat${etat.hubPlein ? " plein" : ""}" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><h2 class="m0 accueil-titre croit">${t("Assistant")}</h2>
-        <button type="button" class="btn btn-petit local-seul" data-nm-nouvelle title="${h(t("A project, its servers and API keys, or servers only, in one form launched in one click."))}">${t("New mission")}</button>
-        <button type="button" class="btn btn-petit local-seul" id="hub-chat-nouveau" ${(hc.messages || []).length ? "" : "hidden"}>${t("New conversation")}</button>
-        <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button></div>
+        <button type="button" class="btn btn-petit si-missions" data-nm-nouvelle title="${h(t("A project, its servers and API keys, or servers only, in one form launched in one click."))}">${t("New mission")}</button>
+        <button type="button" class="btn btn-petit si-assistant" id="hub-chat-nouveau" ${(hc.messages || []).length ? "" : "hidden"}>${t("New conversation")}</button>
+        <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
+        ${boutonPleinHub()}</div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>${boutonBas("hub-chat-fil")}
-      <p class="petit muet m0 distant-seul">${t("From a device, this conversation is read only: write to the assistant on the computer.")}</p>
-      <div class="composeur local-seul">
+      <p class="petit muet m0 distant-seul sans-assistant">${t("From this device the conversation is read only. To write to the assistant from here, allow it on the computer: Remote › Permissions.")}</p>
+      <div class="composeur si-assistant">
         <div class="champ-mentions" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit composeur-champ" rows="2" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide hub-pouvoirs-resume" aria-label="${h(t("What do you want to do?"))}" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
         <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
         <input type="file" multiple hidden id="hc-fichiers" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.ini,.log,.html,.css,.js,.ts,.go,.py,.sql">
         <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
         ${pouvoirsHub(hc.pouvoirs || {}, hc.en_cours)}
+        <p class="petit muet m0 hub-capacites si-assistant${capRepliee("hc", (hc.messages || []).length) ? " repliee" : ""}" id="hub-capacites">${ic("info")} <span id="hub-pouvoirs-resume">${h(capacitesHub(hc.pouvoirs || {}))}</span> <span id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</span></p>
       </div>
-      <p class="petit muet m0 hub-capacites local-seul"><span id="hub-pouvoirs-resume">${h(capacitesHub(hc.pouvoirs || {}))}</span> <span id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</span></p>
     </form>
     <aside class="accueil-cote" aria-label="${h(t("What waits and what works"))}">
       ${blocAttente(d.elements || [], modules)}
@@ -2367,7 +2411,7 @@ function videHub() {
       <path class="ma-a" pathLength="100" d="M 92 168 L 128 86 L 164 168"/><path class="ma-barre" pathLength="100" d="M 109 138 L 147 138"/></svg></div>
     <h2 class="m0">${t("What do you want to do?")}</h2>
     <p class="muet m0">${t("Ask a question, or say what you want done: a project, a change, a server to set up. The assistant proposes, you decide.")}</p>
-    <div class="ligne m0 chat-vide-actions local-seul"><span class="puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</span>
+    <div class="ligne m0 chat-vide-actions si-assistant"><span class="puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</span>
       ${EXEMPLES_HUB.map((x) => `<button type="button" class="btn btn-petit puce-sugg" data-exemple="${h(t(x))}">${h(t(x).replace(/@$/, "@…"))}</button>`).join("")}</div>
   </div>`;
 }
@@ -2527,12 +2571,47 @@ function listeDossiersHub(pv) {
     : `<li class="muet petit">${t("No folder: the assistant sees no file of your computer.")}</li>`;
 }
 // the field's bar, always in sight: attach, the two powers (on: lit), the folders (their count opens their list), Send
+// the sentence under a chat's field (what the assistant can do right now) folds into an "i" of its bar: in sight
+// while the conversation is empty; a sent message means it was read, and it is seen going into the i; a changed
+// power shows it again for a few seconds; the i shows or hides it. hc: the home's, ct: a project's chat
+const CAPACITES = { hc: "hub-capacites", ct: "chat-mode" }, CAP_DUREE = 6000, cap = { repli: {}, minuteur: {} };
+const capRepliee = (id, plein) => cap.repli[id] ?? !!plein;
+const boutonCapacites = (id, plein) => { const nom = t(id === "hc" ? "What the assistant can do" : "What the chat can do");
+  return `<button type="button" class="option-chat capacites-i" data-capacites="${id}" aria-controls="${CAPACITES[id]}" aria-expanded="${!capRepliee(id, plein)}" title="${h(nom)}" aria-label="${h(nom)}">${ic("info")}</button>`; };
+function replierCapacites(id, oui) {
+  clearTimeout(cap.minuteur[id]); cap.repli[id] = oui;
+  const p = document.getElementById(CAPACITES[id]), i = document.querySelector(`[data-capacites="${id}"]`);
+  i?.setAttribute("aria-expanded", String(!oui));
+  if (!p) return;
+  if (!oui) { p.classList.remove("repliee"); p.style.cssText = ""; return; }
+  if (p.classList.contains("repliee") || p.style.opacity === "0") return;
+  if (!i || !i.offsetParent || !p.offsetParent || matchMedia("(prefers-reduced-motion: reduce)").matches) { p.classList.add("repliee"); return; }
+  const a = p.getBoundingClientRect(), b = i.getBoundingClientRect();
+  p.style.transformOrigin = "0 0"; p.style.transition = "transform .45s ease-in, opacity .45s ease-in";
+  p.style.transform = `translate(${b.left + b.width / 2 - a.left}px, ${b.top + b.height / 2 - a.top}px) scale(.05)`; p.style.opacity = "0";
+  setTimeout(() => {
+    if (!cap.repli[id]) return; // shown again meanwhile
+    p.classList.add("repliee"); p.style.cssText = ""; i.classList.add("recoit"); setTimeout(() => i.classList.remove("recoit"), 700);
+  }, 460);
+}
+function montrerCapacites(id) { replierCapacites(id, false); cap.minuteur[id] = setTimeout(() => replierCapacites(id, true), CAP_DUREE); }
+// before the owner acted: folded as soon as the conversation has messages (no motion: nothing was just read)
+function defautCapacites(id, plein) {
+  if (cap.repli[id] !== undefined) return;
+  document.getElementById(CAPACITES[id])?.classList.toggle("repliee", !!plein);
+  document.querySelector(`[data-capacites="${id}"]`)?.setAttribute("aria-expanded", String(!plein));
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-capacites]"); if (!b) return;
+  const id = b.dataset.capacites; replierCapacites(id, !document.getElementById(CAPACITES[id])?.classList.contains("repliee"));
+});
 function pouvoirsHub(pv, enCours) {
   return `<div class="hub-pouvoirs" id="hub-pouvoirs">
     <div class="composeur-barre" role="group" aria-label="${h(t("What the assistant can do"))}">
       <button type="button" class="option-chat" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${ic("trombone")}<span>${t("Files")}</span></button>
       ${POUVOIRS_HUB.map(([k, n, aide, i]) => `<label class="option-chat" title="${h(t(aide))}"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""}>${ic(i)}<span>${t(n)}</span></label>`).join("")}
       <button type="button" class="option-chat" id="hub-dossiers-ouvrir" aria-expanded="false" aria-controls="hub-dossiers" title="${h(t("The folders of your computer the assistant may read"))}">${ic("dossier")}<span>${t("Folders")}</span><span class="option-nb" id="hub-dossiers-nb">${(pv.dossiers || []).length}</span></button>
+      ${boutonCapacites("hc", ((etat.hubChat || {}).messages || []).length)}
       <span class="espace"></span>
       <button type="button" class="btn" id="hub-chat-stop" ${enCours ? "" : "hidden"}>${t("Stop")}</button>
       <button type="submit" class="btn btn-primaire" id="hub-chat-envoyer" ${enCours ? "hidden" : ""}>${t("Send")} ${ic("droite")}</button>
@@ -2544,8 +2623,21 @@ function pouvoirsHub(pv, enCours) {
 }
 async function changerPouvoirs(change) {
   await action(api("hub/chat/pouvoirs", "POST", { ...((etat.hubChat || {}).pouvoirs || {}), ...change }), "");
-  majHubChat(true);
+  await majHubChat(true);
+  montrerCapacites("hc");
 }
+// on a phone, the conversation can take the whole screen (and give it back): the home's tiles stay under it
+const boutonPleinHub = () => `<button type="button" class="btn btn-petit tel-seul" id="hub-chat-plein" aria-pressed="${etat.hubPlein ? "true" : "false"}" title="${h(t(etat.hubPlein ? "Back to the home page" : "Full screen"))}" aria-label="${h(t(etat.hubPlein ? "Back to the home page" : "Full screen"))}">${ic(etat.hubPlein ? "croix" : "agrandir")}</button>`;
+function pleinHub(oui) {
+  etat.hubPlein = oui;
+  const f = $("#accueil-form"); if (!f) return;
+  f.classList.toggle("plein", oui);
+  $("#hub-chat-plein").outerHTML = boutonPleinHub();
+  $("#hub-chat-plein").focus();
+  const fil = $("#hub-chat-fil"); if (fil) fil.scrollTop = fil.scrollHeight;
+}
+document.addEventListener("click", (ev) => { if (ev.target.closest("#hub-chat-plein")) pleinHub(!etat.hubPlein); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.hubPlein && etat.page === "accueil" && !document.querySelector(".dialogue, #accueil-liste:not([hidden])")) pleinHub(false); });
 // a folder from the system's dialog (or Athanor's picker); a dropped folder: the page cannot see its path, the
 // dialog opens to confirm it
 async function ajouterDossierHub(nomGlisse) {
@@ -2586,6 +2678,7 @@ async function majHubChat(force) {
   const pv = d.pouvoirs || {};
   document.querySelectorAll("[data-pouvoir]").forEach((c) => { c.checked = !!pv[c.dataset.pouvoir]; });
   const r = $("#hub-pouvoirs-resume"); if (r) r.textContent = capacitesHub(pv);
+  defautCapacites("hc", (d.messages || []).length);
   const nb = $("#hub-dossiers-nb"); if (nb) nb.textContent = (pv.dossiers || []).length;
   const nv = $("#hub-chat-nouveau"); if (nv) nv.hidden = !(d.messages || []).length;
   const ld = $("#hub-dossiers-liste"); if (ld) ld.innerHTML = listeDossiersHub(pv);
@@ -2613,6 +2706,7 @@ async function envoyerHubChat() {
   if (!r) return;
   etat.accueilTexte = ""; etat.accueilMentions = []; champ.value = ""; champ.style.height = ""; majMentions();
   etat.pieces.hc = []; const ul = $("#hc-liste"); if (ul) ul.innerHTML = "";
+  replierCapacites("hc", true);
   majHubChat(true);
 }
 document.addEventListener("keydown", (ev) => {
@@ -2632,7 +2726,7 @@ document.addEventListener("click", async (ev) => {
   if (b.id === "hub-dossier-ajouter") return ajouterDossierHub();
   if (b.dataset.dossierRetirer) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).filter((x, i) => i !== +b.dataset.dossierRetirer) });
   if (b.id === "hub-chat-stop") { await action(api("hub/chat/arreter", "POST")); return majHubChat(true); }
-  if (await confirmer(t("Start a new conversation? The assistant forgets this one, and its powers are switched off."), { ok: t("New conversation") })) { await action(api("hub/chat/effacer", "POST")); majHubChat(true); }
+  if (await confirmer(t("Start a new conversation? The assistant forgets this one, and its powers are switched off."), { ok: t("New conversation") })) { await action(api("hub/chat/effacer", "POST")); delete cap.repli.hc; majHubChat(true); }
 });
 document.addEventListener("change", async (ev) => {
   if (ev.target.matches("#hub-pouvoirs [data-dossier-acces]")) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).map((x, i) => i === +ev.target.dataset.dossierAcces ? { ...x, ecriture: !!ev.target.value } : x) });
@@ -2659,7 +2753,7 @@ pages.suivi = async () => {
         ? t("Athanor {0} is installed and the app already uses it. This pilot keeps running on {1}, the version it started with, until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version), h(v.version_pilote)])
         : t("Athanor {0} is installed and the app already uses it. This pilot keeps running on the version it started with until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version)])}</p>` : ""}
       <dl class="fiche">
-        <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
+        <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit jalon-resume${etat.ouverts.has("jalon-resume") ? " deplie" : ""}" tabindex="0" role="button" aria-expanded="${etat.ouverts.has("jalon-resume")}" title="${h(t("See all"))}">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
         <dt>${t("Last commit, this computer")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
         ${ligneGitHubSuivi(v.github, e.dernier_commit)}
         ${v.relais && !(v.jalons_deploiement || []).length ? `<dt>${t("Deployment")}</dt><dd class="relais-suivi">${ligneRelais(v.relais)}</dd>` : ""}
@@ -2863,7 +2957,7 @@ const GUIDE = [
       ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
       ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
       ["Missions and cards", "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log."],
-      ["From a phone", "On a paired device the conversation is read only: you read it and its powers, and you write to the assistant on the computer. Approvals and the emergency stop still work from the phone. The *?* at the top of the conversation replays its short tutorial."],
+      ["From a phone", "On a paired device the conversation is read only until *Remote* › *Permissions* › *Write to the home assistant* is allowed on the computer: then the phone writes to it as the computer does. Approvals and the emergency stop always work from the phone. The *?* at the top of the conversation replays its short tutorial."],
     ] },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",
     etapes: [
@@ -2943,7 +3037,7 @@ const GUIDE = [
       ["While it works live", "Your typing is locked under the banner *The assistant is working*: *Stop* ends its task, *Take over* gives you the keyboard back and the assistant goes on in its own connection. When it is done, the keyboard is yours again."],
       ["Permissions and reconnection", "*Permissions*, under the assistant's input, is kept per server: *Manual* asks before every command, *Auto* only before a dangerous or unknown one, *Accept changes* applies its plan and asks only before a dangerous step, *Ignore permissions* asks nothing (it needs Athanor's password, is chosen in the window after a warning; it is your own assistant, so no warning stays on the screen once chosen). If the connection drops, the terminal reconnects by itself, up to 10 attempts at most 30 seconds apart, without asking for anything; a refused password or key (twice, 30 seconds apart, for a server that is rebooting), a changed fingerprint or a removed server stops it at once, and so does a link lost again after 3 reconnections in 5 minutes, with *Try again* or *Connect again*."],
       ["The same guardrails", "In both modes the assistant goes through the guardrails of *Give a task to the Servers agent*: reading runs, a change or a destructive command waits for a plan you accept and is refused without it. The vault's values are masked in what it shows; the server's key and passwords never reach the page or Claude."],
-      ["From a paired device", "A shell is the strongest right on a server: from a paired phone or computer, the terminal and the files are off. On this computer, *Allow the terminal and the server's files from paired devices* turns them on, after a confirmation. The audit log names each connection and each file changed, never what is typed nor a file's content.", "#serveurs", "Servers"],
+      ["From a paired device", "A shell is the strongest right on a server: from a paired phone or computer, the terminal and the files are off. On this computer, *Remote* › *Permissions* › *Terminal and server files* turns them on, after a confirmation. The audit log names each connection and each file changed, never what is typed nor a file's content.", "#serveurs", "Servers"],
     ],
     note: "Nothing to install on the server: Athanor uses its usual SSH connection, and the terminal itself (xterm.js) is part of Athanor." },
   { id: "deploiement", titre: "A project's deployment", intro: "A project is built as before, with nothing of a server. It is also put online as soon as its *Deployment* tab has a server: Studio builds, Athanor prepares the server and deploys, at the moment you chose.",
@@ -5155,7 +5249,11 @@ pages.distance = async () => {
     pret: ["ok", t("Reachable at {0}", [d.adresse || ""]), "ok"],
     erreur: ["attention", d.message || t("The tunnel did not start."), "croix"],
   }[d.etat] || ["muet", ""];
-  const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr>
+  if (etat.appareilVise) setTimeout(() => {
+    const tr = document.querySelector(`[data-appareil-ligne="${CSS.escape(etat.appareilVise)}"]`); etat.appareilVise = "";
+    if (tr) { tr.classList.add("vise"); tr.scrollIntoView({ block: "center" }); tr.querySelector("input")?.focus(); }
+  }, 0);
+  const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr data-appareil-ligne="${h(a.id)}">
       <td class="etroit"><span class="point-appareil ${a.en_ligne ? "en-ligne" : ""}" title="${h(a.en_ligne ? t("Connected now") : t("Not connected"))}"></span></td>
       <td><input class="nom-appareil" data-renommer="${h(a.id)}" value="${h(a.nom)}" maxlength="40" aria-label="${h(t("Name"))}">
         <div class="muet petit">${a.moi ? `<span class="badge">${t("this device")}</span> ` : ""}${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · ${t("notifications on")}` : ""}</div></td>
@@ -5165,13 +5263,15 @@ pages.distance = async () => {
       <div class="bloc"><h2>${t("Remote access")}</h2>
         <p class="petit ${statut[0]}">${statut[2] ? ic(statut[2]) + " " : ""}${h(statut[1])}</p>
         <p class="muet petit">${t("This device is paired: it follows and drives Athanor from anywhere. The switch, the address and the pairing of new devices are on the computer only.")} ${lienGuide("distance")}</p>
-      </div>` : `
+      </div>
+      ${blocPermissions(d, true)}` : `
       <div class="bloc"><h2>${t("Remote access")}</h2>
         <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")} ${lienGuide("distance")}</p>
         <label class="interrupteur"><input type="checkbox" id="dist-actif" ${d.actif ? "checked" : ""}><span>${t("Remote access")}</span></label>
         <p class="petit ${statut[0]}" id="dist-statut">${statut[2] ? ic(statut[2]) + " " : ""}${h(statut[1])}</p>
         <p class="muet petit">${d.domaine ? t("While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.") : t("The address changes when the computer restarts: scan the code again then. While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.")}</p>
       </div>
+      ${blocPermissions(d, false)}
       ${blocDomaine(d)}
       ${d.etat === "pret" && d.lien ? `<div class="bloc"><h2>${t("Pair a device")}</h2>
         <div class="appairage"><img class="qr-distance" src="${h(d.qr)}" alt="${h(t("QR code of the pairing link"))}">
@@ -5203,6 +5303,23 @@ pages.distance = async () => {
     </div>
   </div>`;
 };
+// what the paired devices may do beyond following and driving the Studio: each off by default, allowed on the
+// computer after a confirmation (and Athanor's password); a device reads them
+const PERMISSIONS_DISTANCE = [
+  ["assistant", "Write to the home assistant", "Its messages, files, powers (Internet, Writing, folders of this computer) and its cards."],
+  ["missions", "Missions", "Create, change, launch and stop a mission, and the assistant's work on servers."],
+  ["terminal", "Terminal and server files", "A shell on your servers, and SFTP with the files of this computer."],
+];
+function blocPermissions(d, lecture) {
+  const p = d.permissions || {};
+  return `<div class="bloc" id="permissions-distance"><h2>${t("Permissions")}</h2>
+    <p class="intro petit">${t("From a paired device you follow and drive the Studio, read the hub, decide approvals and stop everything. What can do more is off until you allow it here.")}</p>
+    ${PERMISSIONS_DISTANCE.map(([n, titre, aide]) => lecture
+      ? `<p class="m0 petit">${p[n] ? `<span class="ok">${ic("ok")}</span>` : `<span class="muet">${ic("croix")}</span>`} ${t("{0}: {1}", [`<b>${t(titre)}</b>`, t(p[n] ? "allowed" : "not allowed")])}</p>`
+      : `<label class="interrupteur perm-distance"><input type="checkbox" data-permission="${n}"${p[n] ? " checked" : ""}><span><b>${t(titre)}</b><span class="muet petit">${t(aide)}</span></span></label>`).join("")}
+    ${lecture ? `<p class="muet petit m0">${t("Changed on the computer only.")}</p>` : ""}
+  </div>`;
+}
 // your own domain (distance_domaine.go): a fixed address, and Cloudflare Access in front of it
 function blocDomaine(d) {
   const e = d.domaine_etape || "";
@@ -5684,16 +5801,26 @@ $("#page").addEventListener("change", async (ev) => {
   const m = +sel.value;
   if (await action(api("serveurs/sante", "POST", m ? { minutes: m } : { arret: true }))) toast(m ? t("The sites are checked every {0} minutes.", [m]) : t("The sites' health checks are off."), "ok");
 });
+const QUESTIONS_PERMISSION = {
+  terminal: () => t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time.") + " " + t("The SFTP page's Local panel, the files of this computer, is allowed with it."),
+  assistant: () => t("Allow your paired phone or computer to write to the home assistant? Anyone holding that device could then use its powers: the web, and the folders of this computer you give it, read or changed. You can turn it off here at any time."),
+  missions: () => t("Allow your paired phone or computer to create, change, launch and stop missions? Anyone holding that device could then start Claude on your projects and servers, with the API keys you choose. You can turn it off here at any time."),
+};
+const BRAVO_PERMISSION = {
+  terminal: ["The terminal can now be opened from your paired devices.", "The terminal is off from your paired devices."],
+  assistant: ["Your paired devices can now write to the home assistant.", "The home assistant is read only from your paired devices again."],
+  missions: ["Your paired devices can now create and drive missions.", "The missions are read only from your paired devices again."],
+};
 $("#page").addEventListener("change", async (ev) => {
-  const c = ev.target.closest("[data-srv-term-distance]"); if (!c) return;
-  const oui = c.checked;
-  const q = t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time.") + " " + t("The SFTP page's Local panel, the files of this computer, is allowed with it.");
+  const c = ev.target.closest("[data-permission]"); if (!c) return;
+  const oui = c.checked, nom = c.dataset.permission;
+  const q = QUESTIONS_PERMISSION[nom]();
   // C1-7: Athanor's password retyped when it has one, as for the other strong rights
   const preuve = oui ? ((await api("hub/approbations").catch(() => ({}))).mot_de_passe_requis ? await confirmer(q, { ok: t("Allow"), mdp: true }) : await confirmer(q, { ok: t("Allow") })) : true;
   if (preuve === false) { c.checked = false; return; }
-  if (!(await action(api("serveurs/terminal-distance", "POST", { autoriser: oui, confirme: oui, ...(typeof preuve === "string" ? { mot_de_passe: preuve } : {}) })))) { c.checked = !oui; return; }
-  srv.termDistance = oui;
-  toast(oui ? t("The terminal can now be opened from your paired devices.") : t("The terminal is off from your paired devices."), "ok");
+  if (!(await action(api("distance/permissions", "POST", { permission: nom, autoriser: oui, confirme: oui, ...(typeof preuve === "string" ? { mot_de_passe: preuve } : {}) })))) { c.checked = !oui; return; }
+  if (nom === "terminal") srv.termDistance = oui;
+  toast(t(BRAVO_PERMISSION[nom][oui ? 0 : 1]), "ok");
 });
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button[data-incident]"); if (!b) return;
@@ -6391,13 +6518,13 @@ function cadreMission(m) {
       <div><dt>${t("Servers")}</dt><dd>${avecServeurs ? `<div class="mis-machines">${machinesMission(m, perdue)}</div>` : ""}
         ${taches ? "" : `<span class="${scl}">${t(slib)}</span>${m.url && /^https?:\/\//.test(m.url) ? ` · <a href="${h(m.url)}" target="_blank" rel="noopener">${h(m.url)}</a>` : ""}`}
         ${srvErr ? `<p class="petit attention m0">${h(srvErr)}</p>` : ""}
-        ${!taches && avecServeurs && !perdue ? `<div class="ligne m0 mt-1 local-seul">
+        ${!taches && avecServeurs && !perdue ? `<div class="ligne m0 mt-1 si-missions">
           <button type="button" class="btn btn-petit" data-mis-act="serveur-arreter"${m.serveur_tache ? "" : " disabled"}>${t("Stop the server's work")}</button>
           <button type="button" class="btn btn-petit" data-mis-act="serveur-relancer">${t("Launch the server's work again")}</button></div>` : ""}</dd></div>
       <div><dt>${t("API keys")}</dt><dd>${(m.api_noms || []).length ? h(m.api_noms.join(", ")) : `<span class="muet">${t("No API key")}</span>`}</dd></div>
       ${avecServeurs || (m.api_noms || []).length ? `<div><dt>${t("On the servers")}</dt><dd>${h(nomModeMission(m.mode))}</dd></div>` : ""}
     </dl>
-    <div class="ligne m0 local-seul">${actions}
+    <div class="ligne m0 si-missions">${actions}
       ${perdue ? "" : `<button type="button" class="btn btn-petit" data-mis-modifier="${id}">${t("Edit")}</button>`}<span class="espace"></span>
       <button type="button" class="btn btn-petit" data-mis-suppr="${id}">${t("Delete")}</button></div>
     <details class="plus-options mis-details"><summary>${t("Details")}</summary>
@@ -6412,7 +6539,8 @@ pages.missions = async () => {
   const d = await api("missions"), l = d.missions || [];
   etat.missionsSig = JSON.stringify(l);
   return `<div class="missions">
-    <div class="ligne cof-tete"><h2 class="m0 croit">${t("Missions")} <span class="muet">${l.length}</span></h2><button type="button" class="btn btn-primaire local-seul" data-nm-nouvelle>${t("New mission")}</button></div>
+    <div class="ligne cof-tete"><h2 class="m0 croit">${t("Missions")} <span class="muet">${l.length}</span></h2><button type="button" class="btn btn-primaire si-missions" data-nm-nouvelle>${t("New mission")}</button></div>
+    <p class="petit muet m0 distant-seul sans-missions">${t("From this device the missions are read only. To create, change or stop one from here, allow it on the computer: Remote › Permissions.")}</p>
     <p class="muet m0">${t("A mission links a Studio project, servers and API keys, or servers only. Follow and manage each one in its frame.")}</p>
     ${l.length ? `<div class="mis-cadres">${l.map(cadreMission).join("")}</div>` : `<div class="vide">${t("No mission yet: launch one with New mission, or ask the assistant of the home page.")}</div>`}
   </div>`;
@@ -6462,7 +6590,7 @@ const nomMissionPropose = (texte) => String(texte || "").split("\n")[0].replace(
 pages["nouvelle-mission"] = async () => {
   if (!nm.f) nm.f = MISSION_VIDE();
   lireFormMission(); // drawn again (a choice, an answer): what is typed now, Claude's rewrite included
-  const f = nm.f, edition = !!f.id, distant = !!(etat.vue || {}).distant, studio = !f.sans_projet, gestion = !!f.gestion;
+  const f = nm.f, edition = !!f.id, distant = !permis("missions"), studio = !f.sans_projet, gestion = !!f.gestion;
   const [sv, cof, mis, mod, md] = await Promise.all([api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api("missions").catch(() => ({})),
     etat.cpModeles ? { modeles: etat.cpModeles } : api("modeles").catch(() => ({})), etat.modeDefaut && etat.modeDefaut.cadrage_global !== undefined ? etat.modeDefaut : api("mode?defaut=1").catch(() => ({})), lireCategories(), connexionConnueGH()]);
   etat.cpModeles = mod.modeles || []; etat.modeDefaut = md;
@@ -6531,7 +6659,7 @@ pages["nouvelle-mission"] = async () => {
         clesInconnues.length ? tn(clesInconnues.length, "1 proposed API key is no longer in the vault.", "{0} proposed API keys are no longer in the vault.", [clesInconnues.length]) : ""].filter(Boolean).join(" "))}
         <button type="button" class="btn btn-petit" data-nm-retirer-inconnus>${t("Remove them")}</button></p>` : ""}
       <p class="petit attention m0" id="nm-erreur" role="alert"${studio || gestion ? " hidden" : ""}>${studio || gestion ? "" : t("Tick Studio project, Server management, or both.")}</p>
-      ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer"${studio || gestion ? "" : " disabled"}>${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
+      ${distant ? `<p class="muet petit">${t("From this device the missions are read only. To create, change or stop one from here, allow it on the computer: Remote › Permissions.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer"${studio || gestion ? "" : " disabled"}>${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
     </form></div>`;
 };
 // every change is kept in nm.f at once: a refresh of the page (a choice, the GitHub connection) loses nothing
@@ -6552,7 +6680,7 @@ function lireFormMission() {
   return f;
 }
 // the mission's API keys: chips (as the Deployment tab's) and the one API picker (choixAPI) to add one
-const pucesClesMission = () => ((nm.f || {}).apis || []).filter((id) => (nm.nomsCles || {})[id]).map((id) => `<span class="puce-mention puce-api">${typeMention({ type: "api" })}${h(nm.nomsCles[id])}${(etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-nm-retirer-api="${h(id)}" aria-label="${h(t("Remove {0}", [nm.nomsCles[id]]))}">×</button>`}</span>`).join("")
+const pucesClesMission = () => ((nm.f || {}).apis || []).filter((id) => (nm.nomsCles || {})[id]).map((id) => `<span class="puce-mention puce-api">${typeMention({ type: "api" })}${h(nm.nomsCles[id])}${!permis("missions") ? "" : `<button type="button" class="puce-x" data-nm-retirer-api="${h(id)}" aria-label="${h(t("Remove {0}", [nm.nomsCles[id]]))}">×</button>`}</span>`).join("")
   || `<span class="muet petit">${t("No API chosen yet.")}</span>`;
 // a key added or removed: its chips in place; the form is drawn again only when "On the servers" comes or goes with it
 function changerClesMission() {
@@ -6658,7 +6786,7 @@ pages.serveurs = async () => {
     ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
       <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>
       ${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>${t("Add a server")}</button>`}</div>`}
-    ${d.serveurs.length && !srv.aj ? `<details class="plus-options"><summary>${t("More options")}</summary>${reglageSante(d.sante || {}, distant)}${distant ? "" : `<label class="radio petit srv-reglage-terminal"><input type="checkbox" data-srv-term-distance${d.terminal_distance ? " checked" : ""}> ${t("Allow the terminal and the server's files from paired devices")}</label>`}</details>` : ""}
+    ${d.serveurs.length && !srv.aj ? `<details class="plus-options"><summary>${t("More options")}</summary>${reglageSante(d.sante || {}, distant)}${distant ? "" : `<p class="petit muet m0 srv-reglage-terminal">${t(d.terminal_distance ? "The terminal and the server's files are allowed from paired devices." : "The terminal and the server's files are off from paired devices.")} <a href="#distance">${t("Remote › Permissions")}</a></p>`}</details>` : ""}
   </div>`;
 };
 // the wizard's fields as typed, kept before each render (the address step, then the chosen way)
@@ -6980,7 +7108,7 @@ const SOLUTIONS_TERMINAL = {
   "Too many terminals are open: close one first": "Disconnect a terminal you no longer use, or wait a minute for a closed page's terminal to end.",
   "This terminal is already open in another window": "Use that window, or close it: this one can read the terminal a moment later.",
   "The server refused to open a terminal": "The server accepted the key but not a shell for this user: check the user's shell on the server.",
-  "Not available from a remote device": "The terminal is off from paired devices: allow it on the computer, in Servers › More options.",
+  "Not available from a remote device": "The terminal is off from paired devices: allow it on the computer, in Remote › Permissions.",
 };
 // the terminal's themes (M231d), written by hand from each project's published colours (all MIT, docs/CREDITS.md) and
 // lightened where a colour read below 4.5:1 on its background: TestPalettesTerminal checks every contrast
@@ -7174,7 +7302,7 @@ pages.terminal = async () => {
   const retour = `<p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>`;
   if (!x) return `<div class="serveurs">${retour}<div class="vide"><p><b>${t(d.serveurs.length ? "This server is not in your list." : "No server yet")}</b></p>
     <p class="muet">${t("Add a server first, then press Connect on its card: its terminal opens here.")}</p><a class="btn btn-primaire" href="#serveurs">${t("Servers")}</a></div></div>`;
-  const avis = distant && !d.terminal_distance ? [t("The terminal is off from paired devices: a shell is the strongest right on a server."), t("It can be allowed on the computer, in Servers › More options.")]
+  const avis = distant && !d.terminal_distance ? [t("The terminal is off from paired devices: a shell is the strongest right on a server."), t("It can be allowed on the computer, in Remote › Permissions.")]
     : x.etat === "inconnu" ? [t("Athanor cannot reach this server with its key yet."), t("Put its public key on the server, then press Verify on its sheet.")] : null;
   term.nom = x.nom;
   return `<div class="serveurs terminal-page" data-onglet="${sf.onglet}">
@@ -7758,6 +7886,42 @@ document.addEventListener("keydown", (ev) => {
   if (vers !== undefined) { ev.preventDefault(); l[(vers + l.length) % l.length].focus(); }
   else if (ev.key === "Escape" || ev.key === "Tab") { ev.preventDefault(); fermerMenuSftp(true); }
 });
+// the chat's model: a list of the app's own, in the theme's colours (a native <select> draws its list with the
+// system's, white on white in a dark theme); the SFTP menu's look and keys
+function menuModele() {
+  const b = $("#chat-modele"); if (!b) return;
+  const m = document.createElement("div");
+  m.className = "sftp-menu"; m.id = "modele-menu"; m.setAttribute("role", "listbox"); m.setAttribute("aria-label", t("Model"));
+  m.innerHTML = (chat.choixModeles || []).map((x) => `<button type="button" role="option" tabindex="-1" class="sftp-menu-item" data-modele="${h(x)}" aria-selected="${chat.modele === x}">${h(x || t("account default"))}</button>`).join("");
+  document.body.append(m); b.setAttribute("aria-expanded", "true");
+  const r = b.getBoundingClientRect(), l = m.offsetWidth, hm = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(innerWidth - l - 8, r.left)) + "px";
+  m.style.top = (r.top - hm - 4 >= 8 ? r.top - hm - 4 : Math.min(innerHeight - hm - 8, r.bottom + 4)) + "px"; // above the field, as the native list
+  (m.querySelector('[aria-selected="true"]') || m.firstElementChild)?.focus();
+}
+function fermerMenuModele(rendre) {
+  const m = $("#modele-menu"), b = $("#chat-modele"); if (!m) return;
+  m.remove(); b?.setAttribute("aria-expanded", "false");
+  if (rendre) b?.focus();
+}
+document.addEventListener("click", (ev) => {
+  if (!$("#modele-menu")) return;
+  const it = ev.target.closest("#modele-menu [data-modele]");
+  if (it) {
+    chat.modele = it.dataset.modele; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* this device only */ }
+    const s = $("#chat-modele span"); if (s) s.textContent = chat.modele || t("account default");
+    return fermerMenuModele(true);
+  }
+  if (!ev.target.closest("#chat-modele")) fermerMenuModele();
+}, true);
+document.addEventListener("keydown", (ev) => {
+  const m = $("#modele-menu"); if (!m || !m.contains(document.activeElement)) return;
+  const l = [...m.children], i = l.indexOf(document.activeElement);
+  const vers = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: l.length - 1 }[ev.key];
+  if (vers !== undefined) { ev.preventDefault(); l[(vers + l.length) % l.length].focus(); }
+  else if (ev.key === "Escape" || ev.key === "Tab") { ev.preventDefault(); fermerMenuModele(true); }
+});
+document.addEventListener("focusin", (ev) => { const m = $("#modele-menu"); if (m && !m.contains(ev.target) && ev.target.id !== "chat-modele") fermerMenuModele(); });
 document.addEventListener("focusin", (ev) => { const m = $("#sftp-menu"); if (m && !m.contains(ev.target) && !ev.target.closest?.("[data-sftp-menu]")) fermerMenuSftp(); });
 $("#page").addEventListener("contextmenu", (ev) => { // a right click on a row: that row (kept if already selected), then the menu at the pointer
   const r = etat.page === "terminal" && ev.target.closest(".sftp-entree"); if (!r) return;
@@ -8513,9 +8677,11 @@ function remettreDefil(defils) {
     const d = par.get(k + "#" + vus[k]); if (d) { el.scrollTop = d[2]; el.scrollLeft = d[3]; }
   }
 }
-// auto-scroll of the plan: the milestone being built brought into view when it changes (or when switched on)
+// auto-scroll of the plan: the milestone being built brought into view when it changes (or when switched on);
+// its switch shows only when the list scrolls (every milestone in sight: nothing to follow)
 function suivrePlan(force) {
   const liste = $("#page .plan:not(.jalons-mini)"); if (!liste) return;
+  const b = $('[data-defil="plan"]'); if (b) b.hidden = liste.scrollHeight <= liste.clientHeight + 1;
   const li = liste.querySelector("li.en-cours");
   const cle = li ? li.dataset.jalonCle : "";
   if (!etat.defilAuto.plan || !li || (!force && cle === etat.planSuivi)) { if (!etat.defilAuto.plan) etat.planSuivi = ""; return; }
@@ -8524,6 +8690,13 @@ function suivrePlan(force) {
   liste.scrollTo({ top: liste.scrollTop + (z.top - c.top) - (liste.clientHeight - li.offsetHeight) / 2, behavior: force ? "smooth" : "auto" });
 }
 
+addEventListener("resize", () => suivrePlan());
+document.addEventListener("click", (ev) => {
+  const r = ev.target.closest(".jalon-resume"); if (!r) return;
+  const oui = !etat.ouverts.has("jalon-resume"); oui ? etat.ouverts.add("jalon-resume") : etat.ouverts.delete("jalon-resume");
+  r.classList.toggle("deplie", oui); r.setAttribute("aria-expanded", String(oui));
+});
+document.addEventListener("keydown", (ev) => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest?.(".jalon-resume")) { ev.preventDefault(); ev.target.click(); } });
 async function changerLangue(code) {
   etat.langue = code; appliquerLangue(code);
   await action(api("preferences", "POST", { langue: code }));
@@ -8676,8 +8849,9 @@ $("#page").addEventListener("click", async (ev) => {
   if (page === "chat") {
     if (b.id === "chat-envoyer") return envoyerChat();
     if (b.id === "chat-info") return aideChat();
+    if (b.id === "chat-modele") return $("#modele-menu") ? fermerMenuModele(true) : menuModele();
     if (b.id === "chat-stop") { await action(api("chat/arreter", "POST")); return majChat(true); }
-    if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); majChat(true); } return; }
+    if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); delete cap.repli.ct; majChat(true); } return; }
     if (b.dataset.chatAgent !== undefined) return ajouterAgentChat(b);
     if (b.dataset.chatMcp !== undefined) return ajouterMCPChat(b);
     if (b.dataset.chatNote !== undefined) { b.disabled = true; await action(api("chat/note", "POST", { index: Number(b.dataset.chatNote) })); return majChat(true); }
@@ -8725,9 +8899,8 @@ $("#page").addEventListener("keydown", (ev) => {
 
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
-  if (i.id === "chat-modif") { chat.modif = i.checked; const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); }
-  if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); }
-  if (i.id === "chat-modele") { chat.modele = i.value; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* this device only */ } }
+  if (i.id === "chat-modif") { chat.modif = i.checked; const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); montrerCapacites("ct"); }
+  if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); montrerCapacites("ct"); }
   if (i.dataset.quotaSeuil || i.dataset.quotaAction) {
     const cle = i.dataset.quotaSeuil || i.dataset.quotaAction, bloc = i.closest(".quota-arret");
     const seuil = Number((bloc.querySelector("[data-quota-seuil]") || {}).value || 0);
@@ -8898,6 +9071,7 @@ async function rafraichir() {
     if (etat.projet !== demande) return; // another project chosen meanwhile: this answer is stale, the choice refreshes again
     etat.vue = v;
     document.body.classList.toggle("distant", !!v.distant);
+    for (const n of ["assistant", "missions"]) document.body.classList.toggle("peut-" + n, !!(v.permis_distance || {})[n]);
     if (!v.distant && v.dernier_appareil !== etat.dernierAppareil) {
       if (etat.dernierAppareil !== undefined && v.dernier_appareil) toast(t("New device paired: {0}", [v.dernier_appareil.split("|").slice(1).join("|")]), "ok");
       etat.dernierAppareil = v.dernier_appareil;

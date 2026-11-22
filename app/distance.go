@@ -67,6 +67,38 @@ type DistanceConfig struct {
 	Vapid string `json:"vapid,omitempty"`
 	// Terminal: the Servers terminal and SFTP allowed from a paired device (off by default: a shell is the strongest right)
 	Terminal bool `json:"terminal,omitempty"`
+	// Assistant: the home conversation written from a paired device (its powers, its folders, its cards); Missions:
+	// a mission created, changed, launched or stopped from one. Off by default, as Terminal (Remote › Permissions)
+	Assistant bool `json:"assistant,omitempty"`
+	Missions  bool `json:"missions,omitempty"`
+}
+
+// permissionsDistance: what the owner allows from paired devices beyond reading (Remote › Permissions)
+type PermissionsDistance struct {
+	Terminal  bool `json:"terminal"`
+	Assistant bool `json:"assistant"`
+	Missions  bool `json:"missions"`
+}
+
+func (s *Serveur) permissionsDistance() PermissionsDistance {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d := s.config.Distance
+	return PermissionsDistance{Terminal: d.Terminal, Assistant: d.Assistant, Missions: d.Missions}
+}
+
+// permisDistance: a hub route refused to devices by default that the owner allowed in Remote › Permissions
+func (s *Serveur) permisDistance(r *http.Request) bool {
+	p, m := s.permissionsDistance(), r.URL.Path
+	switch {
+	case routeShellDistance(m):
+		return p.Terminal
+	case m == "/api/hub/chat", strings.HasPrefix(m, "/api/hub/chat/"):
+		return p.Assistant
+	case m == "/api/missions", strings.HasPrefix(m, "/api/missions/"):
+		return p.Missions
+	}
+	return false
 }
 
 type cleContexte string
@@ -377,7 +409,7 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 			s.pageDistance(w, http.StatusUnauthorized, "inconnu")
 			return
 		}
-		if interditDistance(r) || refuseHubDistance(r) && !(routeShellDistance(r.URL.Path) && s.shellDistanceAutorise()) {
+		if interditDistance(r) || refuseHubDistance(r) && !s.permisDistance(r) {
 			s.erreur(w, http.StatusForbidden, "Not available from a remote device")
 			return
 		}
@@ -523,11 +555,12 @@ type DistanceVue struct {
 	Chiffres       string `json:"chiffres,omitempty"`
 	ChiffresExpire int    `json:"chiffres_expire,omitempty"`
 	// your own domain: in use, and its setup (connexion, creation, pret, erreur)
-	Domaine        string        `json:"domaine,omitempty"`
-	DomaineEtape   string        `json:"domaine_etape,omitempty"`
-	DomaineMessage string        `json:"domaine_message,omitempty"`
-	DomaineLien    string        `json:"domaine_lien,omitempty"`
-	Appareils      []AppareilVue `json:"appareils"`
+	Domaine        string              `json:"domaine,omitempty"`
+	DomaineEtape   string              `json:"domaine_etape,omitempty"`
+	DomaineMessage string              `json:"domaine_message,omitempty"`
+	DomaineLien    string              `json:"domaine_lien,omitempty"`
+	Appareils      []AppareilVue       `json:"appareils"`
+	Permissions    PermissionsDistance `json:"permissions"`
 }
 
 func (s *Serveur) vueDistance() DistanceVue { return s.vueDistanceDe("") }
@@ -540,6 +573,7 @@ func (s *Serveur) vueDistanceDe(appareil string) DistanceVue {
 	v := DistanceVue{Actif: s.config.Distance.Actif, Appareils: []AppareilVue{}}
 	appareils := append([]Appareil{}, s.config.Distance.Appareils...)
 	s.mu.Unlock()
+	v.Permissions = s.permissionsDistance()
 	d := s.dist()
 	d.mu.Lock()
 	t := d.tunnel
