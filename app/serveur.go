@@ -557,6 +557,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
 	mux.HandleFunc("POST /api/fenetre", s.garde(false, s.apiFenetre)) // the terminal: Athanor's window as well
+	mux.HandleFunc("POST /api/quitter", s.garde(false, s.apiQuitter)) // the terminal: stop the Athanor in the background
 	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))
 	mux.HandleFunc("GET /api/extensions", s.garde(false, s.apiExtensions))
 	mux.HandleFunc("GET /api/extensions/voir", s.garde(false, s.apiExtVoir))

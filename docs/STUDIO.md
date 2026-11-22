@@ -161,12 +161,12 @@ The agents live in [`template/.claude/agents/`](../template/.claude/agents): edi
 
 ### The pages
 
-<img src="images/overview.png" alt="Studio's Overview page: the hub menu on the left, the project's state with its Start button, and the five first steps" width="100%">
+<img src="images/overview.png" alt="Studio's Overview page while Claude works: Right now (the milestone, the last commit), the subscription quota, and the plan with its done milestones, the one being built and the next ones" width="100%">
 
 | | |
 |:---:|:---:|
 | <img src="images/team.png" alt="Team page: the project lead with the tester it called this cycle, and the library of sub-agents"><br>**Team**: who called whom, what each one does, live | <img src="images/log.png" alt="Log page: Claude's words, a check run and a sub-agent call, filtered by kind"><br>**Log**: readable or raw, filtered, workers tagged |
-| <img src="images/requests.png" alt="Requests page: the form for a new request, files and notes along the way, and one queued request"><br>**Requests**: a queue you can reorder, files, notes along the way | <img src="images/chat.png" alt="Chat page: the conversation box with its attached files and its Change the files and Internet switches"><br>**Chat**: ask about the project at any time |
+| <img src="images/requests.png" alt="Requests page: the form for a new request, files and notes along the way, and one queued request"><br>**Requests**: a queue you can reorder, files, notes along the way | <img src="images/chat.png" alt="Chat page: a conversation about the project, its title naming the folder Claude reads, and under the field Files, Internet, Change the files, the model and the i"><br>**Chat**: ask about the project at any time |
 | <img src="images/skills.png" alt="Skills &amp; MCP page, Skills tab: the community search and the verified catalog"><br>**Skills**: installed once, switched on per project | <img src="images/mcp.png" alt="Skills &amp; MCP page, MCP tab: the MCP Registry search and the verified catalog (Context7, Serena, Playwright)"><br>**MCP**: remote or local in a cage, tested in one click |
 | <img src="images/health.png" alt="Setup &amp; health page on Windows, WSL tab: Check everything, Install everything and one line per check"><br>**Setup & health**: one tab per mode, repair line by line | <img src="images/options.png" alt="Settings, Options tab: language, five palettes and five accents, and the list of projects"><br>**Settings → Options**: 6 languages, 5 palettes × 5 accents |
 

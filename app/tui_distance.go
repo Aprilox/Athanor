@@ -41,12 +41,21 @@ func (a *appTUI) raccourcisDistance() []raccourci {
 	if len(a.dist.Appareils) > 0 {
 		r = append(r, raccourci{"r", t("Rename")}, raccourci{"d", t("Remove")})
 	}
+	switch {
+	case a.dist.Domaine != "":
+		r = append(r, raccourci{"t", t("Back to a temporary address")})
+	case a.dist.DomaineEtape == "connexion":
+		r = append(r, raccourci{"c", t("Cancel")})
+	case a.dist.DomaineEtape != "creation":
+		r = append(r, raccourci{"m", t("Use my domain")})
+	}
 	return r
 }
 
-// matriceQR: the QR code of a text, its modules (true: black) with a white margin of 2 around.
+// matriceQR: the QR code of a text, its modules (true: black) with a white margin of 2 around. Level L: the
+// smallest code (a pairing link: 41 × 21 characters), read on a screen that nothing dirties.
 func matriceQR(texte string) [][]bool {
-	c, err := qr.Encode(texte, qr.M)
+	c, err := qr.Encode(texte, qr.L)
 	if err != nil {
 		return nil
 	}
@@ -85,23 +94,32 @@ func dessinerQR(e *ecranT, x, y int, m [][]bool) {
 func (a *appTUI) pageDistance(e *ecranT, x, y, l, h int) {
 	p := a.pal
 	fond := p.panneau
-	ix, iy, il, ih := a.boite(e, x, y, l, h, a.t("Remote access"), false)
 	d := a.dist
+	var qrM [][]bool
+	if d != nil && d.Etat == "pret" && d.Lien != "" {
+		qrM = matriceQR(d.Lien)
+	}
+	// the QR code first: top left, whole, always at the same place whatever the texts say; they go beside
+	// it (or under it in a narrow terminal)
+	lq, hq := len(qrM), (len(qrM)+1)/2
+	qrVu := qrM != nil && l >= lq+2 && h >= hq
+	if qrVu {
+		dessinerQR(e, x+1, y, qrM)
+		if l-lq-3 >= 34 {
+			x, l = x+lq+2, l-lq-2
+		} else {
+			y, h = y+hq, h-hq
+		}
+	}
+	if h < 3 {
+		return
+	}
+	ix, iy, il, ih := a.boite(e, x, y, l, h, a.t("Remote access"), false)
 	if d == nil {
 		e.texte(ix, iy, il, a.t("Updating…"), a.st(p.muet, fond))
 		return
 	}
-	var qrM [][]bool
-	if d.Lien != "" {
-		qrM = matriceQR(d.Lien)
-	}
-	lq, hq := len(qrM), (len(qrM)+1)/2
-	// the QR code on the right when there is room for it and for the texts, else under them
-	cote := qrM != nil && il >= lq+40 && ih >= hq
 	lt := il
-	if cote {
-		lt = il - lq - 3
-	}
 	var lignes []segTUI
 	ajouter := func(t string, st styleT) {
 		for _, li := range envelopper(t, lt) {
@@ -109,6 +127,9 @@ func (a *appTUI) pageDistance(e *ecranT, x, y, l, h int) {
 		}
 	}
 	vide := func() { lignes = append(lignes, segTUI{"", styleT{}}) }
+	if qrM != nil && !qrVu {
+		ajouter(a.t("The terminal is too small for the QR code: open the link on the device, or make the terminal bigger."), a.gras(p.attention, fond))
+	}
 	interr := "○ " + a.t("off")
 	if d.Actif {
 		interr = "● " + a.t("on")
@@ -146,6 +167,32 @@ func (a *appTUI) pageDistance(e *ecranT, x, y, l, h int) {
 			lignes = append(lignes, segTUI{"  ••• •••   v · " + a.t("Show the code"), a.st(p.muet, fond)})
 		}
 		ajouter(a.t("Shown only here, renewed every 20 seconds: a photo of the QR code is not enough, the device must see this screen. Three wrong codes and it must scan again."), a.st(p.muet, fond))
+	}
+	// the address: a temporary one, or your own domain at Cloudflare (a fixed address, signed in once from any browser)
+	vide()
+	lignes = append(lignes, segTUI{a.t("Address"), a.gras(p.encre, fond)})
+	switch {
+	case d.Domaine != "":
+		ajouter("✔ "+a.t("Your domain: {0}", "https://"+d.Domaine), a.st(p.ok, fond))
+		ajouter(a.t("A fixed address: the devices keep their access when the computer restarts."), a.st(p.muet, fond))
+	case d.DomaineEtape == "connexion":
+		ajouter(a.t("Sign in to Cloudflare in a browser (your phone or another computer): open this link, then choose your domain."), a.st(p.encre, fond))
+		for r := []rune(d.DomaineLien); len(r) > 0; {
+			n := min(len(r), max(1, lt))
+			lignes = append(lignes, segTUI{string(r[:n]), a.st(p.accent, fond)})
+			r = r[n:]
+		}
+		if d.DomaineLien == "" {
+			ajouter(a.t("Updating…"), a.st(p.muet, fond))
+		}
+	case d.DomaineEtape == "creation":
+		ajouter(a.t("Creating the tunnel and the address…"), a.st(p.muet, fond))
+	default:
+		if d.DomaineEtape == "erreur" {
+			ajouter("✖ "+d.DomaineMessage, a.st(p.erreur, fond))
+		}
+		ajouter(a.t("Now a temporary address (trycloudflare.com), which changes when the computer restarts. With a domain of yours at Cloudflare, the address never changes, and Cloudflare can check who comes in before anything reaches the computer."), a.st(p.muet, fond))
+		lignes = append(lignes, segTUI{"m · " + a.t("Use my domain"), a.st(p.accent, fond)})
 	}
 	vide()
 	lignes = append(lignes, segTUI{a.t("Trusted devices"), a.gras(p.encre, fond)})
@@ -186,19 +233,6 @@ func (a *appTUI) pageDistance(e *ecranT, x, y, l, h int) {
 			a.zone(ix-1, iy+i-debut, lt+1, 1, func() { a.selApp = k })
 		}
 	}
-	if qrM == nil {
-		return
-	}
-	switch {
-	case cote:
-		dessinerQR(e, ix+il-lq, iy, qrM)
-	case len(lignes)-debut+1+hq <= ih && lq <= il:
-		dessinerQR(e, ix, iy+len(lignes)-debut+1, qrM)
-	default:
-		if n := len(lignes) - debut; n < ih {
-			e.texte(ix, iy+n, il, a.t("The terminal is too small for the QR code: open the link on the device, or make the terminal bigger."), a.st(p.attention, fond))
-		}
-	}
 }
 
 // dureeCourteTUI: seconds as "1 min 40 s" / "18 s".
@@ -215,7 +249,32 @@ func (a *appTUI) toucheDistance(k string, defiler func(*int, int)) {
 		return
 	}
 	rafraichir := func(map[string]any) { a.derniere["distance"] = time.Time{} }
+	domaine := func(corps map[string]string) { a.agir("POST", "distance/domaine", corps, rafraichir) }
 	switch k {
+	case "m":
+		if d.Domaine != "" || d.DomaineEtape == "connexion" || d.DomaineEtape == "creation" {
+			return
+		}
+		hote := &saisieT{}
+		a.formulaire(a.t("Use my domain"), a.t(aideFormulaireLigne), []champTUI{{lib: a.t("Address on your domain") + " (athanor.example.com)", h: 1, s: hote}}, func(v []string) {
+			if h := strings.TrimSpace(v[0]); h != "" {
+				a.agirFormulaire("POST", "distance/domaine", map[string]string{"action": "connecter", "hote": h}, rafraichir)
+			}
+		})
+	case "c":
+		if d.DomaineEtape == "connexion" {
+			domaine(map[string]string{"action": "annuler"})
+		}
+	case "t":
+		if d.Domaine == "" {
+			return
+		}
+		a.demander(a.t("Back to a temporary address"), a.t("Back to a temporary address? The tunnel of your domain is deleted at Cloudflare, and the devices must scan the code again on the new address."),
+			[]choixTUI{{id: "", texte: a.t("Cancel")}, {id: "oui", texte: a.t("Back to a temporary address"), danger: true}}, func(id string) {
+				if id == "oui" {
+					domaine(map[string]string{"action": "oublier"})
+				}
+			})
 	case "o":
 		if !d.Actif {
 			a.agir("POST", "distance", map[string]bool{"actif": true}, rafraichir)
@@ -256,4 +315,10 @@ func (a *appTUI) toucheDistance(k string, defiler func(*int, int)) {
 	default:
 		defiler(&a.selApp, -1)
 	}
+}
+
+// segTUI: a piece of a line in its own style.
+type segTUI struct {
+	t string
+	s styleT
 }

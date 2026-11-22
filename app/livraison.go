@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -228,3 +229,5 @@ func (p *pilote) rouvrirApresLivraison() bool {
 	p.log("Delivered project reopened: " + raisons + ".")
 	return true
 }
+
+func itoa64(n int64) string { return strconv.FormatInt(n, 10) }

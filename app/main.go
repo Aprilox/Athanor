@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -47,7 +48,10 @@ func main() {
 			config.Kit = strings.TrimPrefix(a, "--kit=")
 		}
 	}
-	terminal := interfaceTerminal()
+	// started by a terminal (lancerEnFond): this Athanor serves in the background, with no window nor terminal
+	fond := os.Getenv("ATHANOR_FOND") == "1"
+	athanorFond.Store(fond)
+	terminal := interfaceTerminal() && !fond
 	attendreInstanceQuiDemarre(terminal) // two launches at the same moment: the second joins the first
 	// Already running: it shows its window, this launch stops (never two Athanor at once); in a terminal,
 	// the terminal interface on the Athanor that runs.
@@ -58,6 +62,15 @@ func main() {
 				os.Exit(1)
 			}
 			os.Exit(lancerTUI(lien, false, ""))
+		}
+		// none runs: Athanor starts in the background, out of this terminal's reach (closing it, or the SSH
+		// session, leaves it running), and this terminal shows it (tui_fond_unix.go)
+		if code, ok := lancerEnFond(); ok {
+			os.Exit(code)
+		}
+	} else if fond {
+		if instanceExistante("ping") {
+			return
 		}
 	} else if instanceExistante("montrer") {
 		return
@@ -94,7 +107,9 @@ func main() {
 	}
 	url := "http://" + ecoute.Addr().String() + "/"
 	// the address alone opens nothing (only the windows Athanor opens can use it, acces.go)
-	if !terminal {
+	if fond {
+		fmt.Println(time.Now().Format(time.DateTime) + " Athanor runs in the background (" + url + ", pid " + strconv.Itoa(os.Getpid()) + "). ./athanor shows it in a terminal.")
+	} else if !terminal {
 		fmt.Println("Athanor is running (" + url + "). To open its window again, start Athanor again: the address alone does not open it. The pilots keep working even when this terminal is closed.")
 	}
 	port := servirLocal(ecoute, mux)
@@ -103,6 +118,20 @@ func main() {
 	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
 	if os.Getenv("ATHANOR_SANS_FENETRE") == "1" { // the real executable under test (TestMissionRedemarrage): it serves, no window
 		select {}
+	}
+	if fond {
+		// in the background: the window when the terminal asks for it (w), until a terminal's "Stop Athanor
+		// completely" or a stop signal
+		go func() {
+			for range demandesFenetre {
+				OuvrirFenetreApp(lienApp())
+			}
+		}()
+		attendreArretFond()
+		s.fermetureNative()
+		effacerInstance()
+		remettreBureau()
+		os.Exit(0)
 	}
 	if terminal {
 		// the terminal interface (tui_app.go); Athanor's window asked meanwhile (w, a second launch) opens

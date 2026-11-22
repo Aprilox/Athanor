@@ -151,7 +151,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
 .tuile-module.besoin { border-color: var(--attention); }
-:is(.a-repondre, .en-cours) { display: flex; flex-direction: column; gap: 12px; }
+section.bloc:is(.a-repondre, .en-cours) { display: flex; flex-direction: column; gap: 12px; }
 .tuile-tete { gap: 8px; flex-wrap: nowrap; }
 .tuile-tete h2 { font-size: 16px; }
 .tuile-raccourcis { gap: 6px; margin-top: 10px; }
@@ -231,6 +231,8 @@ html.scene-pause .ma-cycle, html.scene-pause .chat-marque::before { animation-pl
 /* the field: one rounded box, its options inside, under the text */
 .composeur { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); }
 .composeur:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-halo); }
+/* a project chat's field sits in the box as the home's: no frame of its own (the box shows the focus) */
+.composeur > textarea.composeur-champ, .composeur > textarea.composeur-champ:focus, .composeur > textarea.composeur-champ:focus-visible { border: 0; background: transparent; box-shadow: none; outline: none; }
 .composeur .champ-mentions, .composeur .champ-mentions:focus-within { border: 0; background: transparent; box-shadow: none; padding-left: 8px; }
 .composeur .liste-mentions { margin: 0 10px 6px; }
 .composeur .pieces-liste:has(li) { margin: 0 12px 4px; }
@@ -999,6 +1001,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .chat-tableau th { background: var(--panel); }
 .chat-bas { display: flex; position: relative; z-index: 3; margin: -46px auto 10px; box-shadow: var(--ombre); }
 .tel-seul { display: none; }
+.lib-tel, .ic-tel { display: none; } /* a phone's shorter label and icon of a button (app.js: the home's header) */
 .chat-points i { display: inline-block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: var(--muted); animation: chat-point 1.2s infinite ease-in-out; }
 .chat-points i:nth-child(2) { animation-delay: .2s; } .chat-points i:nth-child(3) { animation-delay: .4s; }
 @keyframes chat-point { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
@@ -1126,7 +1129,11 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .chat-tete h2 { font-size: 17px; }
   .chat-tete .croit { min-width: 0; flex-basis: 100%; order: 3; }
   .accueil-chat .chat-tete { flex-wrap: nowrap; } /* home: the question, then its two buttons on the same row */
-  .accueil-chat .chat-tete .croit { order: 0; flex: 1 1 auto; min-width: 0; }
+  .accueil-chat .chat-tete .croit { order: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the home's header on one row: its buttons by their icon (New mission keeps a short word) */
+  .accueil-chat .chat-tete .btn { flex: none; gap: 4px; }
+  .lib-ordi { display: none; }
+  .lib-tel, .ic-tel { display: inline; }
   /* the conversation over the whole screen (its button at the top right), under the lock and the dialogs */
   .accueil-chat.plein { position: fixed; inset: 0; z-index: 35; display: flex; flex-direction: column; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0;
     padding: calc(10px + env(safe-area-inset-top)) 12px calc(10px + env(safe-area-inset-bottom)); }

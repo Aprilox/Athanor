@@ -14,3 +14,6 @@ func lancerTUI(lien string, proprio bool, journal string) int {
 }
 
 func viderEntree(fd int) {}
+
+// lancerEnFond: Athanor in the background is for the terminal of Linux and macOS.
+func lancerEnFond() (int, bool) { return 0, false }

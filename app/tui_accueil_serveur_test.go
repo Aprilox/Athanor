@@ -78,98 +78,66 @@ func TestTUIAccueilServeur(t *testing.T) {
 	}
 	// "In progress" and the bell's alerts with their reason; a click on a line opens its project's page
 	txt := voir("accueil-120x40", 120, 40)
-	for _, x := range []string{"En cours", "Tout voir (20)", "! Studio, projet-03 : 1 tâche sur la page Pour vous",
-		"! Studio, projet-07 : 1 tâche", "projet-07  Studio  1 tâche sur la page Pour vous"} {
+	for _, x := range []string{"En cours", "! Studio, projet-03 : 1 tâche sur la page Pour vous",
+		"! Studio, projet-07 : 1 tâche", "projet-07  Studio  1 tâche sur la page Pour vous", "Accueil", "À distance"} {
 		if !strings.Contains(txt, x) {
 			t.Errorf("no %q in\n%s", x, txt)
 		}
 	}
-	cliquer := func(motif string) {
-		e := nouvelEcran(120, 40)
-		a.dessiner(e)
-		for y := 0; y < 40; y++ {
-			if i := strings.Index(e.ligneTexte(y), motif); i >= 0 {
-				a.souris(evenementTUI{genre: evSouris, x: largeurTexte(e.ligneTexte(y)[:i]) + 1, y: y, appui: true})
-				return
-			}
+	// read only: a click on a line opens nothing (the Studio's pages are the window's and the phone's)
+	e := nouvelEcran(120, 40)
+	a.dessiner(e)
+	for y := 0; y < 40; y++ {
+		if k := strings.Index(e.ligneTexte(y), "projet-07  Studio"); k >= 0 {
+			a.souris(evenementTUI{genre: evSouris, x: largeurTexte(e.ligneTexte(y)[:k]) + 1, y: y, appui: true})
 		}
-		t.Fatalf("no %q on screen", motif)
 	}
-	cliquer("projet-07  Studio")
-	if a.page != pPourVous || a.c.projet != "projet-07" {
-		t.Errorf("click on projet-07: page %d, project %q", a.page, a.c.projet)
+	if a.page != pAccueil || a.dialogue != nil || a.form != nil {
+		t.Errorf("a click on a line changed the page: %d", a.page)
 	}
-	taper(a, "H")
-	cliquer("! Studio, projet-03")
-	if a.page != pPourVous || a.c.projet != "projet-03" {
-		t.Errorf("click on the alert of projet-03: page %d, project %q", a.page, a.c.projet)
-	}
-	taper(a, "H")
-	cliquer("Tout voir (20)")
-	if a.page != pSuivi {
-		t.Errorf("See all: page %d", a.page)
-	}
-	taper(a, "H")
 	// an ignored alert leaves the home's alerts (the bell's list), its project stays in "In progress"
 	a.hub.Alertes = a.hub.Alertes[1:]
 	if txt := voir("accueil-ignoree-120x40", 120, 40); strings.Contains(txt, "! Studio, projet-03") || !strings.Contains(txt, "projet-03  Studio") {
 		t.Errorf("ignored alert:\n%s", txt)
 	}
-	// the keys of Dev's pages, as before the hub
-	attendus := map[string]int{"1": pSuivi, "2": pJournal, "3": pDemandes, "4": pChat, "5": pSante, "6": pPourVous, "7": pEquipe, "8": pGitHub, "9": pReglages, "0": pDistance}
-	for k, pg := range attendus {
-		taper(a, "H")
+	// two pages: 1 (and H, Esc) the Home, 2 Remote; Tab goes from one to the other
+	for k, pg := range map[string]int{"2": pDistance, "1": pAccueil, "H": pAccueil} {
 		taper(a, k)
 		if a.page != pg {
 			t.Errorf("key %s: page %d, want %d", k, a.page, pg)
 		}
-		voir("page-"+k+"-80x24", 80, 24)
-		voir("page-"+k+"-120x40", 120, 40)
-		taper(a, "\x1b")
-		if a.page == pChat { // the first Esc leaves the typing field
-			taper(a, "\x1b")
-		}
-		if a.page != pAccueil {
-			t.Errorf("Esc from page of key %s: %d", k, a.page)
-		}
 	}
-	// Tab / Shift+Tab go round all 11 pages and come back
-	taper(a, "H")
-	vus := map[int]bool{}
-	for i := 0; i < nbPages; i++ {
-		taper(a, "\t")
-		vus[a.page] = true
-	}
-	if len(vus) != nbPages || a.page != pAccueil {
-		t.Errorf("Tab ring: %d pages seen, ends on %d", len(vus), a.page)
-	}
-	for i := 0; i < nbPages; i++ {
-		taper(a, "\x1b[Z")
-	}
-	if a.page != pAccueil {
-		t.Errorf("Shift+Tab ring ends on %d", a.page)
-	}
-	// "h" is still the help, "H" the Home; "?" too; Esc closes the help without leaving the page
-	taper(a, "3")
-	taper(a, "h")
-	if !a.aide || a.page != pDemandes {
-		t.Errorf("h: help %v page %d", a.aide, a.page)
-	}
-	voir("aide-120x40", 120, 40)
+	taper(a, "2")
+	voir("page-2-80x24", 80, 24)
 	taper(a, "\x1b")
-	if a.aide || a.page != pDemandes {
+	if a.page != pAccueil {
+		t.Errorf("Esc from Remote: %d", a.page)
+	}
+	taper(a, "\t")
+	if a.page != pDistance {
+		t.Errorf("Tab: %d", a.page)
+	}
+	taper(a, "\x1b[Z")
+	if a.page != pAccueil {
+		t.Errorf("Shift+Tab: %d", a.page)
+	}
+	// the keys of the Studio do nothing here any more (s would have started a pilot)
+	for _, k := range []string{"s", "a", "x", "p", "N", "3", "0"} {
+		taper(a, k)
+		if a.page != pAccueil || a.dialogue != nil || a.form != nil {
+			t.Errorf("key %s: page %d, dialog %v, form %v", k, a.page, a.dialogue != nil, a.form != nil)
+		}
+	}
+	// "h" and "?" are the help; Esc closes it without leaving the page
+	taper(a, "h")
+	if !a.aide {
+		t.Error("h: no help")
+	}
+	if txt := voir("aide-120x40", 120, 40); !strings.Contains(txt, "Arrêt d'urgence") || strings.Contains(txt, "Démarrer") {
+		t.Errorf("the help:\n%s", txt)
+	}
+	taper(a, "\x1b")
+	if a.aide || a.page != pAccueil {
 		t.Errorf("Esc in the help: help %v, page %d", a.aide, a.page)
 	}
-	// Esc in the chat's typing mode and in a form must not throw the user back home
-	taper(a, "4")
-	taper(a, "\r")
-	taper(a, "ab")
-	pageAvant, actif := a.page, a.chatActif
-	taper(a, "\x1b")
-	t.Logf("chat: active %v, after Esc page %d (was %d), typed %q", actif, a.page, pageAvant, a.saisie.texte())
-	// n and p keys: the project picker still opens
-	taper(a, "H")
-	taper(a, "p")
-	t.Logf("p from the Home: picker open? page %d", a.page)
-	voir("choix-projet-80x24", 80, 24)
 }

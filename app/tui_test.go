@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -264,7 +263,7 @@ func clesTUI(src string) []string {
 			l = append(l, cle)
 		}
 	}
-	return append(l, aideFormulaireMulti, aideFormulaireLigne)
+	return append(l, aideFormulaireLigne)
 }
 
 func TestTUIInterface(t *testing.T) {
@@ -365,7 +364,7 @@ func taper(a *appTUI, b string) {
 }
 
 func TestTUIContreLeServeur(t *testing.T) {
-	_, c, p := essaiServeurTUI(t)
+	_, c, _ := essaiServeurTUI(t)
 	a := nouvelleAppTUI(c, true)
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.vue != nil && a.c.projet == "essai" })
@@ -373,46 +372,15 @@ func TestTUIContreLeServeur(t *testing.T) {
 	e := nouvelEcran(120, 32)
 	a.dessiner(e)
 	ecran := e.texteEcran()
-	for _, s := range []string{"Athanor", "essai", "Suivi", "Journal", "Demandes"} {
+	for _, s := range []string{"Athanor", "essai", "Accueil", "À distance", "Arrêt d'urgence"} {
 		if !strings.Contains(ecran, s) {
-			t.Fatalf("overview: no %q in\n%s", s, ecran)
+			t.Fatalf("home: no %q in\n%s", s, ecran)
 		}
 	}
 	// the state's sentence, in French (the tooling is seen installed or not, depending on the computer)
 	if !strings.Contains(ecran, "En attente de votre première demande") && !strings.Contains(ecran, "Prêt à installer") {
-		t.Fatalf("overview: the state's sentence\n%s", ecran)
+		t.Fatalf("home: the state's sentence\n%s", ecran)
 	}
-	// a request through the form: n, its title, Tab, its text, Ctrl+S
-	taper(a, "3")
-	attendreTUI(t, a, func() bool { return a.dem != nil })
-	taper(a, "n")
-	if a.form == nil {
-		t.Fatal("no form")
-	}
-	taper(a, "Accueil\tUne page simple.\rAvec un titre.\x13")
-	attendreTUI(t, a, func() bool {
-		b, _ := os.ReadFile(filepath.Join(p.Atelier(), "REQUEST.md"))
-		return strings.Contains(string(b), "Une page simple.\nAvec un titre.")
-	})
-	attendreTUI(t, a, func() bool {
-		return strings.Contains(a.toast, "Demande enregistrée") || strings.Contains(a.toast, "enregistr")
-	})
-	// a second one goes to the queue, then is deleted (d, then the dialog's "Delete")
-	taper(a, "nSuite\tEncore une chose.\x13")
-	attendreTUI(t, a, func() bool { return len(p.LireFileAttente()) == 1 })
-	a.derniere["demandes"] = time.Time{}
-	attendreTUI(t, a, func() bool { return a.dem != nil && len(a.dem.Attente) == 1 })
-	e = nouvelEcran(120, 32)
-	a.dessiner(e)
-	if !strings.Contains(e.texteEcran(), "Suite") {
-		t.Fatalf("the queue:\n%s", e.texteEcran())
-	}
-	taper(a, "d")
-	if a.dialogue == nil {
-		t.Fatal("no question before deleting")
-	}
-	taper(a, "\x1b[B\r")
-	attendreTUI(t, a, func() bool { return len(p.LireFileAttente()) == 0 })
 	// every page draws, wide and narrow, without a panic
 	for _, taille := range [][2]int{{160, 45}, {80, 24}, {60, 16}, {20, 5}} {
 		for pg := 0; pg < nbPages; pg++ {
@@ -424,27 +392,7 @@ func TestTUIContreLeServeur(t *testing.T) {
 			}
 		}
 	}
-	a.page = pSuivi
-	// the working mode, from Manage (M): the eco mode, seen ticked, then the fast mode with it
-	taper(a, "M")
-	if a.dialogue == nil {
-		t.Fatal("no Manage dialog")
-	}
-	taper(a, "\x1b[B\x1b[B\r")
-	attendreTUI(t, a, func() bool { return a.dialogue != nil && a.dialogue.titre == "Mode de travail" })
-	taper(a, "\x1b[B\r")
-	attendreTUI(t, a, func() bool { return p.EcoActif() && strings.Contains(a.toast, "Mode éco activé") })
-	taper(a, "M\x1b[B\x1b[B\r")
-	attendreTUI(t, a, func() bool { return a.dialogue != nil && a.dialogue.titre == "Mode de travail" })
-	if d := a.dialogue; !strings.HasSuffix(d.choix[1].texte, "✓") || strings.HasSuffix(d.choix[2].texte, "✓") || !strings.Contains(d.texte, "Sonnet") {
-		t.Fatalf("working mode: %+v", d)
-	}
-	// the modes add up: the fast mode on top of the eco mode
-	taper(a, "\x1b[B\x1b[B\r")
-	attendreTUI(t, a, func() bool { return p.modeActif("FAST") && strings.Contains(a.toast, "Mode rapide activé") })
-	if m := p.LireMode(); m.Parallele || !m.Eco || !m.Rapide {
-		t.Fatalf("mode: %+v", m)
-	}
+	a.page = pAccueil
 	// the help, then quitting asks first
 	taper(a, "?")
 	if !a.aide {
@@ -491,45 +439,30 @@ func TestTUIVerrou(t *testing.T) {
 	}
 }
 
+// The mouse: a click on a tab changes the page; the wheel moves nothing (nothing scrolls by it any more).
 func TestTUIClicsEtMolette(t *testing.T) {
 	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
-	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a", Courant: true}, {Nom: "b"}}, Projet: &ProjetVue{Nom: "a"}}
-	for i := 0; i < 30; i++ {
-		a.vue.Plan = append(a.vue.Plan, Jalon{ID: "M" + itoa64(int64(i)), Titre: "Jalon " + itoa64(int64(i))})
-	}
+	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a", Courant: true}}, Projet: &ProjetVue{Nom: "a"}}
 	e := nouvelEcran(140, 30)
-	a.dessiner(e)
-	// a click on project b in the left column
-	y := -1
-	for k := 0; k < e.h; k++ {
-		if strings.Contains(e.ligneTexte(k), "● b") {
-			y = k
+	cliquer := func(motif string) {
+		a.dessiner(e)
+		if x := strings.Index(e.ligneTexte(1), motif); x >= 0 {
+			a.souris(evenementTUI{genre: evSouris, x: largeurTexte(e.ligneTexte(1)[:x]) + 1, y: 1, appui: true})
+			return
 		}
+		t.Fatalf("no tab %q: %q", motif, e.ligneTexte(1))
 	}
-	if y < 0 {
-		t.Fatalf("project b not shown:\n%s", e.texteEcran())
+	cliquer("2 Remote")
+	if a.page != pDistance {
+		t.Fatalf("the click on Remote: page %d", a.page)
 	}
-	a.souris(evenementTUI{genre: evSouris, x: 5, y: y, appui: true})
-	if a.c.projet != "b" {
-		t.Fatalf("the click: project %q", a.c.projet)
+	cliquer("1 Home")
+	if a.page != pAccueil {
+		t.Fatalf("the click on Home: page %d", a.page)
 	}
-	// a click on the page Log
-	a.dessiner(e)
-	for k := 0; k < e.h; k++ {
-		if strings.Contains(e.ligneTexte(k), "2 Journal") || strings.Contains(e.ligneTexte(k), "2 Log") {
-			a.souris(evenementTUI{genre: evSouris, x: 5, y: k, appui: true})
-		}
-	}
-	if a.page != pJournal {
-		t.Fatalf("the click on Log: page %d", a.page)
-	}
-	// the wheel scrolls the plan
-	a.page = pSuivi
-	a.c.projet = "a"
-	a.dessiner(e)
-	a.souris(evenementTUI{genre: evSouris, nom: "molette", bouton: 1, x: 120, y: 10})
-	if a.defilPlan != 3 {
-		t.Fatalf("the wheel: %d", a.defilPlan)
+	a.souris(evenementTUI{genre: evSouris, nom: "molette", bouton: 1, x: 70, y: 10})
+	if a.page != pAccueil || a.dialogue != nil {
+		t.Fatalf("the wheel: page %d", a.page)
 	}
 }
 
@@ -596,125 +529,6 @@ func TestTUIFormulaireBoutons(t *testing.T) {
 	}
 }
 
-// A refused form (a system folder for a new project) stays open with the server's reason, what was typed
-// kept.
-func TestTUIFormulaireRefuse(t *testing.T) {
-	_, c, _ := essaiServeurTUI(t)
-	a := nouvelleAppTUI(c, false)
-	a.tic()
-	attendreTUI(t, a, func() bool { return a.vue != nil })
-	taper(a, "N")
-	taper(a, "essai2\t/usr/essai2\tune page\x1bOQ") // F2
-	attendreTUI(t, a, func() bool { return a.form != nil && a.form.erreur != "" })
-	// the reason itself is the server's, its words depend on the system (a Windows path is asked there)
-	if a.form.champs[1].s.texte() != "/usr/essai2" || runtime.GOOS != "windows" && !strings.Contains(a.form.erreur, "système") {
-		t.Fatalf("the form: %q %q", a.form.erreur, a.form.champs[1].s.texte())
-	}
-	e := nouvelEcran(110, 34)
-	a.dessiner(e)
-	if !strings.Contains(e.texteEcran(), "✖") {
-		t.Fatalf("the reason not shown:\n%s", e.texteEcran())
-	}
-}
-
-// The pages 6 to 9 draw in every state (nothing read yet, empty, filled), wide and narrow.
-func TestTUIPages2(t *testing.T) {
-	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
-	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"}}
-	dessinerTout := func(etape string) {
-		for _, taille := range [][2]int{{150, 40}, {90, 26}, {50, 14}} {
-			for _, pg := range []int{pPourVous, pEquipe, pGitHub, pReglages} {
-				a.page = pg
-				e := nouvelEcran(taille[0], taille[1])
-				a.dessiner(e)
-				if taille[0] >= 90 && !strings.Contains(e.texteEcran(), "Athanor") {
-					t.Fatalf("%s %v page %d", etape, taille, pg)
-				}
-			}
-		}
-	}
-	dessinerTout("nothing read")
-	a.taches, a.agents, a.env = []TacheUtilVue{}, []Agent{}, []LigneEnv{}
-	a.gh = &GitHubVue{}
-	dessinerTout("empty")
-	a.taches = []TacheUtilVue{{TacheUtilisateur: TacheUtilisateur{ID: "T1", Titre: "Compte", Details: "Créez-le.", Attendu: "la clé", Secrets: []string{"K"}}, Etat: "pour_vous", Reponses: []ReponseTache{{Action: "fait", Texte: "fait"}}}}
-	a.agents = []Agent{{ID: "c", Genre: "chef", Statut: "travaille", Tours: 3, Modele: "opus"}, {ID: "s", Nom: "executor", Genre: "sous_agent", Parent: "c", Statut: "termine"}, {ID: "o", Genre: "ouvrier", Jalon: "M5", Statut: "attend"}}
-	a.env = []LigneEnv{{Cle: "CLAUDE_CODE_OAUTH_TOKEN", Valeur: "••••", Secret: true, Aide: "Login token"}, {Cle: "MODEL", Aide: "Model"}}
-	a.gh = &GitHubVue{Lie: true, Depot: "moi/site", Branche: "main", Auto: true, ConnexionPC: ConnexionGH{Connecte: true, Login: "moi"}, Dernier: []byte(`{"quand":"2026-10-25","resultat":"ok"}`)}
-	dessinerTout("filled")
-	a.page = pEquipe
-	e := nouvelEcran(150, 40)
-	a.dessiner(e)
-	if !strings.Contains(e.texteEcran(), "Worker M5") || !strings.Contains(e.texteEcran(), "↳ ● executor") {
-		t.Fatalf("team:\n%s", e.texteEcran())
-	}
-	a.page = pReglages
-	a.dessiner(e)
-	if strings.Contains(e.texteEcran(), "sk-ant") {
-		t.Fatal("a secret shown")
-	}
-	// a page's own letters come first, small or capital: p is the palette in Settings, never the project
-	// chooser; a the accent, never Stop after cycle
-	for _, k := range []string{"p", "P"} {
-		a.page, a.dialogue = pReglages, nil
-		taper(a, k)
-		if a.dialogue == nil || a.dialogue.titre != "Palette" {
-			t.Fatalf("%s in Settings: %+v", k, a.dialogue)
-		}
-	}
-	a.dialogue = nil
-	taper(a, "a")
-	if a.dialogue == nil || a.dialogue.titre != "Accent" {
-		t.Fatalf("a in Settings: %+v", a.dialogue)
-	}
-	a.dialogue = nil
-	taper(a, "l")
-	if a.dialogue == nil || a.dialogue.titre != "Language" {
-		t.Fatalf("l in Settings: %+v", a.dialogue)
-	}
-	// on GitHub: d disconnects (asked first), r creates a repository (a form)
-	a.page, a.dialogue = pGitHub, nil
-	taper(a, "D")
-	if a.dialogue == nil || a.dialogue.titre != "Disconnect" {
-		t.Fatalf("D on GitHub: %+v", a.dialogue)
-	}
-	a.dialogue = nil
-	taper(a, "r")
-	if a.form == nil || a.form.titre != "Create a private repository" {
-		t.Fatalf("r on GitHub: %+v", a.form)
-	}
-	a.form = nil
-	// k: the access kept to create repositories without a window (asked first)
-	taper(a, "k")
-	if a.dialogue == nil || a.dialogue.titre != "Create repositories without a window" || a.dialogue.choix[0].id != "oui" {
-		t.Fatalf("k on GitHub: %+v", a.dialogue)
-	}
-	a.dialogue = nil
-	// a setting's form, opened with its value: closed unchanged, nothing asked; changed, asked first
-	a.page, a.selReglage = pReglages, 1
-	a.env[1].Valeur = "opus"
-	taper(a, "\r\n") // one Enter (CR LF): the form opens and stays open
-	if a.form == nil || a.form.champs[0].s.texte() != "opus" {
-		t.Fatalf("Enter on a setting: %+v", a.form)
-	}
-	taper(a, "\x1b")
-	if a.form != nil || a.dialogue != nil {
-		t.Fatalf("Esc on an unchanged form: %v %v", a.form != nil, a.dialogue != nil)
-	}
-	taper(a, "\r")
-	taper(a, "x\x1b")
-	if a.dialogue == nil || a.form == nil {
-		t.Fatal("Esc on a changed form: not asked")
-	}
-	a.dialogue, a.form = nil, nil
-	// elsewhere, p is still the project chooser
-	a.page = pSuivi
-	taper(a, "p")
-	if a.dialogue == nil || a.dialogue.titre == "Palette" {
-		t.Fatalf("p on the Overview: %+v", a.dialogue)
-	}
-}
-
 // Remote: the switch, the pairing link and its QR code drawn in the terminal, the digits hidden until v, the
 // trusted devices renamed or removed (asked first); every state draws, wide and narrow.
 func TestTUIDistance(t *testing.T) {
@@ -767,11 +581,53 @@ func TestTUIDistance(t *testing.T) {
 		t.Fatalf("o (switching off is asked first): %+v", a.dialogue)
 	}
 	a.dialogue = nil
-	// 0 goes to the tenth page
-	a.page = pSuivi
-	taper(a, "0")
+	// the QR code first, whole and at the same place whatever is written beside it, down to 80 × 24
+	pret := *vues[len(vues)-1]
+	for _, m := range []string{"", "a long error message that wraps over several lines of the column beside the code"} {
+		pret.Message = m
+		a.dist, a.page = &pret, pDistance
+		e := nouvelEcran(80, 24)
+		a.dessiner(e)
+		q := matriceQR(pret.Lien)
+		for r := 0; r < (len(q)+1)/2; r++ {
+			if l := []rune(e.ligneTexte(2 + r)); len(l) < 1+len(q) || strings.Trim(string(l[1:1+len(q)]), "▀") != "" {
+				t.Fatalf("message %q: QR row %d not whole at the top left: %q", m, r, e.ligneTexte(2+r))
+			}
+		}
+		if strings.Contains(e.texteEcran(), "too small") {
+			t.Fatalf("80 × 24 said too small:\n%s", e.texteEcran())
+		}
+	}
+	// the address: m asks for your domain; while signing in, the link to open on another device; t goes back
+	// to a temporary address, asked first
+	dv := DistanceVue{Actif: true, Etat: "arret", Appareils: []AppareilVue{}}
+	a.dist, a.page = &dv, pDistance
+	taper(a, "m")
+	if a.form == nil || !strings.Contains(a.form.champs[0].lib, "athanor.example.com") {
+		t.Fatalf("m: %+v", a.form)
+	}
+	a.form = nil
+	dv.DomaineEtape, dv.DomaineLien = "connexion", "https://dash.cloudflare.com/argotunnel?aud=&callback=https%3A%2F%2Flogin.cloudflareaccess.org%2Fx"
+	e = nouvelEcran(120, 40)
+	a.dessiner(e)
+	if !strings.Contains(e.texteEcran(), "https://dash.cloudflare.com/argotunnel") || !strings.Contains(e.texteEcran(), "c Cancel") {
+		t.Fatalf("signing in:\n%s", e.texteEcran())
+	}
+	dv.DomaineEtape, dv.DomaineLien, dv.Domaine = "", "", "athanor.example.com"
+	a.dessiner(e)
+	if !strings.Contains(e.texteEcran(), "https://athanor.example.com") {
+		t.Fatalf("the domain:\n%s", e.texteEcran())
+	}
+	taper(a, "t")
+	if a.dialogue == nil || a.dialogue.titre != "Back to a temporary address" {
+		t.Fatalf("t: %+v", a.dialogue)
+	}
+	a.dialogue = nil
+	// 2 goes to Remote, from the Home
+	a.page = pAccueil
+	taper(a, "2")
 	if a.page != pDistance {
-		t.Fatalf("0: page %d", a.page)
+		t.Fatalf("2: page %d", a.page)
 	}
 }
 
@@ -806,7 +662,7 @@ func TestTUIDistanceContreLeServeur(t *testing.T) {
 	a := nouvelleAppTUI(c, false)
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.vue != nil })
-	taper(a, "0")
+	taper(a, "2")
 	attendreTUI(t, a, func() bool { return a.dist != nil && a.dist.Lien != "" })
 	e := nouvelEcran(160, 45)
 	a.dessiner(e)
@@ -814,7 +670,7 @@ func TestTUIDistanceContreLeServeur(t *testing.T) {
 	// the link, cut at the width of its column: its pieces on the lines under it
 	lien := ""
 	for _, li := range strings.Split(ecran, "\n") {
-		_, texte, _ := strings.Cut(li, "││ ") // the page's column
+		_, texte, _ := strings.Cut(li, "│ ") // the page's box
 		champs := strings.Fields(texte)
 		if lien == "" && len(champs) > 0 && strings.HasPrefix(champs[0], "https://abc-def.trycloudflare.com/appairer?c=") {
 			lien = champs[0]
@@ -904,128 +760,6 @@ func TestTUIDistanceContreLeServeur(t *testing.T) {
 	attendreTUI(t, a, func() bool { return a.dist != nil && !a.dist.Actif && a.dist.Lien == "" })
 }
 
-// The Overview: the local commit, then the one GitHub has (✓ when the same, what is not pushed yet, the
-// automatic push off, why the last push did not go).
-func TestTUISuiviGitHub(t *testing.T) {
-	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
-	a.page = pSuivi
-	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
-		Etat: &Etat{DernierCommit: "abc12345 M9: the shop"}}
-	ecran := func() string {
-		e := nouvelEcran(150, 40)
-		a.dessiner(e)
-		return e.texteEcran()
-	}
-	if s := ecran(); !strings.Contains(s, "Local commit") || strings.Contains(s, "On GitHub") {
-		t.Fatalf("not linked yet, nothing read: %s", s)
-	}
-	a.vue.GitHub = &SuiviGitHub{Lie: true, Depot: "moi/site", Branche: "main", Auto: true, Envoye: &envoiGH{Quand: "2026-10-25T21:00:00", Commit: "abc1234 M9: the shop"}}
-	if s := ecran(); !strings.Contains(s, "On GitHub") || !strings.Contains(s, "abc1234 M9: the shop") || !strings.Contains(s, "✓") {
-		t.Fatalf("up to date: %s", s)
-	}
-	a.vue.Etat.DernierCommit = "def5678 M10: the cart"
-	if s := ecran(); strings.Contains(s, "✓") || !strings.Contains(s, "local one is not pushed yet") {
-		t.Fatalf("M10 not pushed yet: %s", s)
-	}
-	a.vue.GitHub.Auto = false
-	a.vue.GitHub.Dernier = &struct {
-		Quand    string   `json:"quand"`
-		Resultat string   `json:"resultat"`
-		Modele   string   `json:"modele"`
-		Args     []string `json:"args"`
-		Commit   string   `json:"commit"`
-	}{"2026-10-25T22:00:00", "rejete", "GitHub's branch {0} has commits the project does not have. Athanor never overwrites them: choose another branch, or bring those commits into the project.", []string{"main"}, "def5678 M10: the cart"}
-	if s := ecran(); !strings.Contains(s, "automatic push off") || !strings.Contains(s, "GitHub's branch main has commits") {
-		t.Fatalf("off, refused: %s", s)
-	}
-	a.vue.GitHub = &SuiviGitHub{}
-	if s := ecran(); !strings.Contains(s, "not linked to GitHub") {
-		t.Fatalf("unlinked: %s", s)
-	}
-}
-
-// The Overview's progress box says the savings measured.
-func TestTUISuiviGains(t *testing.T) {
-	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
-	a.page = pSuivi
-	stats := []LigneStat{{Cycle: "1", Etat: "ok", CoutUSD: 1.5, Commit: "a1"}, {Cycle: "2", Etat: "ok", CoutUSD: 0.8, Commit: "b2"}}
-	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
-		Etat: &Etat{DernierCommit: "b2 M2"}, Stats: stats,
-		Gains: &GainsVue{CachePct: 71, RTKEntree: 4000, RTKEconomise: 2800, RTKPct: 70, Ponytail: true, VersionPonytail: versionPonytail,
-			Comparaisons: []ComparaisonVue{{Option: "ponytail", AvecN: 3, SansN: 4, AvecCout: 1, SansCout: 2, Ecart: -50}}}}
-	e := nouvelEcran(160, 45)
-	a.dessiner(e)
-	s := e.texteEcran()
-	for _, x := range []string{"Claude's own cache: reading −71 %", "RTK: 3 k tokens spared (−70 %)", "Ponytail " + versionPonytail, "Ponytail: -50 % per cycle"} {
-		if !strings.Contains(s, x) {
-			t.Fatalf("no %q in\n%s", x, s)
-		}
-	}
-	for _, taille := range [][2]int{{80, 24}, {60, 16}} {
-		a.dessiner(nouvelEcran(taille[0], taille[1]))
-	}
-	// every cycle with Ponytail: said, no gain shown
-	a.vue.Gains = &GainsVue{Ponytail: true, VersionPonytail: versionPonytail, PonytailAvec: 28}
-	e = nouvelEcran(160, 45)
-	a.dessiner(e)
-	if s := e.texteEcran(); !strings.Contains(s, "all 28 cycles with Ponytail, none without: no gain measurable") {
-		t.Fatalf("all with Ponytail not said:\n%s", s)
-	}
-	a.vue.Gains = &GainsVue{Ponytail: true, VersionPonytail: versionPonytail, PonytailAvec: 5, PonytailSans: 1}
-	e = nouvelEcran(160, 45)
-	a.dessiner(e)
-	if s := e.texteEcran(); !strings.Contains(s, "Ponytail: 5 cycles with, 1 without (3 of each needed)") {
-		t.Fatalf("counts not said:\n%s", s)
-	}
-}
-
-// Manage › Team, live: nothing yet (be the master, join), a master with its invitation and its team.
-func TestTUIEquipeDirecte(t *testing.T) {
-	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
-	a.equipeDirecte(map[string]any{"direct": nil})
-	if d := a.dialogue; d == nil || d.titre != "Team, live" || d.choix[0].id != "maitre" || d.choix[1].id != "rejoindre" {
-		t.Fatalf("nothing yet: %+v", a.dialogue)
-	}
-	s := 0.42
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "adresse": "https://a-b.trycloudflare.com", "code": "123456",
-		"noeuds": []any{map[string]any{"presence": map[string]any{"nom": "Tour", "jalon": "M5"}, "stats": map[string]any{"session": s, "cycles": 3, "cout": 1.5}, "maitre": true, "en_direct": true}}}})
-	d := a.dialogue
-	if d == nil || !strings.Contains(d.texte, "https://a-b.trycloudflare.com#123456") || !strings.Contains(d.texte, "● Tour (master) · M5 · quota 42 %") || d.choix[0].id != "demarrer-equipe" || d.choix[2].id != "atelier:1" {
-		t.Fatalf("master: %+v", d)
-	}
-	// a computer that gave the right code: the master accepts or refuses it
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "demandes": []any{map[string]any{"ref": "r1", "nom": "Portable"}}}})
-	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Portable wants to join the team") || d.choix[0].id != "accepter:r1" || d.choix[1].id != "refuser:r1" {
-		t.Fatalf("a request: %+v", d)
-	}
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "atelier_lien": true, "atelier": map[string]any{"version": 7, "fichiers": 12, "par": "Portable", "quand": "2026-10-28T10:00:00Z"}}})
-	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Team workshop: version 7, 12 files, last change by Portable") || d.choix[2].id != "atelier:0" {
-		t.Fatalf("the workshop through the link: %+v", d)
-	}
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "noeud", "etat": "connecte", "maitre": "Tour", "atelier_lien": true, "accepte_ordres": true}})
-	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "✔ The master may start and stop this computer's pilot") || d.choix[0].id != "ordres:0" || !strings.Contains(d.texte, "through the master's link") {
-		t.Fatalf("a node: %+v", d)
-	}
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "noeuds": []any{map[string]any{"presence": map[string]any{"id": "x1", "nom": "Portable"}, "en_direct": true}}}})
-	if d := a.dialogue; d == nil || d.choix[0].id != "transmettre:x1" || d.choix[0].texte != "Make Portable the master" {
-		t.Fatalf("hand the team over: %+v", d)
-	}
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "passation": map[string]any{"etat": "en_cours", "nom": "Portable"}}})
-	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Handing the team over to Portable") {
-		t.Fatalf("handing over: %+v", d)
-	}
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "attente", "etat": "attente"}})
-	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Waiting for the master") || d.choix[1].id != "quitter" {
-		t.Fatalf("waiting: %+v", d)
-	}
-	a.equipeDirecte(map[string]any{"direct": map[string]any{"etat": "fini", "erreur": "The master refused this computer."}})
-	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "✖ The master refused") || d.choix[0].id != "maitre" {
-		t.Fatalf("refused: %+v", d)
-	}
-	e := nouvelEcran(100, 30)
-	a.dessiner(e)
-}
-
 // TestTUIAccueil: the hub's home at launch, with the tiles of GET /api/hub, its key H (free on every
 // page), Escape back to it, 1…9, 0 unchanged.
 func TestTUIAccueil(t *testing.T) {
@@ -1054,68 +788,32 @@ func TestTUIAccueil(t *testing.T) {
 		e := nouvelEcran(taille[0], taille[1])
 		a.dessiner(e)
 		ecran := e.texteEcran()
-		for _, x := range []string{"Athanor", "Studio", "Inactif", "Projets en cours", "Besoin de vous : 0", "Pages de Studio"} {
+		for _, x := range []string{"Athanor", "Studio", "Inactif", "Projets en cours", "Besoin de vous : 0", "1 Accueil", "2 À distance", "Appairer un appareil"} {
 			if !strings.Contains(ecran, x) {
 				t.Fatalf("%v: no %q in\n%s", taille, x, ecran)
 			}
 		}
-		if taille[0] == 120 && !strings.Contains(ecran, "H Accueil") {
-			t.Fatalf("the pages' list: no home first\n%s", ecran)
-		}
 	}
-	// H is free on every page (no page letter, no page shortcut), and leads home
-	for pg := 0; pg < nbPages; pg++ {
-		a.page = pg
-		if a.lettrePage("H") != "" {
-			t.Fatalf("page %d takes H", pg)
+	// H, 1 and Escape lead home from Remote; the page's letters never take them
+	for _, k := range []string{"H", "1", "\x1b"} {
+		a.page = pDistance
+		if a.lettrePage(k) != "" {
+			t.Fatalf("Remote takes %q", k)
 		}
-		for _, r := range a.raccourcisPage() {
-			if r.k == "H" || r.k == "h" {
-				t.Fatalf("page %d shows the key %q", pg, r.k)
-			}
-		}
-		taper(a, "H")
+		taper(a, k)
 		if a.page != pAccueil {
-			t.Fatalf("H from page %d: %d", pg, a.page)
+			t.Fatalf("%q from Remote: %d", k, a.page)
 		}
 	}
-	// 1…9, 0 keep Dev's pages; Escape comes back; Tab goes round through the home
-	// a slice, not a map: the Tab below expects "0" to be the last key
-	for _, c := range []struct {
-		k  string
-		pg int
-	}{{"1", pSuivi}, {"3", pDemandes}, {"9", pReglages}, {"0", pDistance}} {
-		taper(a, c.k)
-		if a.page != c.pg {
-			t.Fatalf("key %s: page %d", c.k, a.page)
-		}
-	}
-	taper(a, "\t")
-	if a.page != pAccueil {
-		t.Fatalf("Tab after Remote: %d", a.page)
-	}
-	taper(a, "2")
-	taper(a, "\x1b")
-	if a.page != pAccueil {
-		t.Fatalf("Escape: %d", a.page)
-	}
-	// Escape still clears the log's filter first
-	a.page = pJournal
-	a.recherche.mettreTexte("x")
-	taper(a, "\x1b")
-	if a.page != pJournal || a.recherche.texte() != "" {
-		t.Fatalf("Escape on a filtered log: page %d, filter %q", a.page, a.recherche.texte())
-	}
-	// Enter opens the first module's page; the help shows the home's key
-	a.page = pAccueil
+	// Enter opens nothing (reading only); the help shows the two pages' keys
 	taper(a, "\r")
-	if a.page != pSuivi {
+	if a.page != pAccueil || a.dialogue != nil {
 		t.Fatalf("Enter: %d", a.page)
 	}
 	a.aide = true
 	e := nouvelEcran(120, 40)
 	a.dessiner(e)
-	if !strings.Contains(e.texteEcran(), "H, Esc") {
+	if !strings.Contains(e.texteEcran(), "1, H, Esc") || !strings.Contains(e.texteEcran(), "2, Tab") {
 		t.Fatalf("the help:\n%s", e.texteEcran())
 	}
 	// "In progress": a working element says its milestone and what its pilot does, as the web does
@@ -1124,7 +822,7 @@ func TestTUIAccueil(t *testing.T) {
 		{Module: "dev", ID: "c", Titre: "c", Etat: "actif", Activite: "Seul"}}
 	e = nouvelEcran(120, 40)
 	a.dessiner(e)
-	for _, x := range []string{"b  Studio  Jalon 4/10 : Écrire la page, Tests", "c  Studio  Seul", "Tout voir (2)"} {
+	for _, x := range []string{"b  Studio  Jalon 4/10 : Écrire la page, Tests", "c  Studio  Seul"} {
 		if !strings.Contains(e.texteEcran(), x) {
 			t.Fatalf("no %q in\n%s", x, e.texteEcran())
 		}
@@ -1135,44 +833,30 @@ func TestTUIEtroitEtCalme(t *testing.T) {
 	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
 	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Langue: "fr", Projets: []ProjetVue{{Nom: "a", Courant: true}}, Projet: &ProjetVue{Nom: "a"}}
 	a.langue, a.d = "fr", dicoTUI("fr")
-	// 80 columns: every page keeps a tab, the active one by its name, and it can be clicked
-	a.page = pReglages
-	a.env = []LigneEnv{} // read, but the kit has no settings
+	// 80 columns: both tabs by their name, clickable
 	e := nouvelEcran(80, 24)
 	a.dessiner(e)
 	onglets := e.ligneTexte(1)
-	for _, k := range []string{" H ", " 1 ", " 5 ", " 8 ", "   0", "9 Réglages"} {
+	for _, k := range []string{" 1 Accueil ", " 2 À distance "} {
 		if !strings.Contains(onglets, k) {
 			t.Fatalf("tab %q missing: %q", k, onglets)
 		}
 	}
-	if !strings.Contains(e.texteEcran(), "Pas encore de réglages") || strings.Contains(e.texteEcran(), "Mise à jour") {
-		t.Fatalf("empty settings:\n%s", e.texteEcran())
-	}
-	x := strings.LastIndex(onglets, " 0")
+	x := strings.Index(onglets, " 2 ")
 	a.souris(evenementTUI{genre: evSouris, x: len([]rune(onglets[:x])) + 1, y: 1, appui: true})
 	if a.page != pDistance {
-		t.Fatalf("click on tab 0: page %d", a.page)
+		t.Fatalf("click on tab 2: page %d", a.page)
 	}
-	// the lead's mission in the app's language
-	a.page = pEquipe
-	a.agents = []Agent{{ID: "chef", Genre: "chef", Statut: "attend", Mission: "Leads the current milestone: reads the plan, codes, checks, commits."}}
-	e = nouvelEcran(120, 30)
+	// a still screen (no spinner), below the header (its clock may pass a minute during the wait)
+	a.page = pAccueil
+	a.hub = &reponseHubTUI{}
 	a.dessiner(e)
-	if strings.Contains(e.texteEcran(), "Leads the current") {
-		t.Fatalf("team in English:\n%s", e.texteEcran())
-	}
-	// a reply on its way: a still screen (no spinner)
-	a.page = pChat
-	a.chat = &reponseChatTUI{EnCours: true}
-	a.dessiner(e)
-	// below the header: its clock may pass a minute during the wait (seen once in M304's full check)
-	sousEntete := func() string { _, r, _ := strings.Cut(e.texteEcran(), "╭"); return r }
+	sousEntete := func() string { _, r, _ := strings.Cut(e.texteEcran(), "\n"); return r }
 	avant := sousEntete()
 	time.Sleep(250 * time.Millisecond)
 	a.dessiner(e)
 	if sousEntete() != avant || avant == "" || strings.ContainsAny(avant, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
-		t.Fatalf("the chat moves:\n%s", avant)
+		t.Fatalf("the home moves:\n%s", avant)
 	}
 }
 
@@ -1181,5 +865,37 @@ func TestTraduireTUIMessageImbrique(t *testing.T) {
 	d := map[string]string{"The test e-mail of {0} failed: {1}": "L'e-mail de test de {0} a échoué : {1}", "No answer": "Pas de réponse"}
 	if g := traduireTUI(d, "The test e-mail of {0} failed: {1}", "Pro", &MessageMoteur{Cle: "No answer"}); g != "L'e-mail de test de Pro a échoué : Pas de réponse" {
 		t.Fatal(g)
+	}
+}
+
+// q in a terminal that shows an Athanor in the background: leave it running (the default), or stop it
+// completely (refused to an Athanor that has its window, which stops when its window closes).
+func TestTUIQuitterFond(t *testing.T) {
+	_, c, _ := essaiServeurTUI(t)
+	a := nouvelleAppTUI(c, false)
+	a.tic()
+	attendreTUI(t, a, func() bool { return a.vue != nil })
+	taper(a, "q")
+	if d := a.dialogue; d == nil || len(d.choix) != 3 || d.choix[0].id != "fond" || d.choix[1].id != "arret" {
+		t.Fatalf("the question: %+v", a.dialogue)
+	}
+	taper(a, "\r")
+	if !a.quitter {
+		t.Fatal("Enter: not left running")
+	}
+	a.quitter = false
+	taper(a, "q\x1b[B\r")
+	attendreTUI(t, a, func() bool { return a.toastErr })
+	if a.quitter {
+		t.Fatal("an Athanor with its window stopped from the terminal")
+	}
+	athanorFond.Store(true)
+	t.Cleanup(func() { athanorFond.Store(false) })
+	taper(a, "q\x1b[B\r")
+	attendreTUI(t, a, func() bool { return a.quitter })
+	select {
+	case <-arretFond:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the Athanor in the background was not asked to stop")
 	}
 }

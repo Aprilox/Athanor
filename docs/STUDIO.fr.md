@@ -161,12 +161,12 @@ Les agents sont dans [`template/.claude/agents/`](../template/.claude/agents) : 
 
 ### Les pages
 
-<img src="images/overview.png" alt="Page Vue d'ensemble du Studio : le menu du hub à gauche, l'état du projet avec son bouton Démarrer, et les cinq premiers pas" width="100%">
+<img src="images/overview.png" alt="Page Vue d'ensemble du Studio pendant que Claude travaille : Maintenant (le jalon, le dernier commit), le quota de l'abonnement, et le plan avec ses jalons faits, celui en cours et les suivants" width="100%">
 
 | | |
 |:---:|:---:|
 | <img src="images/team.png" alt="Page Équipe : le chef de projet avec le tester qu'il a appelé pendant ce cycle, et la bibliothèque de sous-agents"><br>**Équipe** : qui a appelé qui, ce que fait chacun, en direct | <img src="images/log.png" alt="Page Journal : les paroles de Claude, un check lancé et un appel de sous-agent, filtrés par type"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
-| <img src="images/requests.png" alt="Page Demandes : le formulaire d'une nouvelle demande, les fichiers et les remarques en cours de route, et une demande en file"><br>**Demandes** : une file réordonnable, des fichiers, des remarques en cours de route | <img src="images/chat.png" alt="Page Chat : la zone de conversation avec ses fichiers joints et ses interrupteurs Modifier les fichiers et Internet"><br>**Discuter** : des questions sur le projet à tout moment |
+| <img src="images/requests.png" alt="Page Demandes : le formulaire d'une nouvelle demande, les fichiers et les remarques en cours de route, et une demande en file"><br>**Demandes** : une file réordonnable, des fichiers, des remarques en cours de route | <img src="images/chat.png" alt="Page Discuter : une conversation sur le projet, son titre qui nomme le dossier que Claude lit, et sous le champ Fichiers, Internet, Modifier les fichiers, le modèle et le i"><br>**Discuter** : des questions sur le projet à tout moment |
 | <img src="images/skills.png" alt="Page Skills &amp; MCP, onglet Skills : la recherche dans la communauté et le catalogue vérifié"><br>**Skills** : installés une fois, activés par projet | <img src="images/mcp.png" alt="Page Skills &amp; MCP, onglet MCP : la recherche dans le registre MCP et le catalogue vérifié (Context7, Serena, Playwright)"><br>**MCP** : distants ou locaux dans une cage, testés en un clic |
 | <img src="images/health.png" alt="Page Installation &amp; santé sous Windows, onglet WSL : Tout vérifier, Tout installer et une ligne par vérification"><br>**Installation & santé** : un onglet par mode, réparation ligne par ligne | <img src="images/options.png" alt="Réglages, onglet Options : la langue, cinq palettes et cinq accents, et la liste des projets"><br>**Réglages → Options** : 6 langues, 5 palettes × 5 accents |
 

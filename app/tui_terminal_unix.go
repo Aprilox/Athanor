@@ -7,10 +7,8 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"sync/atomic"
@@ -219,24 +217,14 @@ func lancerTUI(lien string, proprio bool, journal string) int {
 	// the keys: read in the background; a lone Escape is told from a sequence by a short wait
 	evs := make(chan evenementTUI, 64)
 	octets := make(chan []byte, 16)
-	// while a command runs in front of the user, the reading stops (the keys are the command's): a
-	// deadline wakes the read up, it waits for reprise
-	var pause atomic.Bool
-	garee, reprise := make(chan struct{}, 1), make(chan struct{})
 	go func() {
 		b := make([]byte, 4096)
 		for {
 			n, err := term.f.Read(b)
-			if n > 0 && !pause.Load() {
+			if n > 0 {
 				octets <- append([]byte(nil), b[:n]...)
 			}
 			if err != nil {
-				if pause.Load() && errors.Is(err, os.ErrDeadlineExceeded) {
-					garee <- struct{}{}
-					<-reprise
-					_ = term.f.SetReadDeadline(time.Time{})
-					continue
-				}
 				close(octets)
 				return
 			}
@@ -269,53 +257,12 @@ func lancerTUI(lien string, proprio bool, journal string) int {
 					evs <- e
 				}
 			case <-sigFin:
-				if !pause.Load() { // Ctrl+C in a command run in front of the user stops that command only
-					app.majs <- func(a *appTUI) { a.quitter = true }
-				}
+				app.majs <- func(a *appTUI) { a.quitter = true }
 			}
 		}
 	}()
 
 	var prec *ecranT
-	app.executer = func(titre string, ligne []string, dossier string) (int, error) {
-		pause.Store(true)
-		if err := term.f.SetReadDeadline(time.Now()); err != nil {
-			pause.Store(false)
-			return 0, err
-		}
-		select {
-		case <-garee:
-		case <-time.After(2 * time.Second):
-			pause.Store(false)
-			return 0, errors.New("the terminal cannot be handed over")
-		}
-		term.rendre()
-		fmt.Fprintf(term.f, "\n\x1b[1m── Athanor · %s ──\x1b[0m\n\x1b[2m$ %s\x1b[0m\n\n", titre, citerLigne(ligne))
-		c := exec.Command(ligne[0], ligne[1:]...)
-		c.Dir = dossier
-		c.Stdin, c.Stdout, c.Stderr = term.f, term.f, term.f
-		code := 0
-		if err := c.Run(); err != nil {
-			code = -1
-			if e, ok := err.(*exec.ExitError); ok {
-				code = e.ExitCode()
-			} else {
-				fmt.Fprintln(term.f, err)
-			}
-		}
-		if code == 0 {
-			fmt.Fprintf(term.f, "\n\x1b[32m✔\x1b[0m %s ", app.t("Done. Press Enter to go back to Athanor."))
-		} else {
-			fmt.Fprintf(term.f, "\n\x1b[31m✖\x1b[0m %s ", app.t("It stopped with an error (code {0}). Press Enter to go back to Athanor.", code))
-		}
-		_ = term.f.SetReadDeadline(time.Time{})
-		attendreEntree(term.f)
-		_ = term.brut()
-		prec = nil // the whole screen drawn again
-		pause.Store(false)
-		reprise <- struct{}{}
-		return code, nil
-	}
 	dessiner := func() {
 		e := nouvelEcran(app.l, app.h)
 		app.dessiner(e)

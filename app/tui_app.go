@@ -1,35 +1,23 @@
 package main
 
-// The terminal interface (athanor tui): the application in a terminal, like btop: the projects, the
-// overview, the live log, the requests, the chat and the checks, with the keyboard and the mouse. Its state
-// and its loop; the pages are drawn by tui_pages.go, the keys handled by tui_actions.go.
+// The terminal interface (athanor tui): what a computer without a screen needs (a server through SSH): the
+// state of every module and what waits (Home), pairing a phone (Remote: the QR code, the 6 digits, the trusted
+// devices), the emergency stop. Everything else is the window's, or a paired phone's (3.1.4: the Studio's pages
+// left the terminal). Its state and its loop; the pages are drawn by tui_pages.go, the keys by tui_actions.go.
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 )
 
 const (
-	pSuivi = iota
-	pJournal
-	pDemandes
-	pChat
-	pSante
-	pPourVous
-	pEquipe
-	pGitHub
-	pReglages
-	pDistance
-	pAccueil // the hub's home (key H), drawn first in the lists
+	pAccueil  = iota // the hub's home (keys 1 and H), where the terminal opens
+	pDistance        // Remote (key 2): pairing a phone
 	nbPages
 )
 
 // clesPages: the pages' names (keys of the app's translations).
-var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote", "Home"}
-
-// ordrePages: the pages as the lists show them (the home first, then Dev's pages 1…9, 0).
-var ordrePages = [nbPages]int{pAccueil, pSuivi, pJournal, pDemandes, pChat, pSante, pPourVous, pEquipe, pGitHub, pReglages, pDistance}
+var clesPages = [nbPages]string{"Home", "Remote"}
 
 type paletteTUI struct {
 	fond, panneau, ligne, bord, encre, muet, accent, surAccent, ok, attention, erreur, violet couleurT
@@ -98,29 +86,6 @@ func paletteDe(theme, accent string) paletteTUI {
 	return p
 }
 
-// the answers of the API the terminal reads
-type reponseJournalTUI struct {
-	Evenements []Evenement `json:"evenements"`
-	Contexte   int64       `json:"contexte"`
-	Fichier    string      `json:"fichier"`
-}
-
-type reponseDemandesTUI struct {
-	Demande string           `json:"demande"`
-	Attente []DemandeAttente `json:"attente"`
-	Faites  []DemandeFaite   `json:"faites"`
-}
-
-type reponseChatTUI struct {
-	Messages    []MessageChat `json:"messages"`
-	PiloteActif bool          `json:"pilote_actif"`
-	EnCours     bool          `json:"en_cours"`
-	Partiel     *struct {
-		Textes []string `json:"textes"`
-		Outils []string `json:"outils"`
-	} `json:"partiel"`
-}
-
 type choixTUI struct {
 	id, texte string
 	danger    bool
@@ -155,7 +120,6 @@ type formulaireTUI struct {
 type zoneTUI struct {
 	x, y, l, h int
 	fn         func()
-	molette    func(sens int)
 }
 
 type appTUI struct {
@@ -175,33 +139,6 @@ type appTUI struct {
 	quitter   bool
 	proprio   bool // this process serves the application (quitting stops it)
 
-	// log
-	evs        []Evenement
-	dernierN   int64
-	fichierJ   string
-	defilJ     int // lines above the end (0: follows the log)
-	outils     bool
-	resultats  bool
-	sousAgents bool
-	recherche  saisieT
-	rechActive bool
-
-	defilPlan int
-
-	dem    *reponseDemandesTUI
-	selDem int
-	defilD int
-
-	chat      *reponseChatTUI
-	saisie    saisieT
-	chatActif bool
-	defilC    int
-	envoi     bool
-
-	verifs []VerifVue
-	selV   int
-	defilV int
-
 	dialogue *dialogueTUI
 	form     *formulaireTUI
 	aide     bool
@@ -214,36 +151,17 @@ type appTUI struct {
 	demarrage     time.Time
 	verrouDemande bool
 
-	// For you, Team, GitHub, Settings (tui_pages2.go)
-	taches       []TacheUtilVue
-	selTache     int // approvals first, then the tasks (tui_approbations.go)
-	appr         *reponseApprTUI
-	agents       []Agent
-	selAgent     int
-	gh           *GitHubVue
-	nomPropose   string
-	env          []LigneEnv
-	selReglage   int
-	modeleChat   string         // the chat's model ("": the account's default)
-	chatInternet bool           // the chat's messages may use the web (when one needs it)
-	chatModif    bool           // "change the files": Claude may change them (else a change becomes a note)
-	formValide   *formulaireTUI // the form whose fields are being saved
+	formValide *formulaireTUI // the form whose fields are being saved
 	// Remote (tui_distance.go)
 	dist           *DistanceVue
 	hub            *reponseHubTUI // the home's tiles (tui_accueil.go)
 	selApp         int
 	chiffresJusque time.Time // the 6 digits shown until then
-	// Missions (tui_missions.go)
-	// executer: a command run in this terminal, in front of the user (the screen given back meanwhile), its
-	// exit code; nil where there is no terminal to hand over (the tests)
-	executer func(titre string, ligne []string, dossier string) (int, error)
 }
 
 func nouvelleAppTUI(c *clientTUI, proprio bool) *appTUI {
 	a := &appTUI{c: c, majs: make(chan func(*appTUI), 64), enCours: map[string]bool{}, derniere: map[string]time.Time{}, proprio: proprio,
-		outils: true, sousAgents: true, l: 80, h: 24, page: pAccueil}
-	a.saisie.multi = true
-	a.saisie.maxRunes = 20000
+		l: 80, h: 24, page: pAccueil}
 	a.pal = paletteDe("", "")
 	return a
 }
@@ -366,86 +284,15 @@ func (a *appTUI) tic() {
 		}
 		return func(a *appTUI) { a.recevoirEtat(&v) }, nil
 	})
-	if a.vue == nil || a.vue.Verrouille || a.c.projet == "" {
-		if a.vue != nil && !a.vue.Verrouille && a.page == pSante {
-			a.chargerSante()
-		}
-		if a.vue != nil && !a.vue.Verrouille && a.page == pReglages { // Athanor's settings: no project needed
-			a.chargerPages2()
-		}
-		if a.vue != nil && !a.vue.Verrouille && a.page == pDistance {
-			a.chargerDistance()
-		}
-		if a.vue != nil && !a.vue.Verrouille && a.page == pAccueil {
-			a.chargerHub()
-		}
+	if a.vue == nil || a.vue.Verrouille {
 		return
 	}
-	apres := a.dernierN
-	a.charger("journal", time.Second, func(c clientTUI) (func(*appTUI), error) {
-		var r reponseJournalTUI
-		if err := c.lire("journal?apres="+itoa64(apres), &r); err != nil {
-			return nil, err
-		}
-		return func(a *appTUI) {
-			if apres != a.dernierN {
-				return
-			}
-			a.fichierJ = r.Fichier
-			if len(r.Evenements) > 0 {
-				a.evs = append(a.evs, r.Evenements...)
-				a.dernierN = r.Evenements[len(r.Evenements)-1].N
-				if len(a.evs) > 6000 {
-					a.evs = append([]Evenement(nil), a.evs[len(a.evs)-5000:]...)
-				}
-			}
-		}, nil
-	})
 	switch a.page {
-	case pDemandes:
-		a.charger("demandes", 3*time.Second, func(c clientTUI) (func(*appTUI), error) {
-			var r reponseDemandesTUI
-			if err := c.lire("demandes", &r); err != nil {
-				return nil, err
-			}
-			return func(a *appTUI) { a.dem = &r }, nil
-		})
-	case pChat:
-		tous := 1500 * time.Millisecond
-		if a.chat != nil && a.chat.EnCours {
-			tous = 700 * time.Millisecond
-		}
-		a.charger("chat", tous, func(c clientTUI) (func(*appTUI), error) {
-			var r reponseChatTUI
-			if err := c.lire("chat", &r); err != nil {
-				return nil, err
-			}
-			return func(a *appTUI) { a.chat = &r }, nil
-		})
-	case pSante:
-		a.chargerSante()
-	case pPourVous, pEquipe, pGitHub, pReglages:
-		a.chargerPages2()
 	case pDistance:
 		a.chargerDistance()
 	case pAccueil:
 		a.chargerHub()
 	}
-}
-
-func (a *appTUI) chargerSante() {
-	a.charger("sante", 2*time.Second, func(c clientTUI) (func(*appTUI), error) {
-		var r []VerifVue
-		if err := c.lire("sante", &r); err != nil {
-			return nil, err
-		}
-		return func(a *appTUI) { a.verifs = r }, nil
-	})
-}
-
-func itoa64(n int64) string {
-	b, _ := json.Marshal(n)
-	return string(b)
 }
 
 // recevoirEtat: the state read; the first one chooses the project (the app's current one).
@@ -482,9 +329,6 @@ func (a *appTUI) changerProjet(nom string) {
 	}
 	a.c.projet = nom
 	a.gen++
-	a.evs, a.dernierN, a.fichierJ, a.defilJ = nil, 0, "", 0
-	a.dem, a.chat, a.selDem, a.defilC, a.defilPlan = nil, nil, 0, 0, 0
-	a.chatActif = false
 	for k := range a.derniere {
 		delete(a.derniere, k)
 	}
@@ -512,10 +356,6 @@ func (a *appTUI) zone(x, y, l, h int, fn func()) {
 	a.zones = append(a.zones, zoneTUI{x: x, y: y, l: l, h: h, fn: fn})
 }
 
-func (a *appTUI) zoneMolette(x, y, l, h int, fn func(sens int)) {
-	a.zones = append(a.zones, zoneTUI{x: x, y: y, l: l, h: h, molette: fn})
-}
-
 // souris: a click or the wheel on the frame shown.
 func (a *appTUI) souris(ev evenementTUI) {
 	debut := 0
@@ -528,10 +368,6 @@ func (a *appTUI) souris(ev evenementTUI) {
 			continue
 		}
 		if ev.nom == "molette" {
-			if z.molette != nil {
-				z.molette(ev.bouton)
-				return
-			}
 			continue
 		}
 		if z.fn != nil && ev.appui && ev.bouton == 0 {

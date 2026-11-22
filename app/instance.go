@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -174,6 +176,40 @@ func lienInstanceTerminal() (lien string, existe bool) {
 }
 
 // apiFenetre: the terminal interface asks for Athanor's window too (on this computer's screen).
+// athanorFond: this Athanor serves in the background (started by a terminal); arretFond stops it.
+var (
+	athanorFond atomic.Bool
+	arretFond   = make(chan struct{}, 1)
+)
+
+// attendreArretFond: until a terminal's "Stop Athanor completely", or SIGTERM / Ctrl+C sent to it.
+func attendreArretFond() {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	select {
+	case <-arretFond:
+	case <-sig:
+	}
+}
+
+// apiQuitter: POST /api/quitter, the terminal's "Stop Athanor completely": only an Athanor in the background
+// stops so (one with its window stops when the window closes); this computer only (interditDistance).
+func (s *Serveur) apiQuitter(w http.ResponseWriter, r *http.Request) {
+	if !athanorFond.Load() {
+		s.erreur(w, http.StatusConflict, "Athanor runs with its window: close the window to stop it.")
+		return
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "stop athanor", Resultat: "from the terminal"})
+	s.msg(w, "Athanor stops.")
+	go func() {
+		time.Sleep(300 * time.Millisecond) // the answer reaches the terminal first
+		select {
+		case arretFond <- struct{}{}:
+		default:
+		}
+	}()
+}
+
 func (s *Serveur) apiFenetre(w http.ResponseWriter, r *http.Request) {
 	demanderFenetre()
 	s.msg(w, "Athanor's window opens (on this computer's screen).")

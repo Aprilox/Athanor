@@ -2335,8 +2335,8 @@ pages.accueil = async () => {
    <div class="accueil-grille">
     <form class="bloc accueil-barre accueil-chat${etat.hubPlein ? " plein" : ""}" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><h2 class="m0 accueil-titre croit">${t("Assistant")}</h2>
-        <button type="button" class="btn btn-petit si-missions" data-nm-nouvelle title="${h(t("A project, its servers and API keys, or servers only, in one form launched in one click."))}">${t("New mission")}</button>
-        <button type="button" class="btn btn-petit si-assistant" id="hub-chat-nouveau" ${(hc.messages || []).length ? "" : "hidden"}>${t("New conversation")}</button>
+        <button type="button" class="btn btn-petit si-missions" data-nm-nouvelle title="${h(t("A project, its servers and API keys, or servers only, in one form launched in one click."))}" aria-label="${h(t("New mission"))}"><span class="ic-tel">${ic("plus")}</span><span class="lib-ordi">${t("New mission")}</span><span class="lib-tel">${t("Mission")}</span></button>
+        <button type="button" class="btn btn-petit si-assistant" id="hub-chat-nouveau" title="${h(t("New conversation"))}" aria-label="${h(t("New conversation"))}" ${(hc.messages || []).length ? "" : "hidden"}><span class="ic-tel">${ic("actualiser")}</span><span class="lib-ordi">${t("New conversation")}</span></button>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
         ${boutonPleinHub()}</div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>${boutonBas("hub-chat-fil")}
@@ -2947,7 +2947,7 @@ const GUIDE = [
       ["The bell", "The bell, at the top of the window, gathers what needs you in every module, one line each with its reason (“Studio, my-shop: …”). *View* opens the right page. *Ignore* hides a line and deletes nothing: it waits under *Ignored alerts*, where *Reopen* brings it back, and it comes back by itself when its reason changes."],
       ["The Guide and the tutorials", "*Guide*, beside the bell, opens this page. Home, Studio and the Vault each have a short tutorial, shown on your first visit (the Vault's also opens from a project's *Access* tab). *Tutorials*, at the top of the Guide, replays any of them; *Settings › Options* › *Show the first-launch guide and the tutorials again* shows them all once more."],
       ["Only Studio?", "If you only build projects, nothing changes for you: *Studio* works on its own, as Athanor did before, and the other modules ask for nothing until you open them.", "#suivi", "Overview"],
-      ["In a terminal", "`./athanor tui` opens on the same home page: one block per module and what needs you. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Studio's pages."],
+      ["In a terminal", "`./athanor tui` opens on the same home page, to read: one block per module and what needs you. *2* pairs your phone (its QR code and 6 digits); the rest is done from the phone or the window."],
     ],
     note: "The update moved none of your projects, settings or keys, and old links and notifications still open the same pages as before." },
   { id: "assistant", titre: "Talk to the home assistant", intro: "The home page is a conversation with an assistant that knows Athanor: ask a question, or say what you want done, in your words. It reads, answers and proposes; you decide.",
@@ -3127,14 +3127,14 @@ const GUIDE = [
       ["When a computer waits", "Its Overview says why: everything left depends on a milestone in progress; files of its folder that GitHub has too (move them); a project with another history (start again from an empty folder). A real merge conflict is undone, then Claude merges it at its next cycle."],
     ],
     note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a small ref refs/athanor/pc/… on the repository, not a branch (never in the list of branches, no workflow runs for it); it goes away when that computer stops working with the others." },
-  { id: "terminal", titre: "In a terminal", intro: "On Linux and macOS, Athanor also runs in a terminal, like btop: the same projects, overview, log, requests, chat and checks, with the keyboard and the mouse. Handy on a server reached through SSH.",
+  { id: "terminal", titre: "In a terminal", intro: "On Linux and macOS, Athanor also runs in a terminal, for a computer without a screen (a server reached through SSH): what each module does, what needs you, and pairing your phone. Everything else is done from the phone or the window.",
     etapes: [
       ["Open it", "`./athanor tui` in a terminal, in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH, or on a Linux without a screen, `./athanor` alone opens it."],
-      ["What stays in the window", "The terminal holds the home page and the Studio pages. The Vault, Servers, Access and the home chat stay in the window: *w* opens it on a computer with a screen, and a paired phone reaches it through remote access."],
+      ["What stays in the window", "The terminal shows the home page, to read, and *Remote*, to pair a phone. Projects, the Studio, servers, the vault and the assistant are in the window (*w* opens it on a computer with a screen) and on a paired phone."],
       ["The window instead", "`./athanor gui` opens the window whatever the guess (a computer reached through SSH whose screen you use, say)."],
-      ["Alongside the window", "With Athanor already open, `./athanor tui` shows the same Athanor in the terminal: both stay in step. In the terminal, *w* opens the window as well."],
-      ["The keys", "*1*–*9* the pages, *s* Start, *a* Stop after cycle, *x* Stop now, *p* the project, *n* a request, *i* writes in the chat, *?* every key, *q* quits. The mouse works too."],
-      ["Quitting", "*q* (or Ctrl+C) asks, then quits: the pilots keep running. When the terminal started Athanor, Athanor stops with it: start it again to follow them."],
+      ["Alongside the window", "When no Athanor runs, the terminal starts one in the background and shows it: closing the terminal or the SSH connection leaves it running, and `./athanor` shows it again. With Athanor already open, `./athanor tui` shows that same Athanor; *w* opens the window as well."],
+      ["The keys", "*1* (or *H*) the home page, *2* Remote: *o* switches remote access on, *v* shows the 6 digits, *r* and *d* rename or remove a device. *!* the emergency stop, *w* the window, *?* every key, *q* quits."],
+      ["Quitting", "*q* (or Ctrl+C) asks: leave Athanor running in the background (the default) or stop it completely. Stopped, remote access closes; the pilots keep running."],
     ],
     note: "The colours follow the app's palette. Over SSH the terminal may not say it shows 24-bit colours: `ATHANOR_COULEURS=24 ./athanor tui` forces them. Windows: Athanor is its window." },
 ];
