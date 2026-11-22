@@ -1,6 +1,6 @@
 # Connect Claude Desktop (or Claude Code) to Athanor
 
-*Français : [MCP.fr.md](MCP.fr.md)*
+<sub>Part of the [Athanor Hub README](../README.md) · [Français](MCP.fr.md)</sub>
 
 Athanor has one MCP server. Claude Desktop or Claude Code, **on this PC**, can use it to follow your projects: read their plan and their requests, add a request, start or pause a pilot. Only the projects and the tools you allow, never more. In the app, *Guide › Connect Claude Desktop* walks through the same steps; another Athanor linked to this one is in [REMOTE.md](REMOTE.md).
 

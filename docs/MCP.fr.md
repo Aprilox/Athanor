@@ -1,6 +1,6 @@
 # Brancher Claude Desktop (ou Claude Code) sur Athanor
 
-*English: [MCP.md](MCP.md)*
+<sub>Fait partie du [README d'Athanor Hub](../README.fr.md) · [English](MCP.md)</sub>
 
 Athanor a un seul serveur MCP. Claude Desktop ou Claude Code, **sur ce PC**, peut s'en servir pour suivre vos projets : lire leur plan et leurs demandes, ajouter une demande, démarrer ou mettre en pause un pilote. Seulement les projets et les outils que vous autorisez, jamais plus. Dans l'application, *Guide › Brancher Claude Desktop* reprend les mêmes étapes ; un autre Athanor relié à celui-ci est dans [REMOTE.fr.md](REMOTE.fr.md).
 

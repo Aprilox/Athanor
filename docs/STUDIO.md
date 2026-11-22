@@ -221,7 +221,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | Write | only in the project folder (and in the tool's `tools/` for what it installs) |
 | Read | only the project, `tools/` and the Linux system files; not your documents, not the Windows drives, not `.env` |
 | Internet | yes, freely |
-| Install tools | yes: in `tools/` (Linux tools, portable Windows software in `tools/windows/`), or in a disposable Docker container; every installation is recorded in `tools/INSTALLS.md` |
+| Install tools | yes: in `tools/` (Linux tools, portable Windows software in `tools/windows/`); what only one project uses (its test server, a tool built for it) in that project's `.athanor/tools/`, removed with it; or in a disposable Docker container; every installation is recorded in `tools/INSTALLS.md` |
 | Install Windows software | yes, with winget or an installer: for your user, or with administrator rights if you allowed it (one Windows consent) |
 | Windows firewall | set automatically with the same permission: the project's programs can accept connections **from the local network only** |
 | Your Windows software | yes, through the gateways below. **This is an intended exit from the sandbox**: those programs run with your Windows rights |

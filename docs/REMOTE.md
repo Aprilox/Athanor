@@ -1,6 +1,6 @@
 # Add a remote Athanor
 
-*Français : [REMOTE.fr.md](REMOTE.fr.md)*
+<sub>Part of the [Athanor Hub README](../README.md) · [Français](REMOTE.fr.md)</sub>
 
 Another Athanor, on this PC, on your network or on a VPS, can be linked to this one: its projects and its Servers module come into your hub, and you drive its pilots from here. No link is made without the 6-digit code it shows **and** its owner's yes. In the app, *Guide › Add a remote Athanor* walks through the same steps; Claude Desktop is in [MCP.md](MCP.md).
 

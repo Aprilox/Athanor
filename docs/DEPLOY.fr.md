@@ -1,6 +1,6 @@
 # Déployer avec Athanor
 
-*English: [DEPLOY.md](DEPLOY.md)*
+<sub>Fait partie du [README d'Athanor Hub](../README.fr.md) · [English](DEPLOY.md)</sub>
 
 Comment Athanor met un projet en ligne : qui peut lancer un déploiement, les trois méthodes, ce qu'il écrit sur vos serveurs, comment il revient en arrière, comment il surveille le site, et ce qui n'atteint jamais l'IA. Dans l'application, *Guide › Mettre un site en ligne* vous accompagne ; où un projet va en ligne, et quand, se règle dans son onglet *Déploiement* ([Serveurs et déploiement](SERVERS.fr.md#le-déploiement-dun-projet)) ; Cloudflare est dans [CLOUDFLARE.md](CLOUDFLARE.md).
 

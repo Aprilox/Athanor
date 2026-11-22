@@ -986,3 +986,25 @@ func TestBancPilote(t *testing.T) {
 		}
 	})
 }
+
+func TestAssainirAtelier(t *testing.T) {
+	projet := t.TempDir()
+	etat := filepath.Join(projet, ".athanor")
+	for _, d := range []string{"docs", "tools/jdk/bin", "work/M2", ".athanor"} {
+		_ = os.MkdirAll(filepath.Join(etat, d), 0o755)
+	}
+	cible := filepath.Join(projet, "ailleurs")
+	_ = os.WriteFile(cible, []byte("x"), 0o644)
+	if err := os.Symlink(cible, filepath.Join(etat, "docs", "lien.md")); err != nil {
+		t.Skip("no symbolic links here: " + err.Error())
+	}
+	for _, l := range []string{"tools/jdk/bin/java", "work/M2/lien"} {
+		_ = os.Symlink(cible, filepath.Join(etat, l))
+	}
+	assainirAtelier(etat)
+	for rel, reste := range map[string]bool{"docs/lien.md": false, "tools/jdk/bin/java": true, "work/M2/lien": true, ".athanor": false} {
+		if _, err := os.Lstat(filepath.Join(etat, rel)); (err == nil) != reste {
+			t.Errorf("%s: kept %v, want %v", rel, err == nil, reste)
+		}
+	}
+}

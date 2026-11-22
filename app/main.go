@@ -95,6 +95,8 @@ func main() {
 	go s.battementsDirects()    // the direct link between them: the masters open, the nodes beat (equipe_directe.go)
 	go s.fichesServeursFond()   // the servers' sheets, every 6 hours while their keys can be opened (serveurs_fiche.go)
 	go s.santeEnvsFond()        // the deployed sites' health and their incidents (sante_envs.go)
+	// logs/ of the projects removed long ago, and the old team tunnels (nettoyage_journaux.go)
+	go nettoyerJournaux(s.kitCourant().Racine, config.Projets)
 
 	mux := http.NewServeMux()
 	s.routes(mux)

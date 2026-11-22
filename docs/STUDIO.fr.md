@@ -221,7 +221,7 @@ Les captures montrent les palettes sombre « Ardoise » et « Clair ».
 | Écrire | seulement dans le dossier du projet (et dans `tools/` de l'outil pour ce qu'il installe) |
 | Lire | seulement le projet, `tools/` et les fichiers du système Linux ; ni vos documents, ni les disques Windows, ni `.env` |
 | Internet | oui, librement |
-| Installer des outils | oui : dans `tools/` (outils Linux, logiciels Windows portables dans `tools/windows/`), ou dans un conteneur Docker jetable ; chaque installation est notée dans `tools/INSTALLS.md` |
+| Installer des outils | oui : dans `tools/` (outils Linux, logiciels Windows portables dans `tools/windows/`) ; ce qui ne sert qu'à un projet (son serveur de test, un outil fait pour lui) dans son `.athanor/tools/`, supprimé avec lui ; ou dans un conteneur Docker jetable ; chaque installation est notée dans `tools/INSTALLS.md` |
 | Installer des logiciels Windows | oui, avec winget ou un installateur : pour votre utilisateur, ou avec les droits administrateur si vous l'avez autorisé (une seule demande Windows) |
 | Pare-feu Windows | réglé tout seul avec la même autorisation : les programmes du projet peuvent recevoir des connexions **du réseau local seulement** |
 | Vos logiciels Windows | oui, par les passerelles prévues (voir ci-dessous). **C'est une sortie voulue de la barrière** : ces programmes tournent avec vos droits Windows |

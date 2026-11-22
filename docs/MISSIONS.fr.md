@@ -1,6 +1,6 @@
 # Missions
 
-*English: [MISSIONS.md](MISSIONS.md)*
+<sub>Fait partie du [README d'Athanor Hub](../README.fr.md) · [English](MISSIONS.md)</sub>
 
 Une mission relie ce qu'Athanor gère : un **projet Studio**, ses **serveurs** et des **clés API** du coffre, avec un seul choix de permission pour les serveurs ; ou **seulement des serveurs**, sans projet. [Le hub](HUB.fr.md#missions) décrit le formulaire et le cadre ; cette page dit de quoi une mission est faite et ce que deviennent les missions des versions précédentes.
 

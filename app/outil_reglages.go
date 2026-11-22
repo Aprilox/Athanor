@@ -202,6 +202,10 @@ func construireReglages(kitArg, sortie string) error {
 	var env objetJSON
 	env.mettre("TOOLS", tools)
 	env.mettre("PROJECT", projet)
+	// what only this project uses stays in its workshop and goes with it; a worker's are its main project's
+	// (outil_pilote_parallele.go opens that folder in its sandbox). Gradle's downloads serve every project: shared.
+	env.mettre("PROJECT_TOOLS", joinOS(firstNonEmpty(os.Getenv("ATHANOR_PROJET_PRINCIPAL"), projet), ".athanor", "tools"))
+	env.mettre("GRADLE_USER_HOME", joinOS(tools, "gradle"))
 	env.mettre("ATHANOR_PONT", joinOS(firstNonEmpty(os.Getenv("ATHANOR_PROJET_PRINCIPAL"), firstNonEmpty(os.Getenv("PROJECT"), joinOS(kit, "projet"))), ".athanor", "pont"))
 	env.mettre("XDG_CACHE_HOME", joinOS(tools, "cache"))
 	env.mettre("PIP_CACHE_DIR", joinOS(tools, "cache", "pip"))

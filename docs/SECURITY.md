@@ -1,12 +1,13 @@
 # Security model
+<!-- Absolute links on purpose: GitHub also shows this file on the Security tab, where relative links resolve from the root and break. -->
 
-<sub>Part of the [Athanor Hub README](../README.md) · [Français](SECURITY.fr.md)</sub>
+<sub>Part of the [Athanor Hub README](https://github.com/Aprilox/Athanor/blob/main/README.md) · [Français](https://github.com/Aprilox/Athanor/blob/main/docs/SECURITY.fr.md)</sub>
 
 ## Security model
 
 **What Athanor guards against**: an agent that is tricked (a prompt injection in a web page, a README, an e-mail or a command's output), an agent that makes a mistake (`rm -rf`, the wrong server), someone on your local network or on the Internet, and a copied disk or backup. Each guard is in Athanor's Go code, never in an instruction to Claude, so it holds even if an agent obeys an attacker.
 
-**What it does not guard against**: malicious software running with all your user rights. Such a program can read what you can read, watch what you type and wait for you to unlock. And in [native Windows mode](STUDIO.md#native-windows-mode-experimental) there is no sandbox: an agent can read any file of your PC (see below what is refused there by default).
+**What it does not guard against**: malicious software running with all your user rights. Such a program can read what you can read, watch what you type and wait for you to unlock. And in [native Windows mode](https://github.com/Aprilox/Athanor/blob/main/docs/STUDIO.md#native-windows-mode-experimental) there is no sandbox: an agent can read any file of your PC (see below what is refused there by default).
 
 ### The eight rules
 
@@ -29,11 +30,11 @@ Each rule has an automatic test in the CI and, where it can be shown for real, a
 
 **Native Windows mode.** It has no sandbox, so an agent could open the *code* key through DPAPI as you can. Linking an *infra* entry to a project, Servers tasks and giving infrastructure keys through *For you* are refused there by default, with an offer to use WSL; *Force, knowing the risk* allows it project by project, after a confirmation, and each forced use is logged.
 
-**On the servers.** Every command is ranked *read*, *change* or *destructive* by Athanor itself; a plan is shown and reviewed before anything changes; a firewall or SSH change undoes itself after 5 minutes unless confirmed; a backup is made before a risky step; key-only SSH, no direct root by default; a server's output is data, never an order. Details in [Servers](SERVERS.md#servers).
+**On the servers.** Every command is ranked *read*, *change* or *destructive* by Athanor itself; a plan is shown and reviewed before anything changes; a firewall or SSH change undoes itself after 5 minutes unless confirmed; a backup is made before a risky step; key-only SSH, no direct root by default; a server's output is data, never an order. Details in [Servers](https://github.com/Aprilox/Athanor/blob/main/docs/SERVERS.md#servers).
 
 ### The sandbox, the app and the rest
 
-- **Claude's commands** run in the Claude Code sandbox (bubblewrap + seccomp). They can write only in the project folder and `tools/`. They cannot read the rest of your Linux home or the Windows drives, and cannot launch `cmd.exe` or `powershell.exe` directly. *Setup & health → Test the sandbox* proves it with a real session. Claude's file tools (Read, Edit, Write…) are limited the same way by a hook (`athanor hook fichiers`, [`app/outil_gardes.go`](../app/outil_gardes.go)). On macOS the sandbox is Seatbelt, with the same rules.
+- **Claude's commands** run in the Claude Code sandbox (bubblewrap + seccomp). They can write only in the project folder and `tools/`. They cannot read the rest of your Linux home or the Windows drives, and cannot launch `cmd.exe` or `powershell.exe` directly. *Setup & health → Test the sandbox* proves it with a real session. Claude's file tools (Read, Edit, Write…) are limited the same way by a hook (`athanor hook fichiers`, [`app/outil_gardes.go`](https://github.com/Aprilox/Athanor/blob/main/app/outil_gardes.go)). On macOS the sandbox is Seatbelt, with the same rules.
 - **Windows software is an intended exit.** The gateways run outside the sandbox, with your user rights, and `pc-exec` runs any Windows program Claude places in the project or in `tools/windows`. Treat a project like code you run yourself.
 - **Administrator rights are opt-in.** *Administrator rights → Repair* asks for your consent once and registers an elevated scheduled task (`Athanor - installations`). It runs a copy of `Athanor.exe` kept in `C:\ProgramData\Athanor`, which only administrators can modify. The task only runs winget packages and programs located inside your project folders or `tools\windows`. It also lets the project's programs accept local-network connections without the firewall dialog. Remove it any time with `Athanor.exe autoriser-admin --retirer`.
 - **The pilot never trusts the project folder.** It keeps its own state (pid, lock, sandbox settings, instructions, counters) in `logs/`, out of Claude's reach, and never writes through a symbolic link placed in `.athanor/`. It validates every value it reads back, and runs git with hooks, filters, merge drivers, fsmonitor, external diff and signature programs disabled. It starts Claude Code with only its own settings and MCP servers (`--setting-sources user`, `--strict-mcp-config` when the CLI supports them), and `tools/` is never in its `PATH`.

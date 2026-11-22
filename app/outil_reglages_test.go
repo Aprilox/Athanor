@@ -155,6 +155,10 @@ func TestPariteReglages(t *testing.T) {
 				fs["denyRead"] = l[:2]
 			}
 		}
+		// since 3.1.6 the project's own tools folder, which settings.py did not have (TestReglagesContenu checks it)
+		envG := g.(map[string]any)["env"].(map[string]any)
+		delete(envG, "PROJECT_TOOLS")
+		delete(envG, "GRADLE_USER_HOME")
 		if !reflect.DeepEqual(sansProgramme(t, p), sansProgramme(t, g)) {
 			t.Errorf("%s:\n--- go\n%s\n--- python\n%s", c.nom, bg, bp)
 		}
@@ -222,6 +226,24 @@ func TestReglagesContenu(t *testing.T) {
 	if strings.Contains(string(b), "hook claude") {
 		t.Fatal("RTK's hook without RTK")
 	}
+	// the project's own tools (a worker's are its main project's), Gradle's downloads shared in the kit's
+	outils := filepath.Join(p, ".athanor", "tools")
+	for _, principal := range []string{"", p} {
+		if principal != "" {
+			t.Setenv("ATHANOR_PROJET_PRINCIPAL", principal)
+			t.Setenv("PROJECT", filepath.Join(p, ".athanor", "work", "M2"))
+			if err := construireReglages(kit, out); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var r struct{ Env map[string]string }
+		b, _ := os.ReadFile(out)
+		if json.Unmarshal(b, &r) != nil || filepath.ToSlash(r.Env["PROJECT_TOOLS"]) != filepath.ToSlash(outils) || filepath.ToSlash(r.Env["GRADLE_USER_HOME"]) != filepath.ToSlash(filepath.Join(kit, "tools", "gradle")) {
+			t.Errorf("worker %v: PROJECT_TOOLS %q, GRADLE_USER_HOME %q", principal != "", r.Env["PROJECT_TOOLS"], r.Env["GRADLE_USER_HOME"])
+		}
+	}
+	t.Setenv("ATHANOR_PROJET_PRINCIPAL", "")
+	t.Setenv("PROJECT", p)
 	// RTK in the kit: its hook rewrites Claude's commands (native Windows: rtk.exe, forward slashes for Git Bash)
 	rtk := cheminRTK(kit)
 	_ = os.MkdirAll(filepath.Dir(rtk), 0o755)

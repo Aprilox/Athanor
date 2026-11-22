@@ -209,13 +209,21 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 	fConsignes := filepath.Join(p.prive, "CLAUDE.ouvrier-"+ident+".md")
 	_ = os.WriteFile(fConsignes, []byte(consignes), 0o644)
 	_ = os.Remove(filepath.Join(p.prive, "relais-"+ident+".md"))
-	// the worker's sandbox: its worktree (PROJECT), plus write access to the project's .git
+	// the worker's sandbox: its worktree (PROJECT), plus write access to the project's .git and its tools folder
+	// (PROJECT_TOOLS: what the pilot set up for this project only, not made again by each worker)
 	fReglages := filepath.Join(p.prive, "reglages-"+ident+".json")
 	if p.exeAthanor([]string{"ATHANOR_PROJET_PRINCIPAL=" + p.projet, "PROJECT=" + trav}, "reglages", p.kit, fReglages).Run() != nil {
 		p.log(fmt.Sprintf("Worker %s: cannot build the settings.", ident))
 		return nil, false
 	}
-	c := p.exeAthanor(nil, "reglages-ouvrier", fReglages, filepath.Join(p.projet, ".git"))
+	ouvrir := []string{"reglages-ouvrier", fReglages, filepath.Join(p.projet, ".git")}
+	outilsProjet := filepath.Join(p.etat, "tools")
+	// the sandbox opens only a folder that exists, and never a link Claude placed there
+	_ = os.MkdirAll(outilsProjet, 0o755)
+	if st, err := os.Lstat(outilsProjet); err == nil && st.IsDir() && !estLien(p.etat) {
+		ouvrir = append(ouvrir, outilsProjet)
+	}
+	c := p.exeAthanor(nil, ouvrir...)
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if c.Run() != nil {
 		return nil, false

@@ -468,10 +468,10 @@ func lancerSolutions(args []string) int {
 func lancerReglagesOuvrier(args []string) int {
 	args = cheminsOutil(args)
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: athanor reglages-ouvrier SETTINGS GIT")
+		fmt.Fprintln(os.Stderr, "usage: athanor reglages-ouvrier SETTINGS DIR...")
 		return 2
 	}
-	f, git := args[0], args[1]
+	f, dossiers := args[0], args[1:]
 	b, err := os.ReadFile(f)
 	var r objetJSON
 	if err == nil {
@@ -496,8 +496,11 @@ func lancerReglagesOuvrier(args []string) int {
 					return 1
 				}
 			}
-			g, _ := json.Marshal(git)
-			fs.mettre(cle, append(l, g))
+			for _, d := range dossiers {
+				g, _ := json.Marshal(d)
+				l = append(l, g)
+			}
+			fs.mettre(cle, l)
 		}
 		sb.mettre("filesystem", fs)
 		r.mettre("sandbox", sb)

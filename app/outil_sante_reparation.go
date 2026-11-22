@@ -58,7 +58,11 @@ func lancerReparation(args []string) int {
 	fmt.Printf("[reparer] Claude session%s: %s\n", precision, filepath.Base(fichier))
 
 	var sortie io.Writer = os.Stdout
-	if j, err := os.OpenFile(filepath.Join(kit, "logs", "reparations.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+	jr := filepath.Join(kit, "logs", "reparations.jsonl")
+	if st, err := os.Stat(jr); err == nil && st.Size() > 4<<20 {
+		_ = os.Rename(jr, jr+".1") // the one before kept, as souris.log
+	}
+	if j, err := os.OpenFile(jr, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		defer j.Close()
 		sortie = io.MultiWriter(os.Stdout, j)
 	}

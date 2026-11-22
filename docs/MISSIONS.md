@@ -1,6 +1,6 @@
 # Missions
 
-*Français : [MISSIONS.fr.md](MISSIONS.fr.md)*
+<sub>Part of the [Athanor Hub README](../README.md) · [Français](MISSIONS.fr.md)</sub>
 
 A mission links what Athanor manages: a **Studio project**, its **servers** and **API keys** of the vault, with one permission choice for the servers; or **servers only**, without a project. [The hub](HUB.md#missions) describes the form and the frame; this page says what a mission is made of and what becomes of the missions of earlier versions.
 

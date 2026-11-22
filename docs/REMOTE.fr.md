@@ -1,6 +1,6 @@
 # Ajouter un Athanor distant
 
-*English: [REMOTE.md](REMOTE.md)*
+<sub>Fait partie du [README d'Athanor Hub](../README.fr.md) · [English](REMOTE.md)</sub>
 
 Un autre Athanor, sur ce PC, sur votre réseau ou sur un VPS, peut être relié à celui-ci : ses projets et son module Serveurs arrivent dans votre hub, et vous commandez ses pilotes d'ici. Aucun lien n'est fait sans le code à 6 chiffres qu'il affiche **et** le oui de son propriétaire. Dans l'application, *Guide › Ajouter un Athanor distant* reprend les mêmes étapes ; Claude Desktop est dans [MCP.fr.md](MCP.fr.md).
 

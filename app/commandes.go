@@ -17,7 +17,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "3.1.5"
+const versionAthanor = "3.1.6"
 
 type sousCommande struct {
 	aide  string
@@ -45,7 +45,7 @@ func init() {
 		"etat-taches":            {"etat-taches PROJECT: how many tasks wait for the user or for Claude (the pilot)", lancerEtatTaches},
 		"plan":                   {"plan lister PLAN | chevauchement PLAN LINE [RUNNING...] | documentation | cocher PLAN ID: the plan's milestones for the parallel mode (the pilot)", lancerPlan},
 		"solutions":              {"solutions ranger FILE WHAT | fusionner MAIN COPY: .athanor/SOLUTIONS.md kept short, a worker's merged (the pilot)", lancerSolutions},
-		"reglages-ouvrier":       {"reglages-ouvrier SETTINGS GIT: a parallel worker's settings, the project's .git opened in its sandbox (the pilot)", lancerReglagesOuvrier},
+		"reglages-ouvrier":       {"reglages-ouvrier SETTINGS DIR...: a parallel worker's settings, the project's .git and tools folder opened in its sandbox (the pilot)", lancerReglagesOuvrier},
 		"pont":                   {"pont KIT [PROJECT]: the bridge between Claude's sandbox and the PC tools (the pilot, WSL and Linux)", lancerPont},
 		"roblox-sync":            {"roblox-sync serve PROJECT PIDFILE | payload PROJECT: a Rojo project's scripts, live in the open Roblox Studio (the pilot)", lancerRobloxSync},
 		"reparer":                {"reparer --diff | --recompiler [--tests] [--forcer] | --annuler [KIT]: rebuilds this executable from the kit's app/ (after a repair), checked, the previous one kept", lancerReparer},

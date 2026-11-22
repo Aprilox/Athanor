@@ -222,18 +222,21 @@ func publierFichier(dest string, contenu []byte) error {
 	return nil
 }
 
-func assainirAtelier(projet string) {
-	etat := filepath.Join(projet, ".athanor")
+// assainirAtelier: the links placed in the workshop etat (the project's .athanor) and on its .git removed.
+func assainirAtelier(etat string) {
+	projet := filepath.Dir(etat)
 	if estLien(etat) {
 		_ = os.Remove(etat)
 	}
 	_ = os.MkdirAll(etat, 0o755)
-	work := filepath.Join(etat, "work")
+	_ = os.Remove(filepath.Join(etat, ".athanor")) // left empty by versions up to 3.1.5, which walked that folder instead
+	// the workers' copies, and the project's own tools (a JDK, a venv hold links; Athanor never reads them)
+	work, outils := filepath.Join(etat, "work"), filepath.Join(etat, "tools")
 	_ = filepath.WalkDir(etat, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if p == work && d.IsDir() {
+		if (p == work || p == outils) && d.IsDir() {
 			return filepath.SkipDir
 		}
 		if d.Type()&os.ModeSymlink != 0 {

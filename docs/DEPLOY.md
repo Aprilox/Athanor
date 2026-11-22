@@ -1,6 +1,6 @@
 # Deploying with Athanor
 
-*Français : [DEPLOY.fr.md](DEPLOY.fr.md)*
+<sub>Part of the [Athanor Hub README](../README.md) · [Français](DEPLOY.fr.md)</sub>
 
 How Athanor puts a project online: who can start a deployment, the three methods, what it writes on your servers, how it goes back, how it watches the site, and what never reaches the AI. In the app, *Guide › Put a site online* walks through it; where a project goes online, and when, is set in its *Deployment* tab ([Servers and deployment](SERVERS.md#a-projects-deployment)); Cloudflare is in [CLOUDFLARE.md](CLOUDFLARE.md).
 
