@@ -156,11 +156,6 @@ func (a *assistantEnv) secret() (string, bool) {
 	return a.ligne()
 }
 
-func estTerminal(f *os.File) bool {
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
-}
-
 func lancerConfigurer(args []string) int {
 	kit := ""
 	if len(args) > 0 {

@@ -3,9 +3,23 @@
 package main
 
 import (
+	"os"
 	"testing"
 	"time"
 )
+
+// /dev/null is a character device, never a terminal: a launch with no terminal (a service, the I7 test, cron) is
+// not taken for the terminal interface on a Linux without a screen (it would go to the background).
+func TestEstTerminalDevNull(t *testing.T) {
+	f, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if estTerminal(f) {
+		t.Fatal("/dev/null taken for a terminal")
+	}
+}
 
 // Enter sent as CR, then its LF in a read of its own (some terminals over SSH): one Enter, never two (the
 // second saved at once the form the first opened). An LF alone, long after, is still an Enter.

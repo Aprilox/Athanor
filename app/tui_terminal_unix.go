@@ -49,6 +49,12 @@ func ioctlTermios(f *os.File, req uintptr, t *syscall.Termios) error {
 	return ioctlTUI(f, req, unsafe.Pointer(t))
 }
 
+// estTerminal: f is a terminal (it answers the termios request; /dev/null, a pipe or a file do not).
+func estTerminal(f *os.File) bool {
+	var t syscall.Termios
+	return ioctlTermios(f, ioctlLireTermios, &t) == nil
+}
+
 func ouvrirTerminalTUI() (*terminalTUI, error) {
 	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {

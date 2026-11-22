@@ -46,13 +46,8 @@ func avecInterface(args []string) []string {
 
 // terminalInteractif: Athanor was started from a terminal (its input and output are one).
 func terminalInteractif() bool {
-	for _, f := range []*os.File{os.Stdin, os.Stdout} {
-		st, err := f.Stat()
-		if err != nil || st.Mode()&os.ModeCharDevice == 0 {
-			return false
-		}
-	}
-	return true
+	// a real terminal on both: /dev/null is a character device too (a service, a test, cron), never a terminal
+	return estTerminal(os.Stdin) && estTerminal(os.Stdout)
 }
 
 // interfaceTerminal: the terminal interface rather than the window.
