@@ -1751,14 +1751,18 @@ function filChat(d) {
   return html;
 }
 
+let minuterieChat;
 async function majChat(force) {
   if (etat.page !== "chat") return;
-  const d = await api("chat").catch(() => null); if (!d) return;
+  const d = await api("chat").catch(() => null); if (!d || etat.page !== "chat") return;
+  // a turn under way is followed on its own, as the home's (majHubChat): the page's refresh loop may wait on slower calls
+  clearTimeout(minuterieChat);
+  if (d.en_cours) minuterieChat = setTimeout(() => majChat(false), 1500);
   const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pilote_actif, d.messages.map((m) => (m.agent || "") + (m.mcp || "")).join(","), (d.messages[d.messages.length - 1] || {}).note]);
   chat.piloteActif = !!d.pilote_actif;
+  const fil = $("#chat-fil"); if (!fil) return; // the thread not in the page yet: the signature is stored only once it is drawn
   if (!force && sig === chat.signature) return;
   chat.signature = sig;
-  const fil = $("#chat-fil"); if (!fil) return;
   const enBas = auBas(fil);
   fil.innerHTML = filChat(d);
   if (enBas || force) fil.scrollTop = fil.scrollHeight;
