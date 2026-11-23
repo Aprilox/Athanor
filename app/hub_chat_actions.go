@@ -743,7 +743,7 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 			return "", nil, err
 		}
 		if md := a.Modes; md != nil { // before its pilot starts: its first cycle reads them
-			err = p.ecrireMode(ModeVue{Parallele: md.Parallele, ParalleleMax: md.ParalleleMax, Eco: md.Eco, Rapide: md.Rapide, CadrageMax: md.CadrageMax, DureeMax: md.DureeMax, Modeles: md.Modeles})
+			err = p.ecrireMode(ModeVue{Parallele: md.Parallele, ParalleleMax: md.ParalleleMax, Eco: md.Eco, Rapide: md.Rapide, Automatisation: md.Automatisation, CadrageMax: md.CadrageMax, DureeMax: md.DureeMax, Modeles: md.Modeles})
 		}
 		if err == nil && a.Deploiement != nil {
 			err = deployer(p.Nom)

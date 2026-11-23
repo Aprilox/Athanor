@@ -9,6 +9,7 @@ You describe what you want: a game, a website, an app, a tool. Studio runs Claud
 | | |
 |---|---|
 | **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
+| **Development or automation** | One choice per project. Development (the usual): Claude builds or changes a game, a site, an app or a tool and fixes what it finds. Automation: Claude carries out tasks on what already exists (use a site as its customers and its team would, test it, analyse, fill in or move data) and reports everything that is wrong, without fixing anything, in the fast mode too. |
 | **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
 | **Eco mode** | One switch per project, for when the quota matters more than speed: the lead does the work itself instead of handing it to sub-agents, one review at delivery, at most 4 images per cycle, shorter command outputs. The model and the effort stay as you set them. |
 | **Fast mode** | One switch per project, for when the build time matters most: quick checks only at each milestone and no review on the way; the full check, the tester, the critic and every fix come once, in a final verification the pilot enforces before the delivery. The three modes add up. |
@@ -52,6 +53,19 @@ You describe what you want: a game, a website, an app, a tool. Studio runs Claud
 
 **Large projects, in stages.** A request too large for 25 milestones is neither squeezed into oversized milestones nor reduced: the framing cuts it into stages, as many as it takes, each one complete and tested at its end. It details the first one only; every later stage is one line of the plan (`- [ ] S2: Stage 2/5 — …`). When the pilot reaches it, the `tester` then the `critic` review what is done, and the lead details the stage into real milestones, with the code of the earlier stages in hand. The polish and the delivery come with the last stage. The Overview and *All projects* show the stage under way ("Stage 2/5"). In parallel mode a stage line is never handed to a worker: the lead details it itself; in eco mode the review only happens at the delivery.
 
+### Development or automation
+
+*Manage → Working mode → Development or automation*, per project, or right when you create the project; the **i** beside it says the difference.
+
+- **Development** (the usual): Claude builds a game, a site, an application or a tool, or changes one, milestone by milestone, and fixes what it finds, on the way or at the end.
+- **Automation**: Claude carries out tasks on what already exists: use a site or an application as its customers and its team would, test it, analyse, fill in or move data, run a routine. Each milestone is a task of your request, not a phase of a product (no skeleton, no polish, no `deliverable/`).
+  - **Nothing is fixed**: no code, no configuration and no data changed to repair what it finds, unless your request asks for that change.
+  - **The report is the deliverable**: the one your request names, or `REPORT.md` at the root of the project, completed after every task (how serious, where, the steps to see it again, what was expected, what happened). Each task ends with a commit of the report.
+  - **Put back as it was**: when your request asks for it, Claude saves what it will change (a database dump, a copy of the files) before the first task and restores it at the end, test accounts and orders included.
+  - **With the fast mode**, the final verification fixes nothing either: it completes the report. The eco and parallel modes work as usual.
+
+It applies from the next cycle; in a terminal, the Overview shows *automation* while a cycle runs.
+
 ### Parallel mode
 
 *Manage → Working mode → Parallel mode*, per project, with 2 to 10 workers at most. Workers run on `WORKER_MODEL` (Sonnet by default): a well-written milestone sheet is execution work, the lead keeps its own model for the plan and the merges.
@@ -87,6 +101,7 @@ The **model and the thinking effort are not touched**: they stay as you set them
 - **No review on the way.** `tester` and `critic` do not run after the complete slice, at the end of a stage or in the polish.
 - **Defects are noted, not chased.** One line in `BUGS.md`, fixed at once only when it blocks what comes next. **Until the end, the project may be buggy, unpolished or badly finished.**
 - **Everything is verified and fixed at the end.** Before the delivery comes the final verification: the full check until it passes, `tester` then `critic` on the whole project, **every** finding fixed (the small ones too), the full check again and a second tester pass, until nothing is left. The delivery is as finished as without the mode. The last milestone is longer, since it carries the verification of the whole project.
+- **With automation, nothing is fixed** (see *Development or automation*): the final verification completes the report instead.
 - **The pilot enforces it.** A fast cycle leaves `.athanor/FAST_DEBT`; Claude deletes it only once the final verification is complete. A delivery made while that file exists is reopened (three times at most per run; then the pilot stops and says so).
 - **Switched off on the way**: what was built in the fast mode is verified as a whole first (at the delivery in the eco mode, as its single review), then the work goes on as usual.
 

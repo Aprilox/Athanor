@@ -64,7 +64,7 @@ func suffixeModeles(resume string) string {
 
 // modesBase: the working modes alone.
 func modesBase(texteEnv string) string {
-	par, maxi, eco, rapide := "0", "3", "0", "0"
+	par, maxi, eco, rapide, auto := "0", "3", "0", "0", "0"
 	un := func(v string) string {
 		if v == "1" {
 			return "1"
@@ -78,6 +78,8 @@ func modesBase(texteEnv string) string {
 			eco = un(l[len("ECO="):])
 		case strings.HasPrefix(l, "FAST="):
 			rapide = un(l[len("FAST="):])
+		case strings.HasPrefix(l, "AUTOMATION="):
+			auto = un(l[len("AUTOMATION="):])
 		case strings.HasPrefix(l, "PARALLEL="):
 			par = un(l[len("PARALLEL="):])
 		case strings.HasPrefix(l, "PARALLELE="):
@@ -94,7 +96,11 @@ func modesBase(texteEnv string) string {
 	if par == "0" {
 		maxi = "-" // the number of workers only counts with the parallel mode
 	}
-	return fmt.Sprintf("parallel=%s max=%s eco=%s fast=%s", par, maxi, eco, rapide)
+	s := fmt.Sprintf("parallel=%s max=%s eco=%s fast=%s", par, maxi, eco, rapide)
+	if auto == "1" { // only when on: the line of a development project stays as before
+		s += " automation=1"
+	}
+	return s
 }
 
 // changementsEnAttente: what the user changed that the project's running pilot has not taken yet: "modes"

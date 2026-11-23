@@ -1519,11 +1519,12 @@ async function rendreMode() {
   return m ? blocMode(m) : "";
 }
 // the "i" of a mode: what it does (the line beside its switch stays short)
-const NOMS_MODES = { PARALLEL: "Parallel mode", ECO: "Eco mode", FAST: "Fast mode" };
+const NOMS_MODES = { GENRE: "Development or automation", PARALLEL: "Parallel mode", ECO: "Eco mode", FAST: "Fast mode" };
 const DETAILS_MODES = {
+  GENRE: ["Development (the usual): Claude builds a game, a site, an application or a tool, or changes one, milestone by milestone, and fixes what it finds on the way or at the end.", "Automation: Claude carries out tasks on what already exists (use a site as its customers and its team would, test it, analyse, fill in or move data, run a routine…) and writes everything that is wrong in a report. It fixes nothing: no code, no configuration, no data changed to repair, unless your request asks for that change.", "The report is what you get: the one your request names, or REPORT.md at the root of the project, completed after every task. Each task ends with a commit of the report.", "With the fast mode: the final verification fixes nothing either, it completes the report. The eco and parallel modes work as usual.", "To put everything back as it was at the end (test accounts, orders, data), say so in your request: Claude saves what it will change before the first task and restores it at the end. Applies from the next cycle."],
   PARALLEL: ["The lead writes a fine-grained plan with dependencies. Workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next.", "Much faster on a project that splits well; it uses more quota (one session per worker). It starts with 2 workers and adds one each time a worker delivers, up to the maximum you choose.", "With the eco mode, every worker reads and prints less. With the fast mode, only quick checks follow the merges. Applies from the next cycle."],
   ECO: ["Every lever but the model and the effort is set for the quota: the lead does the work itself instead of handing it to sub-agents (they use most of the quota), at most 4 images per cycle, shorter command outputs.", "The critic and the tester run once, at the delivery. Slower to polish, much lighter on the quota.", "With the parallel mode, the workers follow the same rules. Applies from the next cycle."],
-  FAST: ["Speed first: at each milestone, Claude runs only the quick check on what it just built, then moves on. No full check, no tester and no critic on the way.", "While the project is being built, it may be buggy, unpolished or badly finished: the defects seen on the way are noted, and fixed at once only when they block what comes next.", "At the end of the project, everything is verified again and fixed: the full check, the tester and the critic on the whole project, then every defect found, until nothing is left. The delivery is as finished as without this mode.", "The last milestone is therefore longer: it carries the verification of the whole project. The pilot refuses a delivery made without it.", "Switched off on the way: what was built in the fast mode is verified as a whole first. Applies from the next cycle."],
+  FAST: ["Speed first: at each milestone, Claude runs only the quick check on what it just built, then moves on. No full check, no tester and no critic on the way.", "While the project is being built, it may be buggy, unpolished or badly finished: the defects seen on the way are noted, and fixed at once only when they block what comes next.", "At the end of the project, everything is verified again and fixed: the full check, the tester and the critic on the whole project, then every defect found, until nothing is left. The delivery is as finished as without this mode.", "The last milestone is therefore longer: it carries the verification of the whole project. The pilot refuses a delivery made without it.", "With automation (Development or automation, above), nothing is fixed: the final verification completes the report.", "Switched off on the way: what was built in the fast mode is verified as a whole first. Applies from the next cycle."],
 };
 const boutonMode = (cle) => `<button type="button" class="chat-info" data-detail-mode="${cle}" title="${h(t("What this mode does"))}" aria-label="${h(t("What this mode does"))}">i</button>`;
 function detailMode(cle) {
@@ -1532,20 +1533,26 @@ function detailMode(cle) {
 // carte (M258): the mission card's version, the three modes with one fixed line each, no framing nor time limit
 function blocMode(m, carte) {
   etat.modeMax = m.parallele_max;
+  const auto = !!m.automatisation;
   const ligne = (id, cle, actif, court) => `<div class="ligne m0 mode-suite">
     <label class="interrupteur m0"><input type="checkbox" id="${id}" ${actif ? "checked" : ""}><span><b>${t(NOMS_MODES[cle])}</b></span></label>${boutonMode(cle)}
     <span class="muet petit">${court}</span>`;
   return `<div class="bloc mode-ligne"><div class="mode-grille">
     <h2 class="m0">${t("Working mode")}</h2>
+    <div class="ligne m0 mode-suite">
+    <span class="petit"><b>${t(NOMS_MODES.GENRE)}</b>${boutonMode("GENRE")}</span>
+    <span class="muet petit">${auto ? t("tasks on what exists and a report of everything wrong; nothing is fixed") : t("Claude builds or changes the project and fixes what it finds")}</span>
+    <span class="espace"></span><div class="choix m0">${[["dev", "Development"], ["auto", "Automation"]].map(([g, l]) => `<button type="button" data-type-projet="${g}" class="${(g === "auto") === auto ? "actif" : ""}" aria-pressed="${(g === "auto") === auto}">${t(l)}</button>`).join("")}</div>
+    </div>
     ${ligne("md-parallele", "PARALLEL", m.parallele, m.parallele || carte ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota"))}
     ${m.parallele ? `<span class="espace"></span><span class="petit" title="${h(t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle."))}">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}">${n}</button>`).join("")}</div>` : ""}
     </div>
     ${ligne("md-eco", "ECO", m.eco, m.eco && !carte ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible"))}
     </div>
     ${m.eco && !carte ? `<p class="muet petit m0 mode-suite">${t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")}</p>` : ""}
-    ${ligne("md-rapide", "FAST", m.rapide, m.rapide && !carte ? t("speed first: quick checks at each milestone, everything verified and fixed at the end") : t("builds as fast as possible; everything is verified and fixed at the end"))}
+    ${ligne("md-rapide", "FAST", m.rapide, auto ? t("as fast as possible; the report is completed at the end, nothing is fixed") : m.rapide && !carte ? t("speed first: quick checks at each milestone, everything verified and fixed at the end") : t("builds as fast as possible; everything is verified and fixed at the end"))}
     </div>
-    ${m.rapide ? `<p class="attention petit m0 mode-suite">${t("Until the end, the project may be buggy or badly finished. The last milestone is longer: it verifies and fixes the whole project.")}</p>` : ""}
+    ${m.rapide && !auto ? `<p class="attention petit m0 mode-suite">${t("Until the end, the project may be buggy or badly finished. The last milestone is longer: it verifies and fixes the whole project.")}</p>` : ""}
     ${carte ? "" : `<p class="muet petit m0 mode-suite">${t("The three modes add up: switch on the ones you want.")}</p>
     <div class="ligne m0 mode-suite">
     <span class="petit"><b>${t("Longest framing")}</b>${boutonDetail("FRAMING_MAX_MIN")}</span>
@@ -1588,7 +1595,7 @@ function choixModeleProjet(m, cle) {
 // out stays as it is. On New project nothing is sent yet: the choice waits in etat.npMode for the creation.
 async function changerMode(changement, de) {
   const z = (de && de.closest(".mode-ligne")) || $("#page"), coche = (id) => z.querySelector("#md-" + id).checked;
-  const corps = { parallele: coche("parallele"), parallele_max: maxModeActif(z), eco: coche("eco"), rapide: coche("rapide"), ...changement };
+  const corps = { parallele: coche("parallele"), parallele_max: maxModeActif(z), eco: coche("eco"), rapide: coche("rapide"), automatisation: !!z.querySelector(".mode-ligne button.actif[data-type-projet='auto']"), ...changement };
   if (z.closest("#nm-mode") && nm.f) { // the New mission form: kept with the form, sent at Launch
     nm.f.modes = { ...nm.f.modes, ...corps };
     z.closest("#nm-mode").innerHTML = blocMode({ cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...nm.f.modes }, true);
@@ -8783,6 +8790,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
   const pageMode = page === "projet" || (page === "nouveau" && etat.npMode) || $("#nm-mode");
   if (b.dataset.max && pageMode) return changerMode({ parallele_max: Number(b.dataset.max) }, b);
+  if (b.dataset.typeProjet && pageMode) return changerMode({ automatisation: b.dataset.typeProjet === "auto" }, b);
   if (b.dataset.cadrage !== undefined && pageMode) return changerMode({ cadrage_max: Number(b.dataset.cadrage) }, b);
   if (b.dataset.dureeMax !== undefined && pageMode) return changerMode({ duree_max: Number(b.dataset.dureeMax) }, b);
   if (b.dataset.detailReglage) return detailReglage(b.dataset.detailReglage);
@@ -8825,7 +8833,7 @@ $("#page").addEventListener("click", async (ev) => {
         // the settings chosen beside the form, when they differ from the defaults
         const md = etat.npMode; etat.npMode = null;
         const mdModeles = Object.fromEntries(Object.entries((md && md.modeles) || {}).filter(([, v]) => v));
-        if (md && (md.parallele || md.eco || md.rapide || md.cadrage_max || md.duree_max !== -1 || Object.keys(mdModeles).length)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max, modeles: mdModeles }).catch((e) => toast(e.message, "erreur"));
+        if (md && (md.parallele || md.eco || md.rapide || md.automatisation || md.cadrage_max || md.duree_max !== -1 || Object.keys(mdModeles).length)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, automatisation: !!md.automatisation, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max, modeles: mdModeles }).catch((e) => toast(e.message, "erreur"));
         // the sign-in window opens (the link shows under Manage), or, with this computer connected, linked at once
         if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); if (rl && rl.cree) toast(t("Private repository created and linked: {0}", [rl.cree]), "ok"); }
         await rafraichir(); location.hash = "#suivi";

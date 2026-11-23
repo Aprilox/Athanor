@@ -203,6 +203,9 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 	if p.eco {
 		consignes += consignesEcoOuvrier
 	}
+	if p.automatisation {
+		consignes += consignesAutomatisationPilote
+	}
 	if fRelais := filepath.Join(p.prive, "relais-"+ident+".md"); tailleFichierPilote(fRelais) > 0 {
 		consignes += "\n" + lireTexteBrut(fRelais)
 	}
@@ -816,6 +819,9 @@ func (p *pilote) cycleParallele(prefixe, template string) int {
 	eco := ""
 	if p.eco {
 		eco = consignesEcoPilote
+	}
+	if p.automatisation {
+		eco += consignesAutomatisationPilote
 	}
 	consignes := strings.TrimRight(lireTexteBrut(p.consignesBaseParallele())+consignesFusionParallele(joindre(fusionnes), joindre(aFusionner), joindre(echoues), p.rapide)+ponytail+eco, "\r\n")
 	args := []string{"-p", but, "--permission-mode", "bypassPermissions", "--settings", p.reglages, "--permission-prompts", "none", "--output-format", "stream-json", "--verbose"}

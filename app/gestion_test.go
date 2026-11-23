@@ -282,6 +282,16 @@ func TestModes(t *testing.T) {
 	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":false}`); !strings.Contains(texteRep(v), "Parallel mode off") || pa.LireMode().Parallele {
 		t.Fatalf("parallel off: %v", v)
 	}
+	// automation: saved, kept by a page that does not send it, then back to development
+	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":false,"automatisation":true}`); !strings.Contains(texteRep(v), "It fixes nothing") || !pa.modeActif("AUTOMATION") || !pa.LireMode().Automatisation {
+		t.Fatalf("automation on: %v\n%s", v, env())
+	}
+	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":true}`); !strings.Contains(texteRep(v), "Eco mode on") || !pa.modeActif("AUTOMATION") {
+		t.Fatalf("automation not sent: %v\n%s", v, env())
+	}
+	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":true,"automatisation":false}`); !strings.Contains(texteRep(v), "Development: from the next cycle") || pa.modeActif("AUTOMATION") {
+		t.Fatalf("development back: %v\n%s", v, env())
+	}
 	// New project: the defaults, with no project named (and with none at all)
 	if m := appelSur("GET", "/api/mode?defaut=1", ""); m["parallele"] != false || m["eco"] != false || m["rapide"] != false || m["parallele_max"] != float64(3) || m["cadrage_global"] != float64(25) {
 		t.Fatalf("defaults: %v", m)

@@ -445,10 +445,12 @@ case "${1:-}" in
 esac
 prompt_txt=""
 prompt_file=""
+but=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --append-system-prompt-file) prompt_file="$2"; shift 2 ;;
     --append-system-prompt) prompt_txt="$2"; shift 2 ;;
+    -p) but="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -458,6 +460,11 @@ n=0
 [ -f "$ETAT/appel_test_n" ] && n=$(cat "$ETAT/appel_test_n")
 n=$(( n + 1 ))
 echo "$n" > "$ETAT/appel_test_n"
+auto=non
+printf '%s' "$prompt_txt" | grep -q "## Automation (the kind of this project)" && auto=oui
+goal=generic
+case "$but" in "/goal Milestone M1 of "*) goal=M1 ;; esac
+echo "$n $auto $goal" >> "$ETAT/auto_vu"
 rapide=non
 printf '%s' "$prompt_txt" | grep -q "## Fast mode (active for this project)" && rapide=oui
 eco=non
@@ -890,9 +897,10 @@ func TestBancPilote(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
 		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
 		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
-		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("ECO=1\nFAST=1\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("ECO=1\nFAST=1\nAUTOMATION=1\n"), 0o644)
 		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
 		vu, _ := os.ReadFile(filepath.Join(projet, ".athanor", "rapide_vu"))
+		autoVu, _ := os.ReadFile(filepath.Join(projet, ".athanor", "auto_vu"))
 		p := Projet{Nom: "test", Dossier: projet}
 		etat, _ := p.LireEtat()
 		echec := false
@@ -905,18 +913,21 @@ func TestBancPilote(t *testing.T) {
 		}
 		// call: fast rules, their eco line, verification owed, debt file, state of the final report
 		verifier(strings.TrimSpace(string(vu)) == "1 oui oui non oui aucun\n2 non non oui oui aucun\n3 non non oui oui STATUS: REOPENED", "what Claude received: %q", vu)
+		// automation: its rules in every cycle; the goal names M1 while it is unticked (butJalonSerie), then the
+		// generic one once everything is ticked
+		verifier(strings.TrimSpace(string(autoVu)) == "1 oui M1\n2 oui M1\n3 oui generic", "automation rules and goal: %q", autoVu)
 		var opts []string
 		for _, st := range p.LireStats() {
 			opts = append(opts, st.Options)
 		}
-		verifier(strings.Join(opts, "|") == "ponytail,eco,fast|ponytail,eco|ponytail,eco", "stats options: %q", opts)
-		verifier(strings.Contains(sortie, "Fast mode on") && strings.Contains(sortie, "Fast mode off"), "fast messages in the pilot's log")
+		verifier(strings.Join(opts, "|") == "ponytail,eco,fast,automation|ponytail,eco,automation|ponytail,eco,automation", "stats options: %q", opts)
+		verifier(strings.Contains(sortie, "Fast mode on") && strings.Contains(sortie, "Fast mode off") && strings.Count(sortie, "Automation: Claude carries out") == 1, "fast and automation messages in the pilot's log")
 		verifier(strings.Count(sortie, "Delivery reopened: what was built in the fast mode") == 1, "the delivery without the verification is reopened once")
 		verifier(strings.HasPrefix(etat.Etat, "DONE") && projetLivre(p), "final state: %+v", etat)
 		verifier(!fichierRegulierPilote(filepath.Join(p.Atelier(), detteRapide)), "the debt file is gone")
 		// the pilot tells the app what it read (reglages_pris.go): the modes of its last cycle (the fast mode
 		// switched off since the first one), the tool's settings of its start
-		verifier(etat.Modes == "parallel=0 max=- eco=1 fast=0" && etat.Reglages == empreinteReglagesKit(kit), "what the pilot says it read: modes %q, settings %q (the kit's: %q)", etat.Modes, etat.Reglages, empreinteReglagesKit(kit))
+		verifier(etat.Modes == "parallel=0 max=- eco=1 fast=0 automation=1" && etat.Reglages == empreinteReglagesKit(kit), "what the pilot says it read: modes %q, settings %q (the kit's: %q)", etat.Modes, etat.Reglages, empreinteReglagesKit(kit))
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}

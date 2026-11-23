@@ -31,6 +31,8 @@ type ModesCarte struct {
 	Parallele bool `json:"parallele"`
 	Eco       bool `json:"eco"`
 	Rapide    bool `json:"rapide"`
+	// the automation kind (as POST /api/mode)
+	Automatisation bool `json:"automatisation,omitempty"`
 	// as POST /api/mode: workers at most (0: 3), framing time box in minutes, work time limit in hours (nil: Settings)
 	ParalleleMax int  `json:"parallele_max,omitempty"`
 	CadrageMax   *int `json:"cadrage_max,omitempty"`

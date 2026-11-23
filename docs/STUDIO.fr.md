@@ -9,6 +9,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | | |
 |---|---|
 | **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
+| **Développement ou automatisation** | Un choix par projet. Développement (le cas habituel) : Claude construit ou modifie un jeu, un site, une application ou un outil et corrige ce qu'il trouve. Automatisation : Claude réalise des tâches sur ce qui existe déjà (utiliser un site comme ses clients et son équipe, le tester, analyser, saisir ou déplacer des données) et signale dans un rapport tout ce qui ne va pas, sans rien corriger, en mode fast aussi. |
 | **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
 | **Mode éco** | Un interrupteur par projet, quand le quota compte plus que la vitesse : le chef fait le travail lui-même au lieu de le confier à des sous-agents, une seule revue à la livraison, 4 images au plus par cycle, des sorties de commandes plus courtes. Le modèle et l'effort restent tels que vous les avez réglés. |
 | **Mode fast** | Un interrupteur par projet, quand c'est le temps de construction qui compte le plus : des vérifications rapides seulement à chaque jalon et aucune revue en cours de route ; la vérification complète, le testeur, le critique et toutes les corrections viennent une seule fois, dans une vérification finale que le pilote impose avant la livraison. Les trois modes se cumulent. |
@@ -52,6 +53,19 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 
 **Les gros projets, par étapes.** Une demande trop grande pour 25 jalons n'est ni tassée en jalons géants ni réduite : le cadrage la découpe en étapes, autant qu'il en faut, chacune complète et testée à sa fin. Il ne détaille que la première ; chaque étape suivante tient sur une ligne du plan (`- [ ] S2: Stage 2/5 — …`). Quand le pilote y arrive, le `tester` puis le `critic` passent sur ce qui est fait, et le chef détaille l'étape en vrais jalons, avec le code des étapes précédentes sous les yeux. La finition et la livraison viennent à la dernière étape. Le Suivi et *Tous les projets* montrent l'étape en cours (« Étape 2/5 »). En mode parallèle, une ligne d'étape n'est jamais confiée à un ouvrier : le chef la détaille lui-même ; en mode éco, la revue n'a lieu qu'à la livraison.
 
+### Développement ou automatisation
+
+*Gérer → Mode de travail → Développement ou automatisation*, par projet, ou dès la création du projet ; le **i** à côté explique la différence.
+
+- **Développement** (le cas habituel) : Claude construit un jeu, un site, une application ou un outil, ou en modifie un, jalon par jalon, et corrige ce qu'il trouve, en cours de route ou à la fin.
+- **Automatisation** : Claude réalise des tâches sur ce qui existe déjà : utiliser un site ou une application comme le feraient ses clients et son équipe, le tester, analyser, saisir ou déplacer des données, lancer une routine. Chaque jalon est une tâche de votre demande, pas une phase d'un produit (ni squelette, ni finition, ni `deliverable/`).
+  - **Rien n'est corrigé** : aucun code, aucune configuration et aucune donnée modifiés pour réparer ce qu'il trouve, sauf si votre demande réclame ce changement.
+  - **Le rapport est le livrable** : celui que nomme votre demande, ou `REPORT.md` à la racine du projet, complété après chaque tâche (gravité, endroit, étapes pour le revoir, ce qui était attendu, ce qui s'est passé). Chaque tâche se termine par un commit du rapport.
+  - **Tout remettre comme avant** : quand votre demande le dit, Claude sauvegarde ce qu'il va modifier (un dump de la base, une copie des fichiers) avant la première tâche et le restaure à la fin, comptes de test et commandes compris.
+  - **Avec le mode fast**, la vérification finale ne corrige rien non plus : elle complète le rapport. Les modes éco et parallèle fonctionnent comme d'habitude.
+
+Le choix s'applique dès le prochain cycle ; dans un terminal, le Suivi affiche *automatisation* pendant un cycle.
+
 ### Mode parallèle
 
 *Gérer → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers au maximum. Les ouvriers tournent sur `WORKER_MODEL` (Sonnet par défaut) : une fiche de jalon bien écrite est du travail d'exécution, le chef garde son modèle pour le plan et les fusions.
@@ -87,6 +101,7 @@ Le **modèle et l'effort de réflexion ne sont pas touchés** : ils restent tels
 - **Aucune revue en cours de route.** `tester` et `critic` ne passent ni après la tranche complète, ni en fin d'étape, ni au polish.
 - **Les défauts sont notés, pas poursuivis.** Une ligne dans `BUGS.md`, corrigée tout de suite seulement si elle bloque la suite. **Jusqu'à la fin, le projet peut être bugué, mal fini ou avec des problèmes de finition.**
 - **Tout est vérifié et corrigé à la fin.** Avant la livraison vient la vérification finale : la vérification complète jusqu'à ce qu'elle passe, `tester` puis `critic` sur tout le projet, **chaque** remarque corrigée (les petites aussi), la vérification complète à nouveau et un second passage du testeur, jusqu'à ce qu'il ne reste rien. La livraison est aussi finie que sans ce mode. Le dernier jalon est plus long, puisqu'il porte la vérification de tout le projet.
+- **En automatisation, rien n'est corrigé** (voir *Développement ou automatisation*) : la vérification finale complète le rapport à la place.
 - **Le pilote l'impose.** Un cycle en mode fast laisse `.athanor/FAST_DEBT` ; Claude ne le supprime qu'une fois la vérification finale terminée. Une livraison faite tant que ce fichier existe est rouverte (trois fois au plus par lancement ; ensuite le pilote s'arrête et le dit).
 - **Désactivé en cours de route** : ce qui a été construit en mode fast est d'abord vérifié en entier (à la livraison en mode éco, comme son unique revue), puis le travail reprend comme d'habitude.
 

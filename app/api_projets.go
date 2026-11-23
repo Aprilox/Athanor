@@ -144,9 +144,10 @@ type EtatVue struct {
 	Relais      *RelaisJalon          `json:"relais,omitempty"` // the dev deployment after the last milestone (M136)
 	// its work on its servers, step by step, beside its code milestones (nil without a server)
 	JalonsDeploiement []JalonDeploiement `json:"jalons_deploiement,omitempty"`
-	Eco               bool               `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
-	Rapide            bool               `json:"rapide,omitempty"` // the project's fast mode (.athanor/.env FAST=1)
-	Gains             *GainsVue          `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
+	Eco               bool               `json:"eco,omitempty"`            // the project's eco mode (.athanor/.env ECO=1)
+	Rapide            bool               `json:"rapide,omitempty"`         // the project's fast mode (.athanor/.env FAST=1)
+	Automatisation    bool               `json:"automatisation,omitempty"` // the automation kind (.athanor/.env AUTOMATION=1)
+	Gains             *GainsVue          `json:"gains,omitempty"`          // the savings measured on the project's cycles (gains.go)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
@@ -266,6 +267,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Gains = calculerGains(vue.Stats, ponytailDansEnv(kit.Env()))
 		vue.Eco = p.EcoActif()
 		vue.Rapide = p.modeActif("FAST")
+		vue.Automatisation = p.modeActif("AUTOMATION")
 		if b, err := lireAtelier(p, "github.json", 64<<10); err == nil {
 			var g SuiviGitHub
 			if json.Unmarshal(b, &g) == nil {
@@ -825,6 +827,8 @@ type ModeVue struct {
 	ParalleleMax int  `json:"parallele_max"`
 	Eco          bool `json:"eco"`    // the eco mode: the quota first
 	Rapide       bool `json:"rapide"` // the fast mode: quick checks only, the whole verification at the end
+	// the kind: automation (tasks carried out on what exists, findings reported, nothing fixed), else development
+	Automatisation bool `json:"automatisation"`
 	// the project's own framing time box in minutes (nil, or 0 when written: the global FRAMING_MAX_MIN);
 	// absent from a POST, it is left as it is (the terminal interface does not send it)
 	CadrageMax    *int `json:"cadrage_max,omitempty"`
@@ -881,6 +885,8 @@ func (p Projet) LireMode() ModeVue {
 			m.Eco = l.Valeur == "1"
 		case "FAST":
 			m.Rapide = l.Valeur == "1"
+		case "AUTOMATION":
+			m.Automatisation = l.Valeur == "1"
 		case "PARALLEL_MAX":
 			if n, err := strconv.Atoi(l.Valeur); err == nil && n >= 2 && n <= 10 {
 				m.ParalleleMax = n
@@ -944,7 +950,7 @@ func (p Projet) ecrireMode(m ModeVue) error {
 	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
 		m.ParalleleMax = 3
 	}
-	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0"}
+	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0", "AUTOMATION": "0"}
 	if m.Parallele {
 		v["PARALLEL"] = "1"
 	}
@@ -953,6 +959,9 @@ func (p Projet) ecrireMode(m ModeVue) error {
 	}
 	if m.Rapide {
 		v["FAST"] = "1"
+	}
+	if m.Automatisation {
+		v["AUTOMATION"] = "1"
 	}
 	if m.CadrageMax != nil {
 		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
@@ -991,10 +1000,11 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// "rapide" absent (a page loaded before the fast mode existed, still open): that mode stays as it is
+	// "rapide" or "automatisation" absent (a page loaded before that mode existed, still open): it stays as it is
 	var c struct {
 		ModeVue
-		Rapide *bool `json:"rapide"`
+		Rapide         *bool `json:"rapide"`
+		Automatisation *bool `json:"automatisation"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -1006,6 +1016,10 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if c.Rapide != nil {
 		m.Rapide = *c.Rapide
 	}
+	m.Automatisation = avant.Automatisation
+	if c.Automatisation != nil {
+		m.Automatisation = *c.Automatisation
+	}
 	if err := p.ecrireMode(m); err != nil {
 		code := http.StatusInternalServerError
 		if _, ok := err.(erreurEntree); ok {
@@ -1015,7 +1029,7 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// the message tells what this call changed (the modes are independent switches)
-	memesModes := m.Parallele == avant.Parallele && m.Eco == avant.Eco && m.Rapide == avant.Rapide
+	memesModes := m.Parallele == avant.Parallele && m.Eco == avant.Eco && m.Rapide == avant.Rapide && m.Automatisation == avant.Automatisation
 	switch {
 	case len(m.Modeles) > 0 && memesModes:
 		s.msg(w, "Models saved for this project: a running pilot uses them from its next cycle.")
@@ -1023,6 +1037,10 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		s.msg(w, "Work time limit saved for this project: a running pilot applies it before its next cycle.")
 	case m.CadrageMax != nil && memesModes:
 		s.msg(w, "Framing time box saved: it applies to this project's next framing.")
+	case m.Automatisation && !avant.Automatisation:
+		s.msg(w, "Automation: from the next cycle, Claude carries out the request's tasks and writes what it finds in a report. It fixes nothing.")
+	case avant.Automatisation && !m.Automatisation:
+		s.msg(w, "Development: from the next cycle, Claude builds the project and fixes what it finds, as usual.")
 	case m.Rapide && !avant.Rapide:
 		s.msg(w, "Fast mode on: it applies from the next cycle. The project may be buggy or unpolished on the way; everything is verified and fixed before the delivery.")
 	case avant.Rapide && !m.Rapide:

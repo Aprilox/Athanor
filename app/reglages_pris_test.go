@@ -29,6 +29,7 @@ func TestEmpreintesReglages(t *testing.T) {
 	for texte, attendu := range map[string]string{
 		"":                               "parallel=0 max=- eco=0 fast=0",
 		"ECO=1\nFAST=1\n":                "parallel=0 max=- eco=1 fast=1",
+		"AUTOMATION=1\n":                 "parallel=0 max=- eco=0 fast=0 automation=1",
 		"PARALLEL=1\r\nPARALLEL_MAX=6\n": "parallel=1 max=6 eco=0 fast=0",
 		"PARALLELE=1\nPARALLELE_MAX=x\n": "parallel=1 max=3 eco=0 fast=0", // the old names, an invalid number
 		"PARALLEL=0\nPARALLEL_MAX=8\n":   "parallel=0 max=- eco=0 fast=0", // the workers only count with the mode

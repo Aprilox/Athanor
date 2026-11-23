@@ -98,6 +98,8 @@ type pilote struct {
 	ecoAnnonce         string // "1"/"0": the eco state last logged
 	rapide             bool   // the fast mode (FAST=1 in .athanor/.env): quick checks only, the whole verification at the end
 	rapideAnnonce      string // "1"/"0": the fast state last logged
+	automatisation     bool   // the automation kind (AUTOMATION=1 in .athanor/.env): tasks and a report, nothing fixed
+	automatisationVue  string // "1"/"0": the kind last logged
 	refusRapide        int    // deliveries reopened by this run because the fast mode's verification was owed
 	// what this pilot read, told to the app in STATE.json (reglages_pris.go): the tool's settings at its start,
 	// the project's working modes at the start of its cycle

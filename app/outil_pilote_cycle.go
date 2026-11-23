@@ -1464,7 +1464,7 @@ func (p *pilote) lireModeParallele() {
 	// what this cycle runs with, from the very bytes parsed below; the models from the ones applied at the
 	// start of the cycle (appliquerModelesProjet)
 	p.modesLus = modesBase(string(b)) + suffixeModeles(p.modelesLus)
-	parStr, maxStr, ecoStr, rapideStr := "0", "3", "0", "0"
+	parStr, maxStr, ecoStr, rapideStr, autoStr := "0", "3", "0", "0", "0"
 	for _, l := range strings.Split(string(b), "\n") {
 		l = strings.TrimSuffix(l, "\r")
 		switch {
@@ -1472,6 +1472,8 @@ func (p *pilote) lireModeParallele() {
 			ecoStr = l[len("ECO="):]
 		case strings.HasPrefix(l, "FAST="):
 			rapideStr = l[len("FAST="):]
+		case strings.HasPrefix(l, "AUTOMATION="):
+			autoStr = l[len("AUTOMATION="):]
 		case strings.HasPrefix(l, "PARALLEL="):
 			parStr = l[len("PARALLEL="):]
 		case strings.HasPrefix(l, "PARALLELE="):
@@ -1502,6 +1504,15 @@ func (p *pilote) lireModeParallele() {
 			p.log("Fast mode off: back to the usual way of working. What was built in the fast mode is verified first (.athanor/FAST_DEBT).")
 		}
 		p.rapideAnnonce = e
+	}
+	p.automatisation = autoStr == "1"
+	if e := map[bool]string{true: "1", false: "0"}[p.automatisation]; e != p.automatisationVue {
+		if p.automatisation {
+			p.log("Automation: Claude carries out the request's tasks and writes what it finds in a report; it fixes nothing, in the fast mode too.")
+		} else if p.automatisationVue != "" {
+			p.log("Development: Claude builds the project and fixes what it finds, as usual.")
+		}
+		p.automatisationVue = e
 	}
 	if p.jalonPC != nil {
 		// several computers: each one builds one milestone at a time (the others are the parallel workers)
@@ -1807,6 +1818,25 @@ The user switched on the **fast mode**: in this project speed comes first until 
 
 // consignesRapideEco: with the eco mode too, the final verification is the eco mode's single review.
 const consignesRapideEco = "- **With the eco mode:** the final verification is the eco mode's single review: `tester` and `critic` once each, no second pass; you still fix every finding yourself.\n"
+
+// consignesAutomatisationPilote: the automation kind (AUTOMATION=1 in .athanor/.env): the request's tasks carried
+// out on what exists, every finding reported, nothing fixed. Added last to every serial cycle, the framing
+// included (its plan is one of tasks), and to the parallel workers and their verification.
+const consignesAutomatisationPilote = `
+
+## Automation (the kind of this project)
+
+The user chose **automation**: this project carries out the tasks of ` + "`.athanor/REQUEST.md`" + ` on what already exists (use a site or an application as its users would, test it, analyse, fill in or move data, run a routine…); it does not build a product. These rules come before every other rule of these instructions, the phases and the fast and eco modes included, wherever they differ.
+
+- **Nothing is fixed.** Never change the code, the configuration or the data of what you work on to repair what you find, even an obvious bug, unless the request asks for that change by name. Everything that goes wrong, is buggy, does not work as it should or is hard to understand goes into the report.
+- **The report is the deliverable**: the one the request names (its file, its place, its form); with none named, ` + "`REPORT.md`" + ` at the root of the project, in the request's language. Each finding says how serious it is, where, the steps to see it again, what was expected and what happened. Complete it after every task, never only at the end.
+- **A milestone is a task.** The framing plans the request's tasks in the order they need (one task, or a few related ones a session can carry out, per milestone), not product phases: no skeleton, no complete slice, no polish, no ` + "`deliverable/`" + `, no ` + "`TEST_GUIDE.md`" + `. ` + "`.athanor/docs/REQUIREMENTS.md`" + ` lists the tasks and what the report must say, ` + "`ARCHITECTURE.md`" + ` what exists and how the tasks reach it (addresses, accounts, tools). The last milestone rereads the whole report (complete, clear, nothing found left out), puts back what the request asks to put back, then writes ` + "`.athanor/FINAL_REPORT.md`" + ` with ` + "`STATUS: DONE`" + `.
+- **The check** (` + "`.athanor/check.sh`" + `, with its ` + "`quick`" + ` mode) checks only what the tasks need: what you work on answers, the tools are there, the report exists. Never a build or a test suite of the project unless the request asks for one.
+- **Each task ends with a commit** (` + "`Mn: …`" + `) of the report and of what the request asked the task to change, nothing else: the pilot counts a task as done by its commit.
+- **What you create or change to carry out the tasks** (test accounts, orders, data, settings) is noted in ` + "`.athanor/LOG.md`" + ` as you go. When the request asks to put things back as they were, take a backup before the first task changes anything (a database dump, a copy of the files, into ` + "`.athanor/`" + `), restore it in the last milestone, then check that nothing of the tasks is left.
+- ` + "`tester`" + ` and ` + "`critic`" + ` run only if the request asks for them; a sub-agent may carry out tasks beside you (several users simulated at once).
+- **With the fast mode,** its final verification fixes nothing either: the full check, then every open line of ` + "`.athanor/BUGS.md`" + ` moved into the report and the whole report reread; then ` + "`.athanor/FAST_DEBT`" + ` is deleted.
+`
 
 // consignesDetteRapide: the fast mode was switched off (or the project came from a fast run) while the whole
 // verification is owed: it is done before anything else, or at the delivery in the eco mode (its single review).
@@ -2769,6 +2799,9 @@ func lancerPilote(args []string) int {
 		if p.rapide && !cadrage {
 			opts = append(opts, "fast")
 		}
+		if p.automatisation {
+			opts = append(opts, "automation")
+		}
 		if p.rtkBin != "" {
 			opts = append(opts, "rtk")
 		}
@@ -2951,6 +2984,12 @@ func lancerPilote(args []string) int {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.rapide.md")
 			_ = os.WriteFile(consignesCycle, append(b1, []byte(ajout)...), 0o644)
+		}
+		// automation: its rules last of all, the framing included (its plan is one of tasks)
+		if p.automatisation && mode == "serie" {
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.automatisation.md")
+			_ = os.WriteFile(consignesCycle, append(b1, []byte(consignesAutomatisationPilote)...), 0o644)
 		}
 		if mode == "serie" {
 			texteConsignes, _ := os.ReadFile(consignesCycle)
