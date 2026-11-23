@@ -30,6 +30,21 @@ func TestAttenteQuotaPilote(t *testing.T) {
 	}
 }
 
+// TestButJalonSerie: the serial goal names the milestone that is next at the start, so ticking it ends the goal
+func TestButJalonSerie(t *testing.T) {
+	plan := []byte("# Plan\n- [x] M15 : Done\n- [ ] M16 : Fix the grid — Acceptance: ok\n- [ ] M17 : Next\n")
+	b := butJalonSerie(plan, false, 80, "")
+	if !strings.HasPrefix(b, "/goal Milestone M16 of ") || strings.Contains(b, "M17") || strings.Contains(b, "quick mode") {
+		t.Fatalf("goal not pinned to M16: %q", b)
+	}
+	if b := butJalonSerie([]byte("- [ ] M4.1: Sub\n"), true, 80, ""); !strings.HasPrefix(b, "/goal Milestone M4.1 of ") || !strings.Contains(b, "quick mode") {
+		t.Fatalf("sub-milestone or fast mode: %q", b)
+	}
+	if b := butJalonSerie([]byte("- [x] M1 : Done\n"), false, 80, ""); b != "" {
+		t.Fatalf("everything ticked: want the generic goal, got %q", b)
+	}
+}
+
 func TestLignesEnDirectPilote(t *testing.T) {
 	cas := []struct {
 		json string

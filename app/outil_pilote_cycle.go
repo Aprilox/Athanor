@@ -2798,6 +2798,12 @@ func lancerPilote(args []string) int {
 		butCycle := but
 		if j := p.jalonPC; j != nil && !cadrage && j.ID != jalonCadragePC && j.ID != jalonLivraisonPC {
 			butCycle = butJalonPC(*j, p.equipePC.pcs, p.maxTurnsPerCycle, p.phraseLangue)
+		} else if p.jalonPC == nil && !cadrage {
+			if pl, err := lireBorne(filepath.Join(p.etat, "PLAN.md"), 4<<20); err == nil {
+				if b := butJalonSerie(pl, p.rapide, p.maxTurnsPerCycle, p.phraseLangue); b != "" {
+					butCycle = b
+				}
+			}
 		}
 		consignesCycle := p.consignes
 		planSeul := false

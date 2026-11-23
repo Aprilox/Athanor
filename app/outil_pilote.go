@@ -1125,6 +1125,26 @@ func (p *pilote) butCadrage(fermeture bool, limiteMin string) string {
 	return fmt.Sprintf("/goal The framing is done according to the framing steps of your instructions: .athanor/PLAN.md exists, %s; .athanor/docs/REQUIREMENTS.md and .athanor/docs/ARCHITECTURE.md exist; .athanor/LOG.md has a new entry. No code, no installation, no demo content in this cycle.%s Or stop after %d turns. %s", formatJalonPilote, tb, p.maxTurnsPerCycle, p.phraseLangue)
 }
 
+// butJalonSerie: a serial cycle's goal, pinned to the milestone that is next when the cycle starts. "The next
+// unticked milestone" moved on as soon as Claude ticked one, and kept the session on the following one until
+// the pilot killed it. "" when the plan has no unticked milestone with an identifier (the generic goal then).
+func butJalonSerie(plan []byte, rapide bool, tours int, langue string) string {
+	m := reJalonOuvertPilote.FindSubmatch(plan)
+	if m == nil {
+		return ""
+	}
+	idm := reIdentJalon.FindStringSubmatch(string(m[1]))
+	if idm == nil {
+		return ""
+	}
+	id := idm[1] // as written in the plan ("M4.1", not identJalon's "M4_1"): Claude and the evaluator read it there
+	check := "bash .athanor/check.sh has been run"
+	if rapide {
+		check = "bash .athanor/check.sh has been run (its quick mode during the milestones, the full one in the final verification, as your fast-mode instructions say)"
+	}
+	return fmt.Sprintf("/goal Milestone %s of .athanor/PLAN.md is completed and verified according to your instructions: %s and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If %s waits for a task of the user (athanor todo list), the first unticked milestone after it that does not wait takes its place; if %s is split into smaller milestones, the first one left takes its place; if every unticked milestone waits for the user, the goal is reached once athanor todo wait has run. If .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved). One milestone only: once it is ticked and committed the goal is reached, and the next one is left to the next cycle. Or stop after %d turns. %s", id, check, id, id, tours, langue)
+}
+
 func (p *pilote) consignesCadrage(fermeture bool, limiteMin string) string {
 	if fermeture {
 		return "\n## This cycle: closing the framing\n\nThe framing cycle ended before the plan was written. Write `.athanor/PLAN.md` now, yourself, from `.athanor/REQUEST.md` and what is already in `.athanor/docs/`: each milestone one line starting with `- [ ] M1 : `. Do not read the attachments again, do not call any sub-agent, write no code. The missing details become milestones of the plan.\n"
