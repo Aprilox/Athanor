@@ -132,7 +132,7 @@ func TestMajCompat2xVers3(t *testing.T) {
 	if !strings.HasPrefix(versionAthanor, "3.") {
 		t.Fatalf("versionAthanor %s", versionAthanor)
 	}
-	for _, ancienne := range []string{"2.53.0", "2.52.1", "2.9.0", "2.24.29", "3.0.0", "3.0.1", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.1.7", "3.1.8", "3.1.9"} {
+	for _, ancienne := range []string{"2.53.0", "2.52.1", "2.9.0", "2.24.29", "3.0.0", "3.0.1", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.1.7", "3.1.8", "3.1.9", "3.1.10"} {
 		if !versionPlusRecente(versionAthanor, ancienne) || versionPlusRecente(ancienne, versionAthanor) {
 			t.Fatalf("%s not newer than %s", versionAthanor, ancienne)
 		}

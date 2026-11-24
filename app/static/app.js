@@ -9153,40 +9153,13 @@ async function rafraichir() {
       }
       if (etat.page === "chat") majChat(false);
       if (etat.page === "accueil") majHubChat(false);
-      if (etat.page === "distance") await majDistance();
-      // after "Connect to GitHub": the window is the user's; the blocks follow until the connection is there
-      if (etat.ghConnexionSuivi && Date.now() < etat.ghConnexionSuivi) {
-        const c = await majConnexionGH();
-        if (c && c.connecte) {
-          etat.ghConnexionSuivi = 0; toast(t("Connected to GitHub as {0}.", [c.login]), "ok");
-          if (etat.page === "projet") majGitHub();
-          // the new project's page keeps what was typed: only its notices change
-          document.querySelectorAll("[data-avis-connexion]").forEach((x) => { x.className = "ok petit"; x.innerHTML = ic("ok") + " " + t("Connected as {0}", [h(c.login)]); });
-          const rj = $("#rj-rejoindre"); if (rj) rj.disabled = false;
-        }
-      }
-      if (etat.ghAccesSuivi && Date.now() < etat.ghAccesSuivi) {
-        const c = await majConnexionGH();
-        if (c && c.acces_garde) { etat.ghAccesSuivi = 0; toast(t("This computer now creates your repositories without a window."), "ok"); }
-      }
       // the update's progress, in place (Settings › Options)
       const blocMaj = document.getElementById("bloc-version");
       if (blocMaj && etat.optionsVue) {
         const sig = JSON.stringify(v.maj || {});
         if (sig !== etat.majSig) { etat.majSig = sig; blocMaj.innerHTML = `<h2>${t("Version")}</h2>${rendreBlocMaj(etat.optionsVue)}`; }
       }
-      if ((etat.page === "serveurs" || etat.page === "serveur") && ++etat.srvEtatTic % 3 === 0) await majEtatServeurs();
-      if (etat.page === "serveur" && srv.tachesSig && !document.activeElement.matches("input, textarea, select") && ++etat.srvTic % 2 === 0) { // a task's states, live
-        const r = await api("serveurs/" + encodeURIComponent(srv.id || "") + "/taches").catch(() => null);
-        if (r && JSON.stringify(r) !== srv.tachesSig) rendrePage();
-      }
-      if ((etat.page === "pourvous" || etat.page === "approbations") && !document.activeElement.matches("input, textarea, select") && ++etat.pvTic % 4 === 0) {
-        const [r, ap] = await Promise.all([etat.page === "pourvous" ? api("pourvous").catch(() => null) : null, api("hub/approbations").catch(() => null)]); // M310d: the Approvals page follows its accords too
-        if ((r && JSON.stringify(r.taches || []) !== etat.pvSignature) || (ap && signatureAppr(ap) !== etat.apprSignature)) rendrePage();
-      }
       annoncerTaches(v);
-      // the checks and the output update in place: the page itself is never rebuilt under the user's typing
-      if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) await majSante();
     }
     etat.majRedemarre = !!(v.maj && v.maj.en_cours === "redemarrage");
   } catch (e) {
@@ -9203,6 +9176,38 @@ async function rafraichir() {
   }
 }
 
+// the open page's live follow-up, in a loop of its own: a slow /api/etat, journal or /api/hub (many projects,
+// servers) held it back for seconds, and a check, the tunnel or a server task seemed frozen until the page was left
+async function suivrePage() {
+  if (etat.page === "distance") await majDistance();
+  // after "Connect to GitHub": the window is the user's; the blocks follow until the connection is there
+  if (etat.ghConnexionSuivi && Date.now() < etat.ghConnexionSuivi) {
+    const c = await majConnexionGH();
+    if (c && c.connecte) {
+      etat.ghConnexionSuivi = 0; toast(t("Connected to GitHub as {0}.", [c.login]), "ok");
+      if (etat.page === "projet") majGitHub();
+      // the new project's page keeps what was typed: only its notices change
+      document.querySelectorAll("[data-avis-connexion]").forEach((x) => { x.className = "ok petit"; x.innerHTML = ic("ok") + " " + t("Connected as {0}", [h(c.login)]); });
+      const rj = $("#rj-rejoindre"); if (rj) rj.disabled = false;
+    }
+  }
+  if (etat.ghAccesSuivi && Date.now() < etat.ghAccesSuivi) {
+    const c = await majConnexionGH();
+    if (c && c.acces_garde) { etat.ghAccesSuivi = 0; toast(t("This computer now creates your repositories without a window."), "ok"); }
+  }
+  if ((etat.page === "serveurs" || etat.page === "serveur") && ++etat.srvEtatTic % 3 === 0) await majEtatServeurs();
+  if (etat.page === "serveur" && srv.tachesSig && !document.activeElement.matches("input, textarea, select") && ++etat.srvTic % 2 === 0) { // a task's states, live
+    const r = await api("serveurs/" + encodeURIComponent(srv.id || "") + "/taches").catch(() => null);
+    if (r && JSON.stringify(r) !== srv.tachesSig) rendrePage();
+  }
+  if ((etat.page === "pourvous" || etat.page === "approbations") && !document.activeElement.matches("input, textarea, select") && ++etat.pvTic % 4 === 0) {
+    const [r, ap] = await Promise.all([etat.page === "pourvous" ? api("pourvous").catch(() => null) : null, api("hub/approbations").catch(() => null)]); // M310d: the Approvals page follows its accords too
+    if ((r && JSON.stringify(r.taches || []) !== etat.pvSignature) || (ap && signatureAppr(ap) !== etat.apprSignature)) rendrePage();
+  }
+  // the checks and the output update in place: the page itself is never rebuilt under the user's typing
+  if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) await majSante();
+}
+
 (async () => {
   await rafraichir();
   const v = etat.vue || {};
@@ -9215,6 +9220,11 @@ async function rafraichir() {
     if (etat.rafraichit || (document.hidden && Date.now() - etat.rafraichiLe < 15000)) return;
     etat.rafraichit = true;
     try { await rafraichir(); } finally { etat.rafraichit = false; }
+  }, 1500);
+  setInterval(async () => {
+    if (etat.suitPage || document.hidden || etat.verrouille || etat.coupe || etat.nonAppaire) return;
+    etat.suitPage = true;
+    try { await suivrePage(); } catch (e) { /* Athanor out of reach: the shared refresh says it */ } finally { etat.suitPage = false; }
   }, 1500);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !etat.rafraichit) rafraichir(); });
 })();
