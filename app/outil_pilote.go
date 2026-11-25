@@ -928,6 +928,47 @@ func journalQuotaPilote(chemin string) bool {
 	return false
 }
 
+// cheminsProjetsPilote: a project folder as the app writes it (logs/projects.txt) → as this pilot reaches it (WSL:
+// wslpath once, not at every check)
+var cheminsProjetsPilote sync.Map
+
+// journauxQuotaCompte: the cycle logs of the app's other projects (logs/projects.txt) run on the connection this
+// pilot uses: with a list of connections, only the cycles noted on it (their logs/connexions.json); with a single
+// connection, all of them.
+func (p *pilote) journauxQuotaCompte() []string {
+	b, err := os.ReadFile(filepath.Join(p.kit, "logs", "projects.txt"))
+	if err != nil {
+		return nil
+	}
+	id, propres := p.connexionActuelle().ID, filepath.Clean(filepath.Join(p.etat, "logs"))
+	var out []string
+	for _, d := range strings.Split(string(b), "\n") {
+		if d = strings.TrimSpace(d); d == "" {
+			continue
+		}
+		natif, ok := cheminsProjetsPilote.Load(d)
+		if !ok {
+			natif = cheminNatifPilote(d)
+			cheminsProjetsPilote.Store(d, natif)
+		}
+		logs := filepath.Join(natif.(string), ".athanor", "logs")
+		if filepath.Clean(logs) == propres {
+			continue
+		}
+		cycles := map[string]string{}
+		if id != "" {
+			lireJSONFichier(fichierConnexionsCycles(logs), &cycles)
+		}
+		fs, _ := filepath.Glob(filepath.Join(logs, "cycle-*.jsonl"))
+		for _, f := range fs {
+			if id == "" || cycles[cleCycle(f)] == id {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
 func (p *pilote) seuilQuota() string {
 	regles := reglesQuotaProjet(p.projet, filepath.Join(p.kit, "logs", "quota-arret.json"))
 	if s := p.connexionActuelle().SeuilPropre; s > 0 { // the subscription's own limit: the next connection at it, any window
@@ -939,6 +980,9 @@ func (p *pilote) seuilQuota() string {
 		return ""
 	}
 	fs, _ := filepath.Glob(filepath.Join(p.etat, "logs", "*.jsonl"))
+	// the account's quota now: the newest report of any project on this connection, not this project's last one
+	// (stopped at 80 %, the window started again since: another project saw 2 %, this one must not stay blocked)
+	fs = append(fs, p.journauxQuotaCompte()...)
 	type j struct {
 		f string
 		t time.Time

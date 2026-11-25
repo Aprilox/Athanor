@@ -222,3 +222,41 @@ git add -A && git commit -qm "M1: built on the second subscription"
 printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
 exit 0
 `
+
+// The owner's case (3.2.0): a project stopped by its 70 % rule at 80 %; the 5-hour window started again since and
+// another project already saw 2 %: this one's pilot judges on the account's newest report, not on its own last one.
+// With a list of connections, only the other project's cycles noted on the same connection count.
+func TestSeuilQuotaCompte(t *testing.T) {
+	d := t.TempDir()
+	kit := filepath.Join(d, "kit")
+	ecrireFichier(t, filepath.Join(kit, "logs", "quota-arret.json"), `{"five_hour":{"seuil":70,"action":"apres"}}`, 0o644)
+	a, b := fauxProjet(t, d, "a", 2, 0), fauxProjet(t, d, "b", 2, 0)
+	evt := func(u float64) string {
+		return fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":%g,"resetsAt":%d}}}}`+"\n", u, time.Now().Unix()+3600)
+	}
+	ecrire := func(p Projet, nom, contenu string, age time.Duration) string {
+		f := filepath.Join(p.LogsDir(), nom)
+		ecrireFichier(t, f, contenu, 0o644)
+		_ = os.Chtimes(f, time.Now().Add(-age), time.Now().Add(-age))
+		return f
+	}
+	ecrire(a, "cycle-20261125-100000-0001.jsonl", evt(0.80), 2*time.Hour)
+	p := &pilote{kit: kit, projet: a.Dossier, etat: a.Atelier()}
+	if s := p.seuilQuota(); !strings.HasPrefix(s, "apres\t") {
+		t.Fatalf("its own report alone, 80 %% past 70 %%: %q", s)
+	}
+	fb := ecrire(b, "cycle-20261125-130000-0001.jsonl", evt(0.02), time.Minute)
+	ecrireFichier(t, filepath.Join(kit, "logs", "projects.txt"), a.Dossier+"\n"+b.Dossier+"\n", 0o644)
+	if s := p.seuilQuota(); s != "" {
+		t.Fatalf("the account at 2 %% now (another project's report): still blocked, %q", s)
+	}
+	p.connexion = connexionClaude{ID: "un", Mode: modeConnexionAbonnement, Jeton: "x"}
+	noterConnexionCycle(fb, "deux")
+	if s := p.seuilQuota(); !strings.HasPrefix(s, "apres\t") {
+		t.Fatalf("another connection's 2 %% is not this account's: %q", s)
+	}
+	noterConnexionCycle(fb, "un")
+	if s := p.seuilQuota(); s != "" {
+		t.Fatalf("the same connection's 2 %%: %q", s)
+	}
+}
