@@ -187,7 +187,10 @@ func noterDepense(kit, mode, id string, cout float64, projet, origine string) {
 		return
 	}
 	defer f.Close()
-	_, _ = fmt.Fprintf(f, "%d\t%s\t%s\t%s\t%s\t%s\n", time.Now().Unix(), propre(mode), strconv.FormatFloat(cout, 'f', 4, 64), propre(projet), propre(origine), propre(id))
+	if id != "" { // the connection's id after the five columns of before: a single connection writes the same line
+		id = "\t" + propre(id)
+	}
+	_, _ = fmt.Fprintf(f, "%d\t%s\t%s\t%s\t%s%s\n", time.Now().Unix(), propre(mode), strconv.FormatFloat(cout, 'f', 4, 64), propre(projet), propre(origine), id)
 }
 
 // depenseAPI: the dollars spent in API mode since depuis (Unix seconds), and how many runs.
