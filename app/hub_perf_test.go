@@ -111,6 +111,34 @@ func TestHubJalonsDuJour(t *testing.T) {
 	}
 }
 
+// TestHubActionProjetNonChoisi: a running project that is not the selected one shows what its lead does now on
+// Projects, Home and Missions: its log is read forward there (it stayed frozen until the project was opened).
+func TestHubActionProjetNonChoisi(t *testing.T) {
+	d := t.TempDir()
+	choisi, autre := fauxProjet(t, d, "choisi", 3, 1), fauxProjet(t, d, "autre", 3, 1)
+	s := nouveauServeur(Config{Kit: filepath.Join(d, "kit"), Projets: []Projet{choisi, autre}, ProjetActif: "choisi", Langue: "en"})
+	action := func(n int) string {
+		_ = os.WriteFile(filepath.Join(autre.Atelier(), "pilot.pid"), []byte("1\n"), 0o644)
+		f, err := os.OpenFile(filepath.Join(autre.LogsDir(), "cycle-20261125-1.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(f, `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t%d","name":"Bash","input":{"command":"ls","description":"step %d"}}]}}`+"\n", n, n)
+		_ = f.Close()
+		for _, e := range (moduleDev{}).Elements(s) {
+			if e.ID == "autre" {
+				return e.Action
+			}
+		}
+		return "no element"
+	}
+	for n := 1; n <= 2; n++ {
+		if a := action(n); !strings.Contains(a, fmt.Sprintf("step %d", n)) {
+			t.Fatalf("line %d of the log: the element says %q", n, a)
+		}
+	}
+}
+
 func TestHubLirePlanCache(t *testing.T) {
 	d := t.TempDir()
 	p := fauxProjet(t, d, "a", 5, 2)

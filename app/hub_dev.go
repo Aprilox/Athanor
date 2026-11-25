@@ -27,7 +27,7 @@ func (moduleDev) Pages() []PageModule {
 }
 
 // Elements: one per project not archived, its progress, its milestone in progress, what its pilot
-// does now (the team view of a log already open, never a file read for it) and why it needs the owner.
+// does now (activiteChef) and why it needs the owner.
 func (moduleDev) Elements(s *Serveur) []ElementHub {
 	var out []ElementHub
 	for _, pv := range s.vuesProjets("") {
@@ -42,15 +42,8 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 		switch {
 		case pv.Actif:
 			e.Etat, e.Activite = "actif", firstNonEmpty(pv.JalonTitre, pv.Jalon)
-			s.mu.Lock()
-			j := s.logs[pv.Nom]
-			s.mu.Unlock()
-			if j != nil {
-				for _, a := range j.Agents() {
-					if a.Genre == "chef" && a.Statut != "termine" {
-						e.Action = a.Activite
-					}
-				}
+			if p, ok := s.projetParNom(pv.Nom); ok {
+				e.Action = s.activiteChef(p)
 			}
 		case pv.Phase == "termine" || pv.Jalons > 0 && pv.Faits == pv.Jalons:
 			e.Etat = "termine"
@@ -69,6 +62,21 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 		out = append(out, e)
 	}
 	return append(out, s.elementsDevDistants()...)
+}
+
+// activiteChef: what the lead of p's running pilot does now. Its log is read forward first (only the new
+// lines): only the selected project's log moved on with the pages, so another running project's line on
+// Projects, Home and Missions stayed frozen until that project was opened.
+func (s *Serveur) activiteChef(p Projet) string {
+	j := s.journalDe(p)
+	j.Lire(1 << 62)
+	activite := ""
+	for _, a := range j.Agents() {
+		if a.Genre == "chef" && a.Statut != "termine" {
+			activite = a.Activite
+		}
+	}
+	return activite
 }
 
 // attenteDev: what a project waits for from the owner (besoinProjet), with the bell's texts.

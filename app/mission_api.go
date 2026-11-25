@@ -96,7 +96,7 @@ func (s *Serveur) voiesEnDirect(m Mission) Mission {
 }
 
 // avancementVoie: v's milestones done of p's plan, the title of milestone jalon in progress and, while its pilot
-// works, what the project lead does (the team view of a log already open, as the home's Studio block).
+// works, what the project lead does (activiteChef, as the home's Studio block).
 func (s *Serveur) avancementVoie(v *VoieMission, p Projet, jalon string) {
 	for _, j := range p.LirePlan() {
 		v.Total++
@@ -107,18 +107,8 @@ func (s *Serveur) avancementVoie(v *VoieMission, p Projet, jalon string) {
 			v.Titre = strings.TrimLeft(strings.TrimPrefix(j.Titre, j.ID), " :")
 		}
 	}
-	if v.Actuel != "travaille" {
-		return
-	}
-	s.mu.Lock()
-	l := s.logs[p.Nom]
-	s.mu.Unlock()
-	if l != nil {
-		for _, a := range l.Agents() {
-			if a.Genre == "chef" && a.Statut != "termine" {
-				v.Activite = a.Activite
-			}
-		}
+	if v.Actuel == "travaille" {
+		v.Activite = s.activiteChef(p)
 	}
 }
 

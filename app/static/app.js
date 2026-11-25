@@ -89,7 +89,7 @@ function boutonDefil(quoi) {
 // ----------------------------------------------------------------------------- state
 const etat = {
   pieces: {}, // files waiting to be attached, per form
-  pvTic: 0, srvEtatTic: 0, hubTic: 0, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
+  pvTic: 0, srvEtatTic: 0, hubTic: 0, suiviTic: 0, suivi: null, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
   pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
   apprForm: {}, // choices being made on an approval of For you (vault entry, variable; never the password)
   // page: none until naviguer() reads the address (no flash of another page at load)
@@ -105,9 +105,11 @@ function messageDe(r) {
   if (r.message_key) return t(r.message_key, r.args || []);
   return r.message || "";
 }
-async function api(chemin, methode = "GET", corps) {
+// projet: the project the call is for, the selected one by default; an action that waits before its call (Start's
+// GitHub check) gives the one it was clicked on, or another project chosen meanwhile would get it
+async function api(chemin, methode = "GET", corps, projet = etat.projet) {
   if (methode !== "GET") { etat.hubLu = 0; etat.ecritLe = Infinity; } // a change: the next lireHub() asks again; ecritLe: see rafraichir
-  if (etat.projet) chemin += (chemin.includes("?") ? "&" : "?") + "p=" + encodeURIComponent(etat.projet);
+  if (projet) chemin += (chemin.includes("?") ? "&" : "?") + "p=" + encodeURIComponent(projet);
   // Athanor stopped or out of reach: said in plain words, never the browser's "Failed to fetch" (M313b3)
   const r = await fetch("/api/" + chemin, {
     method: methode, headers: { "X-Athanor": CSRF, "Content-Type": "application/json" },
@@ -241,8 +243,8 @@ async function resultatLierCompte(r, corps) {
 }
 
 // working on one repository in turns (outil_github_recuperer.go): GitHub's work brought in, or only counted
-async function recupererGitHub(verifier) {
-  return api("github", "POST", { action: verifier ? "verifier" : "recuperer" }).catch((e) => { if (!verifier) toast(e.message, "erreur"); return null; });
+async function recupererGitHub(verifier, projet = etat.projet) {
+  return api("github", "POST", { action: verifier ? "verifier" : "recuperer" }, projet).catch((e) => { if (!verifier) toast(e.message, "erreur"); return null; });
 }
 // what bringing GitHub's work in did; true when the pilot can start after it
 function annoncerRecuperation(r) {
@@ -261,8 +263,8 @@ function annoncerRecuperation(r) {
 }
 // before a start: a project behind its repository (someone pushed meanwhile) asks first; GitHub slow or
 // unreachable: the start goes on (at most 25 s)
-async function avantDemarrageGitHub() {
-  const v = await Promise.race([recupererGitHub(true), new Promise((r) => setTimeout(() => r(null), 25000))]);
+async function avantDemarrageGitHub(projet) {
+  const v = await Promise.race([recupererGitHub(true, projet), new Promise((r) => setTimeout(() => r(null), 25000))]);
   if (!v || v.equipe || v.resultat !== "verifie" || !(v.derriere > 0)) return true;
   const quand = v.quand ? dateLisible(v.quand) : "";
   const c = await choisir((v.sans_lien ? t("GitHub's branch {0} has a history of its own, nothing in common with this project's: {1} commit(s), the last one “{2}” by {3}, {4}. Usually the README, licence or .gitignore GitHub adds when it creates the repository.", [v.branche || "main", v.derriere, v.sujet || "?", v.auteur || "?", quand])
@@ -273,7 +275,7 @@ async function avantDemarrageGitHub() {
     { titre: t("Not up to date with GitHub") });
   if (c === "ici") return true;
   if (c !== "recuperer") return false;
-  const r = v.sans_lien ? await api("github", "POST", { action: "integrer" }).catch((e) => { toast(e.message, "erreur"); return null; }) : await recupererGitHub();
+  const r = v.sans_lien ? await api("github", "POST", { action: "integrer" }, projet).catch((e) => { toast(e.message, "erreur"); return null; }) : await recupererGitHub(false, projet);
   return !!r && annoncerRecuperation(r);
 }
 // GitHub's branch has commits the project has not (a repository made on GitHub with a README, someone's
@@ -306,7 +308,7 @@ async function resoudreBrancheGitHub() {
 // Start: always there. When the tooling was not seen installed or the request is empty, the user is asked
 // first (install, open the check, or start anyway): nobody stays stuck on the first steps.
 async function demarrerPilote(b) {
-  const v = etat.vue || {};
+  const v = etat.vue || {}, projet = etat.projet; // the project clicked on, even if another one is chosen during the checks
   // Several computers: the request comes with the others' work, the pilot brings it in
   if (v.demande_vide && !(v.github && v.github.equipe)) {
     const c = await choisir(t("The project has no request yet: Claude would wait for one. Write what you want first."), [
@@ -326,13 +328,13 @@ async function demarrerPilote(b) {
   if (b) b.disabled = true;
   const avant = b ? b.textContent : "";
   if (b) b.textContent = t("Checking GitHub…");
-  const ok = await avantDemarrageGitHub();
+  const ok = await avantDemarrageGitHub(projet);
   if (b) { b.textContent = avant; b.disabled = ok; }
   if (!ok) return;
-  etat.demarrage[etat.projet] = Date.now() + 25000;
-  const r = await api("pilote/demarrer", "POST").catch((e) => e);
+  etat.demarrage[projet] = Date.now() + 25000;
+  const r = await api("pilote/demarrer", "POST", undefined, projet).catch((e) => e);
   if (!(r instanceof Error)) { const m = messageDe(r); if (m) toast(m, "ok"); }
-  else { delete etat.demarrage[etat.projet]; if (r.data?.erreur_key === SANS_CLAUDE) proposerClaude(r.message); else if (r.message !== t("Locked")) toast(r.message, "erreur"); }
+  else { delete etat.demarrage[projet]; if (r.data?.erreur_key === SANS_CLAUDE) proposerClaude(r.message); else if (r.message !== t("Locked")) toast(r.message, "erreur"); }
   setTimeout(rafraichir, 800);
 }
 // the pilot cannot start without a connection to Claude (api_projets.go): say why, with the way to fix it
@@ -3226,7 +3228,7 @@ async function changerReglageProjet(sel) {
 pages.projet = async () => {
   if (!etat.projet) await rafraichir(); // opened straight on this page: the project is known after the first refresh
   if (!etat.projet) return `<div class="vide"><p>${t("No project.")}</p><a class="btn btn-primaire" href="#nouveau">${t("New project")}</a></div>`;
-  const g = await api("projets/gestion?nom=" + encodeURIComponent(etat.projet));
+  const cheminGestion = "projets/gestion?nom=" + encodeURIComponent(etat.projet), g = suivreDonnees(cheminGestion, await api(cheminGestion));
   const p = g.projet, dis = p.actif ? "disabled" : "";
   const decoches = Object.entries(g.decoches || {});
   setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: the last state known first, then updated
@@ -4516,7 +4518,7 @@ document.addEventListener("change", (ev) => { // the typed text stays: only the 
   $("#nd-titre-champ").hidden = etat.ndVite; $("#nd-actions").innerHTML = actionsDemande();
 });
 pages.demandes = async () => {
-  const d = await api("demandes");
+  const d = suivreDonnees("demandes", await api("demandes"));
   const planTexte = (await api("plan").catch(() => ({ texte: "" }))).texte || "";
   const plan = d.plan || [];
   const enCours = d.demande && !/^\s*$/.test(d.demande.replace(/^#.*$/gm, "").replace(/^\(.*\)$/gm, ""));
@@ -4622,6 +4624,7 @@ pages.deploiement = async () => {
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
   const distant = !!(etat.vue || {}).distant, chemin = "projets/" + encodeURIComponent(projet);
   const [d, sv, c, rp] = await Promise.all([api(chemin + "/deploiement"), api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api(chemin + "/reglages").catch(() => ({})), lireCategories()]);
+  suivreDonnees(chemin + "/deploiement", d);
   const e = d.deploiement || {}, nom = (l, id) => ((l || []).find((x) => x.id === id) || {}).nom || id;
   if ((d.anciens || []).length) marquerInfosVues(projet); // its note is on this page
   if (dep.projet !== projet || !dep.f || !dep.f.modifie) dep.f = { url: e.url || "", plan: e.plan || "", moment: e.moment || "", modifie: false, // the saved one, unless this project's form is being typed
@@ -6424,7 +6427,7 @@ const phraseMission = (s) => { const noms = projetsVisibles(etat.vue || {}).map(
   return h(s).replace(/@([\w-]+(?:\.[\w-]+)*)/g, (tout, n) => noms.includes(n) ? `<a href="#suivi" data-mis-projet="${n}">${tout}</a>` : tout); };
 // One old mission (#missions/<id>), read only: its sentence, the state it was left in, its journal
 pages.mission = async () => {
-  const d = await api("missions/" + encodeURIComponent(etat.missionId || ""));
+  const cheminMission = "missions/" + encodeURIComponent(etat.missionId || ""), d = suivreDonnees(cheminMission, await api(cheminMission));
   etat.missionVue = d;
   if (d.mission.suivie) return `<div class="missions mis-detail"><div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a></div>${cadreMission(d.mission)}</div>`; // a mission of 3.1: its frame
   const m = d.mission, titre = (m.carte || {}).titre, fin = m.etat === "echec" ? raisonEchec(m) : {};
@@ -9206,7 +9209,17 @@ async function suivrePage() {
   }
   // the checks and the output update in place: the page itself is never rebuilt under the user's typing
   if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) await majSante();
+  // Requests, Deployment, a mission, Manage: rebuilt when their data changed (a request taken, a milestone, a deployment,
+  // the pilot stopped), never under the owner's typing nor over a field changed and not saved yet
+  const s = etat.suivi;
+  if (s && s.page === etat.page && ++etat.suiviTic % 2 === 0 && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".modale") && !String(window.getSelection() || "")
+    && ![...$("#page").querySelectorAll("input, textarea")].some((x) => (x.type === "radio" || x.type === "checkbox" ? x.checked !== x.defaultChecked : x.value !== x.defaultValue))) {
+    const d = await api(s.chemin).catch(() => null);
+    if (d && etat.suivi === s && JSON.stringify(d) !== s.sig) rendrePage();
+  }
 }
+// suivreDonnees: a page's data, kept with the address it came from for suivrePage's live follow-up
+function suivreDonnees(chemin, d) { etat.suivi = { page: etat.page, chemin, sig: JSON.stringify(d) }; return d; }
 
 (async () => {
   await rafraichir();
