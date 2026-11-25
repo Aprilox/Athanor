@@ -1,5 +1,6 @@
 # Secrets and local state: never in the repository (all paths anchored at the root of the tool)
 /.env
+/.env.connexions
 /tools/
 /logs/
 # made at run time: what the PC has, Claude's commands (links to the executable), RTK

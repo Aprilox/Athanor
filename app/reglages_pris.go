@@ -40,10 +40,14 @@ func empreinteReglages(texteEnv string) string {
 	return hex.EncodeToString(h[:6])
 }
 
-// empreinteReglagesKit: empreinteReglages of the tool folder's .env as it is now.
-func empreinteReglagesKit(kit string) string {
+// empreinteReglagesKit: empreinteReglages of the tool folder's .env as it is now, for no project in particular.
+func empreinteReglagesKit(kit string) string { return empreinteReglagesProjet(kit, "") }
+
+// empreinteReglagesProjet: empreinteReglages of the tool folder's .env as it is now, with what the project replaces
+// of it (Manage › Settings › Claude for this project): what its pilot would take if it started now.
+func empreinteReglagesProjet(kit, projet string) string {
 	b, _ := os.ReadFile(filepath.Join(kit, ".env"))
-	return empreinteReglages(string(b))
+	return empreinteReglages(string(b) + texteEnvProjet(envProjetNom(lireConfig(), projet)))
 }
 
 // modesDemandes: the working modes a project's .athanor/.env asks for, as the pilot reads them when a cycle
@@ -126,7 +130,7 @@ func (s *Serveur) changementsEnAttente(p Projet, actif bool) []string {
 		}
 	}
 	if e.Reglages != "" {
-		if courante := empreinteReglagesKit(s.kitCourant().Racine); courante != e.Reglages {
+		if courante := empreinteReglagesProjet(s.kitCourant().Racine, p.Nom); courante != e.Reglages {
 			r = append(r, "reglages")
 			s.relancerPourReglages(p, e.Pid, courante)
 		}

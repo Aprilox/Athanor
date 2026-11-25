@@ -46,27 +46,7 @@ func quotaActuel(projets []Projet) *EtatQuota {
 		return quotaCache
 	}
 	quotaQuand = time.Now()
-	type journal struct {
-		chemin string
-		date   time.Time
-	}
-	var js []journal
-	for _, p := range projets {
-		entrees, err := os.ReadDir(p.LogsDir())
-		if err != nil {
-			continue
-		}
-		for _, e := range entrees {
-			if !strings.HasPrefix(e.Name(), "cycle-") || !strings.HasSuffix(e.Name(), ".jsonl") {
-				continue
-			}
-			if i, err := e.Info(); err == nil && i.Mode().IsRegular() {
-				js = append(js, journal{filepath.Join(p.LogsDir(), e.Name()), i.ModTime()})
-			}
-		}
-	}
-	sort.Slice(js, func(a, b int) bool { return js[a].date.After(js[b].date) })
-	for i, j := range js {
+	for i, j := range journauxCycleRecents(projets) {
 		if i >= 6 { // the newest logs only: a cycle that said nothing about the quota is rare
 			break
 		}
@@ -77,6 +57,32 @@ func quotaActuel(projets []Projet) *EtatQuota {
 		}
 	}
 	return quotaCache
+}
+
+type journalCycle struct {
+	chemin string
+	date   time.Time
+}
+
+// journauxCycleRecents: the cycle logs of these projects, the newest first.
+func journauxCycleRecents(projets []Projet) []journalCycle {
+	var js []journalCycle
+	for _, p := range projets {
+		entrees, err := os.ReadDir(p.LogsDir())
+		if err != nil {
+			continue
+		}
+		for _, e := range entrees {
+			if !strings.HasPrefix(e.Name(), "cycle-") || !strings.HasSuffix(e.Name(), ".jsonl") {
+				continue
+			}
+			if i, err := e.Info(); err == nil && i.Mode().IsRegular() {
+				js = append(js, journalCycle{filepath.Join(p.LogsDir(), e.Name()), i.ModTime()})
+			}
+		}
+	}
+	sort.Slice(js, func(a, b int) bool { return js[a].date.After(js[b].date) })
+	return js
 }
 
 // quotaDuJournal: the last rate_limit_event of a log (read from its end), nil when there is none.
@@ -174,11 +180,11 @@ func borner(u *float64) *float64 {
 
 type RegleQuota struct {
 	Seuil  int    `json:"seuil"`  // percent of the window used
-	Action string `json:"action"` // apres (after the cycle), maintenant (now), pause (until the reset)
+	Action string `json:"action"` // apres (after the cycle), maintenant (now), pause (until the reset), bascule (the next connection: connexions.go)
 }
 
 var fenetresRegles = map[string]bool{"five_hour": true, "seven_day": true, "modele": true}
-var actionsRegles = map[string]bool{"apres": true, "maintenant": true, "pause": true}
+var actionsRegles = map[string]bool{"apres": true, "maintenant": true, "pause": true, "bascule": true}
 
 func fichierReglesQuota(k Kit) string { return filepath.Join(k.Journaux(), "quota-arret.json") }
 

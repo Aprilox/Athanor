@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -771,6 +773,48 @@ func TestBancPilote(t *testing.T) {
 		verifier(strings.Contains(string(journal), "no credit left") && strings.Contains(string(journal), "Connection to Claude changed in Settings"), "pilot.log:\n%s", journal)
 		verifier(time.Since(debut) < 3*time.Minute, "the wait was not cut short: %v", time.Since(debut))
 		verifier(d == 0.03 && n == 1, "the API spend: %v (%d)", d, n)
+		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
+	// Two subscriptions in Settings › Claude › Connections and a rule that switches: Claude refuses the first one
+	// (its quota full), the pilot goes on at once with the second, no wait, the first one marked until its reset
+	t.Run("bascule_quota_plein", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-plein.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudePlein, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		ecrireFichier(t, fichierConnexions(kit), `{"liste":[{"id":"plein","nom":"Max 1","type":"subscription","secret":"jeton-plein","actif":true},{"id":"libre","nom":"Max 2","type":"subscription","secret":"jeton-libre","actif":true}]}`, 0o600)
+		ecrireFichier(t, filepath.Join(kit, "logs", "quota-arret.json"), `{"five_hour":{"seuil":100,"action":"bascule"}}`, 0o644)
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		debut := time.Now()
+		// no token from the environment: the list alone; QUOTA_WAIT_MIN=600, ten minutes if it waited instead
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, []string{"CLAUDE_CODE_OAUTH_TOKEN=", "QUOTA_WAIT_MIN=600"})
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		vues, _ := os.ReadFile(filepath.Join(p.Atelier(), "cles_vues"))
+		journal, _ := os.ReadFile(filepath.Join(p.Atelier(), "pilot.log"))
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				sautSiQuarantaine(t, binTemp)
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		verifier(strings.TrimSpace(string(vues)) == "jeton-plein\njeton-libre", "the tokens Claude Code got: %q", vues)
+		verifier(strings.Contains(string(journal), "switching to the subscription token «Max 2»"), "pilot.log:\n%s", journal)
+		verifier(time.Since(debut) < 3*time.Minute, "it waited instead of switching: %v", time.Since(debut))
+		verifier(lireEtatsConnexions(kit)["plein"].Jusqua > time.Now().Unix(), "the full one not marked: %v", lireEtatsConnexions(kit))
+		cycles := map[string]string{}
+		lireJSONFichier(fichierConnexionsCycles(filepath.Join(p.Atelier(), "logs")), &cycles)
+		ids := slices.Sorted(maps.Values(cycles))
+		verifier(slices.Equal(ids, []string{"libre", "plein"}), "the connection of each cycle (the Overview's quota per connection): %v", cycles)
 		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)

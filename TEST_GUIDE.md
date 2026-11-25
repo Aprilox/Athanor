@@ -65,7 +65,7 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 ### En premier (dix minutes)
 
 - [ ] **Accueil.** L'accueil du hub s'affiche, avec la tuile Studio et vos projets ; la visite d'une ligne montre où ils sont.
-- [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (« v3.1.12 », en haut du menu) est 3.1.12.
+- [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (« v3.2.0 », en haut du menu) est 3.2.0.
 - [ ] **Projets.** Les filtres changent la liste ; un projet en cours dit son jalon ; le lien mène au bon endroit.
 - [ ] **Cloche.** Une alerte (par exemple un serveur injoignable) y apparaît une seule fois et disparaît quand c'est réglé.
 - [ ] **Accès.** *Studio › Accès* d'un projet : cocher une clé puis *Enregistrer les modifications* fait apparaître le badge « N accès » à côté de *Démarrer* ; la phrase du badge dit ce qui est donné.

@@ -14,15 +14,17 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 )
 
 // clesReglagesProjet: the settings a project may replace, in the page's order. A quota_<window> value is
-// "<percent>:<action>" (a rule of quota.go), "0" for no automatic stop.
+// "<percent>:<action>" (a rule of quota.go), "0" for no automatic stop; connexions: the ids of Settings › Claude ›
+// Connections it may use, in their order there ("": all of them, connexions.go).
 // The project's own models are set in its Working mode (modeles_projet.go, 2.53.0), its one place.
-var clesReglagesProjet = []string{"quota_five_hour", "quota_seven_day", "quota_modele", "permission"}
+var clesReglagesProjet = []string{"quota_five_hour", "quota_seven_day", "quota_modele", "connexions", "permission"}
 
 var reglagesProjetsMu sync.Mutex
 
@@ -54,8 +56,66 @@ func reglageValide(k Kit, cle, v string) bool {
 		return v == "0" || err == nil && n >= 1 && n <= 100 && actionsRegles[action] && v == fmt.Sprintf("%d:%s", n, action)
 	case cle == "permission":
 		return slices.Contains(modesAutorisation, v)
+	case cle == "connexions":
+		return !slices.ContainsFunc(strings.Split(v, ","), func(id string) bool { return !reIDConnexion.MatchString(id) })
+	}
+	if _, ok := cleEnvProjet(cle); ok {
+		return v != "" && len(v) <= 200 && !strings.ContainsAny(v, "\r\n")
 	}
 	return false
+}
+
+// cleEnvProjet: "env:KEY", a setting of Settings › Claude (the tool's .env) a project replaces for itself. Never the
+// connection (its own list), the models (the project's Working mode) nor a secret.
+func cleEnvProjet(cle string) (string, bool) {
+	k, ok := strings.CutPrefix(cle, "env:")
+	return k, ok && reCle.MatchString(k) && !slices.Contains(clesConnexionClaude, k) && !estCleModeleProjet(k) && !EstSecret(k)
+}
+
+// envProjetNom: the settings of Settings › Claude the project replaces ({KEY: value}).
+func envProjetNom(cf Config, nom string) map[string]string {
+	out := map[string]string{}
+	for cle := range lireReglagesProjets()[nom] {
+		if k, ok := cleEnvProjet(cle); ok {
+			if v := reglagePropre(cf, nom, cle); v != "" {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+// envProjetPilote: envProjetNom of the project of this folder (a pilot's, when it starts: they win over .env).
+func envProjetPilote(dossier string) map[string]string {
+	cf := lireConfig()
+	return envProjetNom(cf, nomProjetDossier(cf, dossier))
+}
+
+// texteEnvProjet: those settings as .env lines added after the tool's own (empreinteReglages: a change of them is a
+// change of the settings the pilot runs with, so it restarts at the end of its cycle as for Settings).
+func texteEnvProjet(m map[string]string) string {
+	var l []string
+	for k, v := range m {
+		l = append(l, "\n"+k+"="+v)
+	}
+	sort.Strings(l)
+	return strings.Join(l, "")
+}
+
+// vueEnvProjet: Manage › Settings › Claude for this project: each setting of the tool's .env a project may replace,
+// in the order of the file, with the value of Settings and the project's own.
+func vueEnvProjet(k Kit, projet string) []ReglageVue {
+	cf, l, vus := lireConfig(), []ReglageVue{}, map[string]bool{}
+	for _, f := range []string{k.Env(), k.EnvExemple()} { // .env first: its values; the example adds what it lacks
+		for _, x := range LireEnv(f) {
+			if _, ok := cleEnvProjet("env:" + x.Cle); ok && !vus[x.Cle] {
+				vus[x.Cle] = true
+				propre := reglagePropre(cf, projet, "env:"+x.Cle)
+				l = append(l, ReglageVue{Cle: x.Cle, Valeur: cmp.Or(propre, x.Valeur), Propre: propre, Defaut: x.Valeur})
+			}
+		}
+	}
+	return l
 }
 
 // reglageGlobal: the value every project follows by default ("" for an unknown setting).
@@ -141,7 +201,7 @@ func definirReglageProjet(projet, cle, valeur string) (string, error) {
 	if valeur == "defaut" {
 		valeur = ""
 	}
-	if !slices.Contains(clesReglagesProjet, cle) {
+	if _, env := cleEnvProjet(cle); !slices.Contains(clesReglagesProjet, cle) && !env {
 		return "", erreurEntree("Unknown project setting")
 	}
 	if valeur != "" && !reglageValide(Kit{Racine: lireConfig().Kit}, cle, valeur) {
@@ -207,7 +267,7 @@ func (s *Serveur) apiReglagesProjet(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusNotFound, "Unknown project")
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"projet": nom, "reglages": vueReglagesProjet(nom)})
+	s.ecrireJSON(w, map[string]any{"projet": nom, "reglages": vueReglagesProjet(nom), "env": vueEnvProjet(s.kitCourant(), nom)})
 }
 
 // apiReglageProjetModifier: POST /api/projets/{nom}/reglages {cle, valeur, confirmer, mot_de_passe}: valeur "" or
@@ -248,5 +308,5 @@ func (s *Serveur) apiReglageProjetModifier(w http.ResponseWriter, r *http.Reques
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: nom, Action: "reglage du projet: " + c.Cle,
 			Resultat: cmp.Or(avant, "defaut") + " → " + cmp.Or(apres, "defaut")})
 	}
-	s.ecrireJSON(w, map[string]any{"message_key": "Project setting saved.", "args": []string{}, "reglages": vueReglagesProjet(nom)})
+	s.ecrireJSON(w, map[string]any{"message_key": "Project setting saved.", "args": []string{}, "reglages": vueReglagesProjet(nom), "env": vueEnvProjet(s.kitCourant(), nom)})
 }

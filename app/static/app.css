@@ -627,6 +627,13 @@ details[open] summary { margin-bottom: 10px; }
 .quota-pied { align-items: center; gap: 8px; flex-wrap: wrap; }
 .quota-arret { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .quota-arret select, .quota-arret input { padding: 2px 6px; font-size: 12px; height: 24px; }
+/* Settings › Claude › Connections: one line per connection, in their order of priority */
+.cx-liste { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.cx-ligne { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.cx-ligne.cx-off { opacity: .65; }
+.cx-ligne .cx-nom, .cx-ligne .cx-secret, .cx-ajout input { width: 14em; max-width: 100%; flex: 0 1 14em; }
+.cx-ligne .cx-budget { width: 9em; flex: 0 1 9em; }
+.cx-ajout { flex-wrap: wrap; gap: 8px; }
 .quota-arret input[type=text] { width: 80px; }
 .quota-ligne.haut .barre i { background: var(--attention); }
 .quota-ligne.plein .barre i { background: var(--erreur); }
@@ -943,10 +950,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pv-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pv-etat { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
 .pv-vous { color: var(--attention); }
-.puce-natif { color: var(--attention); border-color: var(--attention); text-decoration: none; align-self: center; }
-.puce-natif-groupe { display: inline-flex; align-items: center; gap: 4px; align-self: center; }
-.puce-natif-ok { font: inherit; font-size: 12px; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 1px 8px; cursor: pointer; }
-.puce-natif-ok:hover { color: var(--ink); }
 #choix-case { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; }
 .pv-claude { color: var(--accent); }
 .pv-ok { color: var(--ok); }

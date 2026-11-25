@@ -132,6 +132,9 @@ type pilote struct {
 	connexion       connexionClaude
 	origineConn     map[string]string
 	connexionDepuis time.Time // the last change of connection: the quota of the logs before it is another account's
+	// the quota rules switch connections and every one allowed is at its limit: the first back, about then
+	connexionsALimite bool
+	repriseConnexions int64
 }
 
 // logUneFois: a message said once while its cause lasts (oublierLogUneFois: it may be said again).
@@ -527,7 +530,8 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 		minutesAPI = arrondirStat(durAPI/60000.0, 10)
 		tours = strconv.FormatInt(nt, 10)
 		coutUSD = arrondirStat(cost, 100)
-		noterDepense(p.kit, p.connexionActuelle().Mode, cost, filepath.Base(p.projet), "cycle "+etiquette)
+		c := p.connexionActuelle()
+		noterDepense(p.kit, c.Mode, c.ID, cost, filepath.Base(p.projet), "cycle "+etiquette)
 		entree = strconv.FormatInt(it, 10)
 		cacheLu = strconv.FormatInt(cr, 10)
 		cacheEcrit = strconv.FormatInt(cw, 10)
@@ -660,10 +664,15 @@ func (p *pilote) relireConnexion() bool {
 	if lignes == nil {
 		return false // no .env, empty, or caught mid-write: the connection as it was
 	}
-	c := connexionDesLignes(lignes, p.origineConn)
+	p.connexionMu.Lock()
+	actuel := p.connexion.ID
+	p.connexionMu.Unlock()
+	choix := choisirConnexion(lignes, p.kit, p.origineConn, connexionsDuProjet(p.projet), p.basculeActive(), actuel)
+	c := choix.Connexion
 	p.connexionMu.Lock()
 	avant := p.connexion
 	p.connexion = c
+	p.connexionsALimite, p.repriseConnexions = choix.ALimite, choix.Reprise
 	if c.empreinte() == avant.empreinte() {
 		p.connexionMu.Unlock()
 		return false
@@ -674,11 +683,75 @@ func (p *pilote) relireConnexion() bool {
 	for _, f := range []string{"secours_jusqua", "serie_jusqua", "sonde_quota"} {
 		_ = os.Remove(filepath.Join(p.prive, f))
 	}
+	if avant.ID != "" && c.ID != "" { // one of the list for another: a switch, its reset, or the order changed
+		p.log("Connection to Claude: the pilot goes on with the " + c.nom() + ", at once.")
+		return true
+	}
 	quoi := "a new " + c.nom()
 	if c.Mode != avant.Mode {
 		quoi = "the " + c.nom() + " (mode " + c.Mode + ")"
 	}
 	p.log("Connection to Claude changed in Settings: the pilot goes on with " + quoi + ", at once.")
+	return true
+}
+
+// basculeActive: the quota rules of this project (the kit's, or its own) switch connections at a limit, or a
+// connection of Settings › Claude has a limit of its own.
+func (p *pilote) basculeActive() bool {
+	return basculeDesRegles(reglesQuotaProjet(p.projet, filepath.Join(p.kit, "logs", "quota-arret.json"))) || limitesPropres(p.kit)
+}
+
+// basculer: the connection in use is at its limit until jusqua (raison: which window, how full): marked for every
+// pilot, then the next one allowed is taken. False when there is no other (a single connection, or every one at its
+// limit: attendreConnexionLibre waits for the first one back).
+func (p *pilote) basculer(jusqua int64, raison string) bool {
+	c := p.connexionActuelle()
+	if c.ID == "" {
+		return false
+	}
+	marquerConnexion(p.kit, c.ID, jusqua, raison)
+	p.relireConnexion()
+	p.connexionMu.Lock()
+	aLimite, suivante := p.connexionsALimite, p.connexion
+	p.connexionMu.Unlock()
+	if aLimite || suivante.ID == c.ID {
+		return false
+	}
+	p.log(fmt.Sprintf("Quota of the %s at its limit (%s): switching to the %s.", c.nom(), raison, suivante.nom()))
+	return true
+}
+
+// attendreConnexionLibre: every connection allowed is at its limit: the pilot pauses until the first one is back
+// (read again every minute: a reset, a connection added or freed in Settings), true when it waited.
+func (p *pilote) attendreConnexionLibre() bool {
+	p.connexionMu.Lock()
+	aLimite, reprise := p.connexionsALimite, p.repriseConnexions
+	p.connexionMu.Unlock()
+	if !aLimite {
+		return false
+	}
+	quand := "a connection is freed in Settings"
+	if reprise > 0 {
+		quand = "about " + time.Unix(reprise+60, 0).Format("2006-01-02 15:04")
+	}
+	p.etatPhase, p.etatReprise = "quota", ""
+	if reprise > 0 {
+		p.etatReprise = time.Unix(reprise+60, 0).Format("2006-01-02 15:04")
+	}
+	p.log("Every connection to Claude allowed for this project is at its quota limit: pausing until " + quand + ", then resuming automatically.")
+	p.statut("All connections at their limit, resuming around " + quand)
+	for !fichierRegulierPilote(filepath.Join(p.etat, "STOP")) {
+		p.dormir(60)
+		p.relireConnexion()
+		p.connexionMu.Lock()
+		aLimite = p.connexionsALimite
+		p.connexionMu.Unlock()
+		if !aLimite {
+			p.log("A connection to Claude is back: resuming with the " + p.connexionActuelle().nom() + ".")
+			break
+		}
+	}
+	p.etatPhase, p.etatReprise = "", ""
 	return true
 }
 
@@ -857,6 +930,11 @@ func journalQuotaPilote(chemin string) bool {
 
 func (p *pilote) seuilQuota() string {
 	regles := reglesQuotaProjet(p.projet, filepath.Join(p.kit, "logs", "quota-arret.json"))
+	if s := p.connexionActuelle().SeuilPropre; s > 0 { // the subscription's own limit: the next connection at it, any window
+		for f := range fenetresRegles {
+			regles[f] = regleSeuil{float64(s), "bascule"}
+		}
+	}
 	if len(regles) == 0 {
 		return ""
 	}
@@ -911,6 +989,12 @@ func (p *pilote) appliquerSeuilQuota() {
 	action, reinitStr, message := parts[0], parts[1], parts[2]
 	reinit := entier64Pilote(reinitStr, 0)
 	fStop := filepath.Join(p.etat, "STOP")
+	if action == "bascule" { // the threshold met between two cycles: this cycle starts on the next connection
+		if p.basculer(reinit, message) || p.attendreConnexionLibre() {
+			return
+		}
+		action = "pause" // a single connection: nothing to switch to, it waits for its reset
+	}
 	if action == "pause" && reinit > 0 {
 		reprise := time.Unix(reinit+60, 0).Format("2006-01-02 15:04")
 		p.etatPhase = "quota"

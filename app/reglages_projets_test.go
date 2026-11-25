@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -166,7 +168,7 @@ func TestReglagesProjetsExistants(t *testing.T) {
 	if err := os.WriteFile(k.Env(), []byte("MODEL=opus\nFALLBACK_MODEL=sonnet\nSUBAGENT_MODEL=auto\nCHEAP_MODEL=\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	attendu := map[string]string{"quota_five_hour": "0", "quota_seven_day": "90:pause", "quota_modele": "0", "permission": "auto"}
+	attendu := map[string]string{"quota_five_hour": "0", "quota_seven_day": "90:pause", "quota_modele": "0", "connexions": "", "permission": "auto"}
 	if len(attendu) != len(clesReglagesProjet) {
 		t.Fatalf("%d settings expected, %d known", len(attendu), len(clesReglagesProjet))
 	}
@@ -268,5 +270,46 @@ func TestModeProjet(t *testing.T) {
 	}
 	if b := journalAuditTexte(t); !strings.Contains(b, "reglage du projet: permission") || !strings.Contains(b, "manuel → ignorer") || strings.Contains(b, mdpPreuveTest) {
 		t.Error("audit: the change to ignorer is missing, or the password is in the log")
+	}
+}
+
+// Settings › Claude replaced by a project (Manage, env:KEY): never the connection, the models or a secret; the page
+// lists the tool's settings with Settings' value and the project's own; the pilot's settings (their fingerprint)
+// change with them, so a running pilot restarts with them at the end of its cycle, the other projects untouched.
+func TestEnvProjet(t *testing.T) {
+	s, appel := reglagesTest(t)
+	k := s.kitCourant()
+	ecrireFichier(t, k.Env(), "MAX_HOURS=168\nKEEP_AWAKE=1\nMODEL=opus\nCLAUDE_AUTH=subscription\nGH_TOKEN_TEST=x\n", 0o600)
+	if err := os.MkdirAll(s.config.Projets[0].Dossier, 0o755); err != nil { // a pilot's project folder is there
+		t.Fatal(err)
+	}
+	avant, autre := empreinteReglagesProjet(k.Racine, "demo"), empreinteReglagesProjet(k.Racine, "autre")
+	for cle, ok := range map[string]bool{"env:MAX_HOURS": true, "env:KEEP_AWAKE": true, "env:CLAUDE_AUTH": false, "env:ANTHROPIC_API_KEY": false, "env:MODEL": false, "env:GH_TOKEN_TEST": false, "env:a b": false} {
+		if code, _ := appel("POST", "demo", "", map[string]any{"cle": cle, "valeur": "72"}); (code == 200) != ok {
+			t.Errorf("%s: %d", cle, code)
+		}
+	}
+	if code, _ := appel("POST", "demo", "", map[string]any{"cle": "env:MAX_HOURS", "valeur": "1\nMODEL=x"}); code != 400 {
+		t.Errorf("a value on two lines: %d", code)
+	}
+	code, v := appel("GET", "demo", "", nil)
+	var vus []string
+	for _, x := range v["env"].([]any) {
+		e := x.(map[string]any)
+		vus = append(vus, fmt.Sprint(e["cle"], "=", e["valeur"], "/", e["defaut"]))
+	}
+	if code != 200 || !slices.Contains(vus, "MAX_HOURS=72/168") || !slices.Contains(vus, "KEEP_AWAKE=72/1") || slices.ContainsFunc(vus, func(x string) bool {
+		return strings.HasPrefix(x, "MODEL=") || strings.HasPrefix(x, "CLAUDE_AUTH=") || strings.HasPrefix(x, "GH_TOKEN")
+	}) {
+		t.Fatalf("the page's list: %d %v", code, vus)
+	}
+	if m := envProjetPilote(s.config.Projets[0].Dossier); m["MAX_HOURS"] != "72" || len(m) != 2 {
+		t.Fatalf("what demo's pilot takes: %v", m)
+	}
+	if empreinteReglagesProjet(k.Racine, "demo") == avant || empreinteReglagesProjet(k.Racine, "autre") != autre {
+		t.Fatalf("the fingerprint follows demo's own settings only")
+	}
+	if code, _ := appel("POST", "demo", "", map[string]any{"cle": "env:MAX_HOURS", "valeur": ""}); code != 200 || envProjetPilote(s.config.Projets[0].Dossier)["MAX_HOURS"] != "" {
+		t.Fatalf("back to Settings: %d", code)
 	}
 }

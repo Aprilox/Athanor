@@ -48,7 +48,7 @@ func reglesSeuils(chemin string) map[string]regleSeuil {
 		}
 		seuil, ok := nombreJSON(r["seuil"])
 		action, _ := texte(r["action"])
-		if ok && seuil >= 1 && seuil <= 100 && (action == "apres" || action == "maintenant" || action == "pause") {
+		if ok && seuil >= 1 && seuil <= 100 && actionsRegles[action] {
 			out[cle] = regleSeuil{seuil, action}
 		}
 	}

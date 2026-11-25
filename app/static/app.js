@@ -818,8 +818,6 @@ const projetsVisibles = (v) => (v.projets || []).filter((x) => !x.archive);
 const alertesHub = () => (etat.hub && etat.hub.alertes) || [];
 // M319: an information (a project's old site) counts on the bell and the menu until it has been seen (the bell
 // opened, or its project's Deployment tab), remembered on this computer; it stays listed in the bell
-// the native-mode reminder, once understood, stays hidden on this device (Settings › Options still shows the mode)
-const natifCompris = () => { try { return localStorage.getItem("athanor.natifCompris") === "1"; } catch (e) { return false; } };
 const infosVues = () => { try { return JSON.parse(localStorage.getItem("athanor.infosVues") || "[]"); } catch (e) { return []; } };
 const alertesComptees = () => { const vues = infosVues(); return alertesHub().filter((a) => !a.info || !vues.includes(a.empreinte)); };
 function marquerInfosVues(projet) {
@@ -1043,7 +1041,6 @@ function rendreBandeau(v) {
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   if (!cadre.actif) boutons.push(boutonDistance(v, "btn"), boutonCloche(v, "btn"), boutonGuide("btn"));
-  if (v.natif && !natifCompris()) boutons.unshift(`<span class="puce-natif-groupe"><a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Athanor runs directly on Windows: nothing separates Claude from the files of this PC. To put a barrier between them, switch to WSL in Settings › Options."))}">${t("Native mode: no barrier")}</a><button type="button" class="puce-natif-ok" data-natif-compris title="${h(t("Got it: hide this reminder. Settings › Options still shows the mode."))}">${t("Got it")}</button></span>`);
   rendreBarre(v);
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   const html = `<div class="etat-phrase"><h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
@@ -1131,7 +1128,6 @@ async function annulerArret(b) {
 
 $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
-  if (b.hasAttribute("data-natif-compris")) { try { localStorage.setItem("athanor.natifCompris", "1"); } catch (e) { /* storage off: it comes back */ } b.closest(".puce-natif-groupe").remove(); return; }
   if (b.dataset.act === "demarrer") return demarrerPilote(b);
   if (b.dataset.act === "arreter") return arreterPilote(b);
   if (b.dataset.act === "arreter-apres-cycle") return arreterApresCycle(b);
@@ -1905,8 +1901,8 @@ function nomFenetre(n) {
   return n.replace(/_/g, " ");
 }
 // automatic stop of a window: the rule key ("modele" = every model's own week) and its two lists
-const SEUILS_QUOTA = [50, 60, 70, 75, 80, 85, 90, 95];
-const ACTIONS_QUOTA = () => [["apres", t("stop after the cycle")], ["maintenant", t("stop now")], ["pause", t("pause until the reset")]];
+const SEUILS_QUOTA = [10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 85, 90, 95, 100];
+const ACTIONS_QUOTA = () => [["apres", t("stop after the cycle")], ["maintenant", t("stop now")], ["pause", t("pause until the reset")], ["bascule", t("switch to the next connection")]];
 function regleFenetre(n) { return n === "five_hour" || n === "seven_day" ? n : "modele"; }
 function arretAuto(nom, regles) {
   const cle = regleFenetre(nom), r = (regles || {})[cle] || { seuil: 0, action: "apres" };
@@ -1916,7 +1912,7 @@ function arretAuto(nom, regles) {
     <select data-quota-seuil="${cle}">${seuils.sort((a, b) => a - b).map((s) => `<option value="${s}" ${r.seuil === s ? "selected" : ""}>${s ? t("at {0} %", [s]) : t("off")}</option>`).join("")}</select>
     ${r.seuil ? `<select data-quota-action="${cle}">${actions.map(([v, l]) => `<option value="${v}" ${r.action === v ? "selected" : ""}>${h(l)}</option>`).join("")}</select>` : ""}</div>`;
 }
-function rendreQuota(q, regles) {
+function rendreQuota(q, regles, titre = t("Subscription quota")) {
   if (!q || !(q.fenetres || []).length) return ""; // shown once a cycle has run (M318)
   const maintenant = Date.now() / 1000;
   const lignes = q.fenetres.map((f) => {
@@ -1933,8 +1929,16 @@ function rendreQuota(q, regles) {
   }).join("");
   const age = Math.round(maintenant - (q.lu || maintenant));
   const vieux = age > 15 * 60;
-  return `<div class="bloc quota-bloc"><h2>${t("Subscription quota")}</h2>${lignes}
+  return `<div class="bloc quota-bloc"><h2>${h(titre)}</h2>${lignes}
     <div class="muet petit mt-1">${q.statut === "rejected" ? `<span class="attention">${t("Limit reached: the pilot waits for it to start again.")}</span> ` : ""}${vieux ? t("As of the last cycle, {0} ago: it may have changed since.", [age < 7200 ? t("{0} min", [Math.round(age / 60)]) : t("{0} h", [Math.round(age / 3600)])]) : t("As Claude Code reported it a moment ago.")}</div></div>`;
+}
+
+// several subscriptions (Settings › Claude › Connections): each one's own quota, the one in use first said so
+function rendreQuotasConnexions(l, regles) {
+  return l.map((c) => {
+    const titre = [t("Subscription quota"), c.nom || t("Claude subscription (token)"), c.utilisee ? t("in use") : ""].filter(Boolean).join(" · ");
+    return rendreQuota(c.quota, regles, titre) || `<div class="bloc quota-bloc"><h2>${h(titre)}</h2><p class="muet petit m0">${t("No quota reported yet: it shows once a cycle has run on this connection.")}</p></div>`;
+  }).join("");
 }
 
 // rendreDepense: API mode (connexion_claude.go): what Claude cost since the count started, against the
@@ -2791,7 +2795,7 @@ pages.suivi = async () => {
         <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button></div></details>
     </div>
     ${blocJalonsDeploiement(v.jalons_deploiement)}
-    ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
+    ${(v.quotas_connexions || []).length ? rendreQuotasConnexions(v.quotas_connexions, v.quota_arret) + (v.depense ? rendreDepense(v.depense) : "") : v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="colonne"><div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${texteEtape(v.projet)}${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
@@ -3195,7 +3199,7 @@ document.addEventListener("click", (ev) => {
 // --- M291: "This project's settings" (Manage): the settings of reglages_projets.go, and the working mode (/api/mode).
 // One control for all of them: its first entry is "Default (<the value of Settings>)", the others the project's own.
 // (the project's own models are in its Working mode, the Models block)
-const nomReglageProjet = (cle) => cle.startsWith("quota_") ? t("{0}: {1}", [t("Auto stop"), cle === "quota_modele" ? t("This week, each model") : nomFenetre(cle.slice(6))]) : t("Permissions");
+const nomReglageProjet = (cle) => cle.startsWith("quota_") ? t("{0}: {1}", [t("Auto stop"), cle === "quota_modele" ? t("This week, each model") : nomFenetre(cle.slice(6))]) : cle === "connexions" ? t("Connections to Claude") : t("Permissions");
 function libelleReglageProjet(cle, v) {
   if (cle === "permission") return titrePermission(v);
   const [seuil, a] = v.split(":");
@@ -3204,6 +3208,11 @@ function libelleReglageProjet(cle, v) {
 function choixReglageProjet(r) {
   const id = "rp-" + r.cle, defaut = t("As in Settings ({0})", [libelleReglageProjet(r.cle, r.defaut)]);
   if (r.cle === "permission") return selecteurPermissions(id, r.propre, { defaut, distant: (etat.vue || {}).distant });
+  if (r.cle === "connexions") { // the ones ticked, in Settings' order; none ticked: all of them
+    const l = etat.rp.connexions || [], choisis = r.propre ? r.propre.split(",") : [];
+    if (l.length < 2) return `<p class="muet petit m0" id="${id}">${t("One connection: add others in Settings › Claude to choose them here.")}</p>`;
+    return `<div class="ligne m0" id="${id}">${l.map((c) => `<label class="interrupteur m0"><input type="checkbox" data-rp-connexion="${h(c.id)}" ${choisis.includes(c.id) ? "checked" : ""}> <span>${h(c.nom || TYPES_CONNEXION()[c.type])}</span></label>`).join("")}</div><p class="muet petit m0">${t("None ticked: all of them, in the order of Settings › Claude.")}</p>`;
+  }
   const valeurs = ["0", ...SEUILS_QUOTA.flatMap((s) => ACTIONS_QUOTA().map(([a]) => s + ":" + a))];
   if (r.propre && !valeurs.includes(r.propre)) valeurs.push(r.propre);
   return `<select id="${id}">${["", ...valeurs].map((v) => `<option value="${h(v)}"${r.propre === v ? " selected" : ""}>${h(v ? libelleReglageProjet(r.cle, v) : defaut)}</option>`).join("")}</select>`;
@@ -3211,14 +3220,29 @@ function choixReglageProjet(r) {
 const lignesReglagesProjet = (l = etat.rp.reglages) => l.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
   <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_PROJET())}</div><p class="muet petit m0 mt-1">${t("It covers this project's pilot and its deployment on the servers. When it deploys is in the Deployment tab; your own assistant in a server's terminal has its own permission, chosen there.")} <a href="#deploiement">${t("Deployment")}</a></p>` : ""}</div></div>`).join("");
 async function rendreReglagesProjet() {
-  const [r, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), rendreMode()]);
-  etat.rp = { reglages: r.reglages || [] };
+  const [r, mode, cx] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), rendreMode(), api("connexions").catch(() => ({}))]);
+  etat.rp = { reglages: r.reglages || [], connexions: cx.liste || [], env: r.env || [] };
   return `<section class="bloc" id="rp" aria-labelledby="rp-titre"><h2 id="rp-titre">${t("This project's settings")}</h2>
     <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
-    ${mode}<div id="rp-liste">${lignesReglagesProjet()}</div></section>`;
+    ${mode}<div id="rp-liste">${lignesReglagesProjet()}</div>${rendreEnvProjet(etat.rp.env)}</section>`;
+}
+// what the project replaces of Settings › Claude (reglages_projets.go, env:KEY): empty is Settings' value; a running
+// pilot restarts with a change at the end of its cycle
+function rendreEnvProjet(l) {
+  if (!l.length) return "";
+  const n = l.filter((x) => x.propre).length;
+  return `<details class="plus-options mt-1" id="rp-env"><summary>${t("Settings › Claude for this project")}${n ? ` <span class="muet petit">${t("{0} replaced", [n])}</span>` : ""}</summary>
+    <p class="muet petit">${t("Empty: as in Settings › Claude. A value here applies to this project only; its running pilot restarts with it at the end of its cycle.")}</p>
+    ${l.map((x) => { const nom = (REGLAGES[x.cle] || [])[1]; return `<div class="reglage"><label for="rpe-${h(x.cle)}" class="nom-reglage">${nom ? h(t(nom)) + " " : ""}<code class="cle-env">${h(x.cle)}</code></label>
+      <div><input type="text" id="rpe-${h(x.cle)}" data-rp-env="${h(x.cle)}" value="${h(x.propre)}" placeholder="${h(t("As in Settings ({0})", [x.defaut || t("empty")]))}"></div></div>`; }).join("")}</details>`;
+}
+async function changerEnvProjet(i) {
+  const r = await action(api("projets/" + encodeURIComponent(etat.projet) + "/reglages", "POST", { cle: "env:" + i.dataset.rpEnv, valeur: i.value.trim() }));
+  if (r) { i.defaultValue = i.value = i.value.trim(); etat.rp.env = r.env || etat.rp.env; } else i.value = i.defaultValue;
 }
 async function changerReglageProjet(sel) {
-  const cle = sel.id.slice(3), valeur = sel.value, z = $("#rp-liste");
+  const cx = sel.dataset.rpConnexion !== undefined, cle = cx ? "connexions" : sel.id.slice(3), z = $("#rp-liste");
+  const valeur = cx ? [...z.querySelectorAll("[data-rp-connexion]:checked")].map((x) => x.dataset.rpConnexion).join(",") : sel.value;
   const p = cle === "permission" && valeur === "ignorer" ? await confirmerIgnorer(t("This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild.")) : {};
   const r = p && await action(api("projets/" + encodeURIComponent(etat.projet) + "/reglages", "POST", { cle, valeur, confirmer: valeur === "ignorer", ...p }));
   if (r) etat.rp.reglages = r.reglages;
@@ -4930,6 +4954,66 @@ function majModeConnexion(mode) {
   document.querySelectorAll("[data-connexion]").forEach((x) => { x.hidden = x.dataset.connexion !== mode; });
 }
 
+// Settings › Claude › Connections (connexions.go): subscriptions and API keys in their order of priority, never a
+// secret on the page (its last 4 characters); every change saved at once
+const TYPES_CONNEXION = () => ({ subscription: t("Claude subscription (token)"), api: t("API key (paid per use)") });
+function rendreConnexions(liste) {
+  const types = TYPES_CONNEXION();
+  const ligne = (c, i) => `<li class="cx-ligne${c.actif ? "" : " cx-off"}">
+    <input type="text" class="cx-nom" data-cx-nom="${h(c.id)}" value="${h(c.nom)}" placeholder="${h(types[c.type])}" aria-label="${h(t("Name"))}" maxlength="60">
+    <span class="muet petit">${h(types[c.type])}${c.apercu ? ` <code>${h(c.apercu)}</code>` : ""}</span>
+    ${c.utilisee ? `<span class="ok petit">${t("in use")}</span>` : ""}
+    ${c.jusqua ? `<span class="attention petit">${t("At its limit until {0}", [h(dateLisible(new Date(c.jusqua * 1000).toISOString()))])}${c.raison ? ` (${h(c.raison)})` : ""}</span><button type="button" class="btn btn-petit" data-cx="liberer" data-id="${h(c.id)}">${t("Use it again now")}</button>` : ""}
+    ${c.fichier ? `<span class="muet petit">${t("set outside this list (configure, the terminal)")}</span>` : ""}
+    <span class="espace"></span>
+    ${limiteConnexion(c)}
+    <label class="interrupteur m0"><input type="checkbox" data-cx-actif="${h(c.id)}" ${c.actif ? "checked" : ""}> <span>${c.actif ? t("enabled") : t("disabled")}</span></label>
+    <button type="button" class="btn btn-petit" data-cx="monter" data-id="${h(c.id)}" ${i === 0 ? "disabled" : ""} title="${h(t("Move up"))}" aria-label="${h(t("Move up"))}">${ic("haut")}</button>
+    <button type="button" class="btn btn-petit" data-cx="descendre" data-id="${h(c.id)}" ${i === liste.length - 1 ? "disabled" : ""} title="${h(t("Move down"))}" aria-label="${h(t("Move down"))}">${ic("bas")}</button>
+    <button type="button" class="btn btn-petit" data-cx="cle" data-id="${h(c.id)}">${t("Change the key")}</button>
+    <button type="button" class="btn btn-petit btn-danger" data-cx="supprimer" data-id="${h(c.id)}">${t("Remove")}</button></li>`;
+  return `<p class="muet petit">${t("The first connection on is used, by every project unless it chooses its own in Manage. With the quota limit “switch to the next connection”, the next one takes over at its limit, and the first comes back after its reset.")}</p>
+  ${liste.length ? `<ol class="cx-liste">${liste.map(ligne).join("")}</ol>` : `<p class="muet petit">${t("No connection yet: Claude Code's own sign-in is used, if any.")}</p>`}
+  <div class="ligne cx-ajout"><input type="text" id="cx-nouveau-nom" placeholder="${h(t("Name, e.g. My Max plan"))}" maxlength="60" aria-label="${h(t("Name"))}">
+    <select id="cx-nouveau-type" aria-label="${h(t("Connect with"))}">${Object.entries(types).map(([v, l]) => `<option value="${v}">${h(l)}</option>`).join("")}</select>
+    <input type="password" id="cx-nouveau-secret" placeholder="${h(t("Token or API key"))}" autocomplete="off" aria-label="${h(t("Token or API key"))}">
+    <button type="button" class="btn" data-cx="ajouter">${t("Add")}</button></div>`;
+}
+// a connection's own limit: a subscription's percent (the next one at it, any window), an API key's own budget
+function limiteConnexion(c) {
+  if (c.type !== "api") return `<select class="petit" data-cx-seuil="${h(c.id)}" aria-label="${h(t("Limit: as the rules"))}">${[0, ...SEUILS_QUOTA].map((n) => `<option value="${n}" ${(c.seuil || 0) === n ? "selected" : ""}>${n ? t("switch at {0} %", [n]) : t("Limit: as the rules")}</option>`).join("")}</select>`;
+  return `<input type="text" inputmode="decimal" class="cx-budget" data-cx-budget="${h(c.id)}" value="${c.budget || ""}" placeholder="${h(t("Budget of this key ($)"))}" aria-label="${h(t("Budget of this key ($)"))}">
+    <span class="muet petit">${t("{0} $ spent", [(c.depense || 0).toFixed(2)])}</span>${c.depense ? `<button type="button" class="btn btn-petit" data-cx="zero" data-id="${h(c.id)}">${t("Count again from now")}</button>` : ""}`;
+}
+// the quota limits of every project (quota.go), the same rules as Overview › Subscription quota
+function blocLimitesQuota() {
+  const regles = (etat.vue || {}).quota_arret || {};
+  return `<div class="bloc"><h2>${t("Quota limits")}</h2><p class="muet petit">${t("For every project, unless it has its own in Manage › This project's settings. “Switch to the next connection”: at your threshold, at the end of the cycle; when Claude itself refuses (quota full), at once. When every connection is at its limit, the pilot pauses until the first one is back.")}</p>
+  ${["five_hour", "seven_day", "modele"].map((f) => `<div class="reglage"><div class="nom-reglage">${h(f === "modele" ? t("This week, each model") : nomFenetre(f))}</div><div>${arretAuto(f, regles)}</div></div>`).join("")}</div>`;
+}
+async function changerConnexion(corps, el) {
+  if (el) el.disabled = true;
+  const r = await action(api("connexions", "POST", corps));
+  if (el) el.disabled = false;
+  if (r) rendrePage(); else if (el && el.type === "checkbox") el.checked = !el.checked;
+}
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-cx]"); if (!b) return;
+  const a = b.dataset.cx;
+  if (a === "ajouter") {
+    const secret = $("#cx-nouveau-secret").value.trim();
+    if (!secret) { toast(t("Paste the token or the API key first."), "erreur"); $("#cx-nouveau-secret").focus(); return; }
+    return changerConnexion({ action: a, nom: $("#cx-nouveau-nom").value, type: $("#cx-nouveau-type").value, secret }, b);
+  }
+  if (a === "cle") { // the new token or key typed in place of the button, saved by Enter or when the field is left
+    const i = Object.assign(document.createElement("input"), { type: "password", autocomplete: "off", className: "cx-secret", placeholder: t("New token or API key, then Enter") });
+    i.dataset.cxSecret = b.dataset.id; i.setAttribute("aria-label", t("New token or API key, then Enter"));
+    b.replaceWith(i); i.focus(); return;
+  }
+  if (a === "supprimer" && !await confirmer(t("Remove this connection? Its token or key is deleted from Athanor."), { ok: t("Remove"), danger: true })) return;
+  changerConnexion({ action: a, id: b.dataset.id }, b);
+});
+
 // modeles: the proposals, from the server (the aliases, then the models this PC has used: a new model
 // appears by itself once a cycle has run on it); any other name can be typed in the field
 function champReglage(l, modeles) {
@@ -4952,9 +5036,11 @@ pages.reglages = async () => {
   const tete = `<div class="onglets"><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button></div>
   <p class="muet petit">${onglet === "options" ? t("The permission mode chosen here is the default of every project: a project can have its own in Manage › This project's settings.") : t("The models chosen here are the default of every project: a project can have its own in Manage › This project's settings.")}</p>`;
   if (onglet === "options") return tete + await rendreOptions();
-  const [lignes, mod] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] }))]);
-  const modeles = mod.modeles || [];
-  const mode = modeConnexion((lignes.find((l) => l.cle === "CLAUDE_AUTH") || {}).valeur);
+  const [env, mod, cx] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] })), api("connexions").catch(() => ({ liste: [] }))]);
+  const modeles = mod.modeles || [], connexions = cx.liste || [];
+  // the token, the key and their choice are the list's (Connections, below): .env gets its first one on
+  const lignes = env.filter((l) => !["CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"].includes(l.cle));
+  const mode = connexions.some((c) => c.type === "api" && c.actif) ? "api" : "subscription"; // the API budget, shown with an API key on
   const ligne = (l) => {
     const nom = (REGLAGES[l.cle] || [])[1];
     const m = MODE_CONNEXION[l.cle];
@@ -4966,7 +5052,7 @@ pages.reglages = async () => {
   const actif = etat.vue && etat.vue.actif;
   const avance = groupe("avance");
   // M230: only the connection is needed to begin; the models and the pilot's pace have safe defaults, folded
-  const blocGroupe = ([g, titre]) => { const l = groupe(g); return l.length ? `<div class="bloc"><h2>${t(titre)}</h2>${l.map(ligne).join("")}${g === "connexion" ? avertAPI : ""}</div>` : ""; };
+  const blocGroupe = ([g, titre]) => { const l = groupe(g); return l.length || g === "connexion" ? `<div class="bloc"><h2>${t(titre)}</h2>${g === "connexion" ? rendreConnexions(connexions) : ""}${l.map(ligne).join("")}${g === "connexion" ? avertAPI + "</div>" + blocLimitesQuota() : "</div>"}` : ""; };
   const plus = GROUPES_REGLAGES.slice(1).map(blocGroupe).join("") + (avance.length ? `<div class="bloc"><h2>${t("Advanced")} <span class="muet petit">${t("{0} setting(s)", [avance.length])}</span></h2>${avance.map(ligne).join("")}</div>` : "");
   return `${tete}
   <div class="ligne reglages-tete">
@@ -8956,6 +9042,16 @@ $("#page").addEventListener("change", (ev) => {
     const quoi = choix ? choix.value : ((etat.vue && etat.vue.quota_arret || {})[cle] || {}).action || "apres";
     action_quota(cle, seuil, quoi);
   }
+  if (i.dataset.cxActif) changerConnexion({ action: "modifier", id: i.dataset.cxActif, actif: i.checked }, i);
+  if (i.dataset.cxNom) changerConnexion({ action: "modifier", id: i.dataset.cxNom, nom: i.value });
+  if (i.dataset.cxSecret && i.value.trim()) changerConnexion({ action: "modifier", id: i.dataset.cxSecret, secret: i.value.trim() }, i);
+  if (i.dataset.cxSeuil) changerConnexion({ action: "modifier", id: i.dataset.cxSeuil, seuil: Number(i.value) }, i);
+  if (i.dataset.cxBudget) {
+    const v = i.value.trim() === "" ? 0 : Number(i.value.replace(",", ".").replace(/[$\s]/g, ""));
+    if (v >= 0) changerConnexion({ action: "modifier", id: i.dataset.cxBudget, budget: v }, i);
+    else { toast(t("An amount in dollars, or empty for none."), "erreur"); i.value = i.defaultValue; }
+  }
+  if (i.dataset.rpEnv !== undefined) changerEnvProjet(i);
   if (i.dataset.filtre) { etat.filtres[i.dataset.filtre] = i.checked; rendreJournal(); }
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");

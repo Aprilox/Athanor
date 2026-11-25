@@ -107,41 +107,43 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 }
 
 type EtatVue struct {
-	KitValide   bool                  `json:"kit_valide"`
-	KitInstalle bool                  `json:"kit_installe"`
-	Kit         string                `json:"kit"`
-	Verrouille  bool                  `json:"verrouille"`
-	VerrouDans  int                   `json:"verrou_dans"` // seconds before the window locks itself, -1 = no timer
-	MotDePasse  bool                  `json:"mot_de_passe"`
-	ChangerMdp  bool                  `json:"changer_mdp,omitempty"` // unlocked with a password shorter than longueurMinMdp
-	Projets     []ProjetVue           `json:"projets"`
-	Projet      *ProjetVue            `json:"projet"`
-	Actif       bool                  `json:"actif"`
-	TacheActive bool                  `json:"tache_active"` // a Servers task runs: the lock screen says the work goes on
-	Etat        *Etat                 `json:"etat"`
-	Contexte    int64                 `json:"contexte"`
-	Plan        []Jalon               `json:"plan"`
-	Attente     int                   `json:"attente"`
-	PourVous    int                   `json:"pour_vous"`
-	Stats       []LigneStat           `json:"stats"`
-	Bureau      EtatBureau            `json:"bureau"`
-	Maintenant  string                `json:"maintenant"`
-	DemandeVide bool                  `json:"demande_vide"`
-	Langue      string                `json:"langue"`
-	Theme       string                `json:"theme"`
-	Accent      string                `json:"accent"`
-	Bienvenue   bool                  `json:"bienvenue"`
-	HubVu       bool                  `json:"hub_vu"`
-	Tours       map[string]bool       `json:"tours"`   // the modules whose tour was shown (config)
-	Version     string                `json:"version"` // Athanor's version (the sidebar, Settings › Options)
-	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
-	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
-	Systeme     string                `json:"systeme"` // runtime.GOOS: windows, linux, darwin (the Setup page's tabs)
-	Quota       *EtatQuota            `json:"quota,omitempty"`
-	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
-	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
-	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
-	Relais      *RelaisJalon          `json:"relais,omitempty"` // the dev deployment after the last milestone (M136)
+	KitValide   bool            `json:"kit_valide"`
+	KitInstalle bool            `json:"kit_installe"`
+	Kit         string          `json:"kit"`
+	Verrouille  bool            `json:"verrouille"`
+	VerrouDans  int             `json:"verrou_dans"` // seconds before the window locks itself, -1 = no timer
+	MotDePasse  bool            `json:"mot_de_passe"`
+	ChangerMdp  bool            `json:"changer_mdp,omitempty"` // unlocked with a password shorter than longueurMinMdp
+	Projets     []ProjetVue     `json:"projets"`
+	Projet      *ProjetVue      `json:"projet"`
+	Actif       bool            `json:"actif"`
+	TacheActive bool            `json:"tache_active"` // a Servers task runs: the lock screen says the work goes on
+	Etat        *Etat           `json:"etat"`
+	Contexte    int64           `json:"contexte"`
+	Plan        []Jalon         `json:"plan"`
+	Attente     int             `json:"attente"`
+	PourVous    int             `json:"pour_vous"`
+	Stats       []LigneStat     `json:"stats"`
+	Bureau      EtatBureau      `json:"bureau"`
+	Maintenant  string          `json:"maintenant"`
+	DemandeVide bool            `json:"demande_vide"`
+	Langue      string          `json:"langue"`
+	Theme       string          `json:"theme"`
+	Accent      string          `json:"accent"`
+	Bienvenue   bool            `json:"bienvenue"`
+	HubVu       bool            `json:"hub_vu"`
+	Tours       map[string]bool `json:"tours"`   // the modules whose tour was shown (config)
+	Version     string          `json:"version"` // Athanor's version (the sidebar, Settings › Options)
+	Natif       bool            `json:"natif"`   // native Windows mode: no Linux screen
+	Windows     bool            `json:"windows"` // the app runs on Windows: WSL or native mode to choose
+	Systeme     string          `json:"systeme"` // runtime.GOOS: windows, linux, darwin (the Setup page's tabs)
+	Quota       *EtatQuota      `json:"quota,omitempty"`
+	// several subscriptions in Settings › Claude › Connections: each one's own quota (connexions.go)
+	QuotasConnexions []QuotaConnexion      `json:"quotas_connexions,omitempty"`
+	QuotaArret       map[string]RegleQuota `json:"quota_arret"`
+	Maj              *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
+	GitHub           *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
+	Relais           *RelaisJalon          `json:"relais,omitempty"` // the dev deployment after the last milestone (M136)
 	// its work on its servers, step by step, beside its code milestones (nil without a server)
 	JalonsDeploiement []JalonDeploiement `json:"jalons_deploiement,omitempty"`
 	Eco               bool               `json:"eco,omitempty"`            // the project's eco mode (.athanor/.env ECO=1)
@@ -245,6 +247,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	tous := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()
 	vue.Quota = quotaActuel(tous)
+	vue.QuotasConnexions = s.quotasConnexions(tous)
 	vue.QuotaArret = lireReglesQuota(kit)
 	vue.Depense = etatDepenseKit(kit.Racine)
 	m := etatMajCourant(kit)

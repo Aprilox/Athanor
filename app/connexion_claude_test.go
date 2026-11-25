@@ -44,9 +44,9 @@ func TestLireConnexionClaude(t *testing.T) {
 
 func TestDepenseAPI(t *testing.T) {
 	kit := t.TempDir()
-	noterDepense(kit, modeConnexionAbonnement, 3, "p", "cycle 1") // the subscription's: not the API's spend
-	noterDepense(kit, modeConnexionAPI, 1.25, "p\tx", "cycle 2")
-	noterDepense(kit, modeConnexionAPI, 0, "p", "nothing")
+	noterDepense(kit, modeConnexionAbonnement, "", 3, "p", "cycle 1") // the subscription's: not the API's spend
+	noterDepense(kit, modeConnexionAPI, "", 1.25, "p\tx", "cycle 2")
+	noterDepense(kit, modeConnexionAPI, "", 0, "p", "nothing")
 	ancien := time.Now().Add(-time.Hour).Unix()
 	b, _ := os.ReadFile(fichierDepenses(kit))
 	b = append(b, []byte(strconv.FormatInt(ancien, 10)+"\tapi\t50\tp\tbefore the count\n")...)
@@ -140,7 +140,7 @@ func TestAttendreBudget(t *testing.T) {
 	if p.attendreBudget() {
 		t.Fatal("nothing spent yet")
 	}
-	noterDepense(p.kit, modeConnexionAPI, 1.5, "projet", "cycle 1")
+	noterDepense(p.kit, modeConnexionAPI, "", 1.5, "projet", "cycle 1")
 	go func() {
 		time.Sleep(150 * time.Millisecond)
 		_ = EcrireEnv(filepath.Join(p.kit, ".env"), map[string]string{"API_BUDGET_USD": "5"})
@@ -211,12 +211,12 @@ func TestReponseJSONClaude(t *testing.T) {
 func TestDejaEtArretDepense(t *testing.T) {
 	kit := t.TempDir()
 	ecrireFichier(t, filepath.Join(kit, ".env"), "CLAUDE_AUTH=api\nANTHROPIC_API_KEY=sk-ant-x\nAPI_BUDGET_USD=100\nAPI_SPENT_USD=20\nAPI_STOP_USD=80\nAPI_BUDGET_SINCE=1\n", 0o600)
-	noterDepense(kit, modeConnexionAPI, 59.5, "p", "cycle 1")
+	noterDepense(kit, modeConnexionAPI, "", 59.5, "p", "cycle 1")
 	e := etatDepenseKit(kit)
 	if e.Depense != 79.5 || e.Deja != 20 || e.Arret != 80 || e.ArretAtteint || e.Atteint {
 		t.Fatalf("%+v", e)
 	}
-	noterDepense(kit, modeConnexionAPI, 1, "p", "cycle 2")
+	noterDepense(kit, modeConnexionAPI, "", 1, "p", "cycle 2")
 	c := lireConnexionClaude(kit, nil)
 	if a, d := arretDepenseAtteint(kit, c); !a || d != 80.5 {
 		t.Fatalf("stop: %v %v", a, d)

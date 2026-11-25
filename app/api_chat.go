@@ -593,7 +593,8 @@ func (s *Serveur) finChat(k Kit, p Projet, en *chatEnCours, commit, detail strin
 	}
 	total := cout
 	cout = coutTourChat(conv.Messages, repris, total)
-	noterDepense(k.Racine, lireConnexionClaude(k.Racine, nil).Mode, cout, p.Nom, "chat") // API mode: counted once
+	c := connexionCourante(k.Racine)
+	noterDepense(k.Racine, c.Mode, c.ID, cout, p.Nom, "chat") // API mode: counted once
 	texte := strings.TrimSpace(final)
 	if texte == "" && len(textes) > 0 {
 		texte = strings.TrimSpace(textes[len(textes)-1])

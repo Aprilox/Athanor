@@ -2063,10 +2063,17 @@ func lancerPilote(args []string) int {
 	}
 	assainirAtelier(etat)
 
-	origineConn := origineConnexion()     // before .env: what the environment gave (connexion_claude.go)
-	empreinteLue := empreinteReglages("") // the settings this pilot takes, from the very bytes read below
+	origineConn := origineConnexion() // before .env: what the environment gave (connexion_claude.go)
+	// what the project replaces of Settings › Claude (Manage): set first, so .env's own values do not take their place
+	propres := envProjetPilote(projet)
+	for k, v := range propres {
+		if _, ok := os.LookupEnv(k); !ok {
+			_ = os.Setenv(k, v)
+		}
+	}
+	empreinteLue := empreinteReglages(texteEnvProjet(propres)) // the settings this pilot takes, from the very bytes read below
 	if b, err := os.ReadFile(filepath.Join(kit, ".env")); err == nil {
-		empreinteLue = empreinteReglages(string(b))
+		empreinteLue = empreinteReglages(string(b) + texteEnvProjet(propres))
 		for _, l := range strings.Split(string(b), "\n") {
 			l = strings.TrimSuffix(l, "\r")
 			if m := reCleEnvPilote.FindStringSubmatch(l); m != nil {
@@ -2685,6 +2692,9 @@ func lancerPilote(args []string) int {
 			p.dormir(p.loginWaitMin * 60)
 			continue
 		}
+		if p.attendreConnexionLibre() { // the quota rules switch, and every connection allowed is at its limit
+			continue
+		}
 		if p.attendreBudget() {
 			continue
 		}
@@ -2721,7 +2731,8 @@ func lancerPilote(args []string) int {
 		p.cycle++
 		_ = os.WriteFile(filepath.Join(p.prive, "cycle"), []byte(strconv.Itoa(p.cycle)+"\n"), 0o644)
 		p.fichierLog = filepath.Join(p.etat, "logs", fmt.Sprintf("cycle-%s-%04d.jsonl", time.Now().Format("20060102-150405"), p.cycle))
-		purgerJournauxCycle(filepath.Join(p.etat, "logs")) // a pilot that runs for weeks does not fill the project's disk
+		purgerJournauxCycle(filepath.Join(p.etat, "logs"))          // a pilot that runs for weeks does not fill the project's disk
+		noterConnexionCycle(p.fichierLog, p.connexionActuelle().ID) // the quota this log reports is that connection's
 		avant := p.gitHead(p.projet)
 		cochesCycleDebut := p.cochesPlan()
 
@@ -3233,6 +3244,16 @@ func lancerPilote(args []string) int {
 			} else {
 				attente = attenteQuotaCalcul(texteResultat+" "+finLog, time.Now(), p.quotaWaitMin)
 			}
+			// Claude's own limit (full, not a threshold of the rules): with rules that switch, the next connection at once
+			if p.basculeActive() {
+				jusqua := time.Now().Unix() + int64(attente)
+				if rq := entier64Pilote(repriseQuota, 0); rq > time.Now().Unix() {
+					jusqua = rq
+				}
+				if p.basculer(jusqua, strings.TrimSpace("Claude refused, quota full "+typeLimite)) {
+					break
+				}
+			}
 			reprise := time.Unix(time.Now().Unix()+int64(attente), 0).Format("2006-01-02 15:04")
 			p.etatPhase = "quota"
 			p.etatReprise = reprise
@@ -3277,7 +3298,11 @@ func lancerPilote(args []string) int {
 			p.statut("Connection problem: check the token or the API key in Settings")
 			p.dormir(p.loginWaitMin * 60)
 		case "credit":
-			// the API account's credit is used up: nothing to do but add credit or change the key
+			// the API account's credit is used up: the next connection when the rules switch (this key tried again
+			// after the usual wait), else nothing to do but add credit or change the key
+			if p.basculeActive() && p.basculer(time.Now().Unix()+int64(p.loginWaitMin*60), "no API credit left") {
+				break
+			}
 			p.etatPhase = "budget"
 			p.etatReprise = ""
 			p.log(fmt.Sprintf("The API account has no credit left (Claude Code: credit balance too low). Add credit, or put another API key in Settings: the pilot resumes at once (else it tries again in %d min).", p.loginWaitMin))

@@ -35,13 +35,19 @@ const (
 var clesConnexionClaude = []string{"CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "API_BUDGET_USD", "API_BUDGET_SINCE", "API_SPENT_USD", "API_STOP_USD"}
 
 type connexionClaude struct {
-	Mode   string  // subscription, api
-	Jeton  string  // the subscription's token
-	Cle    string  // the API key
-	Budget float64 // API mode: the most to spend, in dollars (0: no limit)
-	Depuis int64   // API mode: the spend counted from (Unix seconds; 0: from the first one written)
-	Deja   float64 // API mode: what was spent already when the count started (Settings: Already spent)
-	Arret  float64 // API mode: the automatic stop, in dollars spent (0: none; Overview › API spend)
+	ID  string // its entry of Settings › Claude › Connections ("": .env's alone, connexions.go)
+	Nom string // the name given to it there
+	// its own limit there: a subscription's percent of any window, an API key's dollars counted from DepuisPropre
+	SeuilPropre  int
+	BudgetPropre float64
+	DepuisPropre int64
+	Mode         string  // subscription, api
+	Jeton        string  // the subscription's token
+	Cle          string  // the API key
+	Budget       float64 // API mode: the most to spend, in dollars (0: no limit)
+	Depuis       int64   // API mode: the spend counted from (Unix seconds; 0: from the first one written)
+	Deja         float64 // API mode: what was spent already when the count started (Settings: Already spent)
+	Arret        float64 // API mode: the automatic stop, in dollars spent (0: none; Overview › API spend)
 }
 
 func (c connexionClaude) api() bool { return c.Mode == modeConnexionAPI }
@@ -63,10 +69,14 @@ func (c connexionClaude) empreinte() string {
 
 // nom: the connection, for the log and the screens.
 func (c connexionClaude) nom() string {
+	n := "subscription token"
 	if c.api() {
-		return "API key"
+		n = "API key"
 	}
-	return "subscription token"
+	if c.Nom != "" {
+		n += " «" + c.Nom + "»"
+	}
+	return n
 }
 
 // origineConnexion: the connection's variables as the process got them (before .env is read): what stands
@@ -140,9 +150,11 @@ func (c connexionClaude) environnement(env []string) []string {
 }
 
 // appliquerConnexionProcessus: this process's environment with only the chosen connection (the short
-// runs: chat, health, Fix with Claude; they read .env when they start).
+// runs: chat, health, Fix with Claude; they read .env when they start): the first one on of Settings › Claude ›
+// Connections, the first not at its limit when the quota rules switch (connexions.go).
 func appliquerConnexionProcessus(kit string, origine map[string]string) {
-	c := lireConnexionClaude(kit, origine)
+	bascule := basculeDesRegles(reglesSeuils(filepath.Join(kit, "logs", "quota-arret.json")))
+	c := choisirConnexion(LireEnv(filepath.Join(kit, ".env")), kit, origine, nil, bascule, "").Connexion
 	_ = os.Unsetenv("CLAUDE_CODE_OAUTH_TOKEN")
 	_ = os.Unsetenv("ANTHROPIC_API_KEY")
 	if c.api() {
@@ -160,8 +172,9 @@ func fichierDepenses(kit string) string { return filepath.Join(kit, "logs", "dep
 
 var depensesMu sync.Mutex
 
-// noterDepense: what a run of Claude Code cost (its total_cost_usd), with the connection it ran on.
-func noterDepense(kit, mode string, cout float64, projet, origine string) {
+// noterDepense: what a run of Claude Code cost (its total_cost_usd), with the connection it ran on (its mode,
+// and its id in Settings › Claude › Connections: an API key's own budget counts its own runs).
+func noterDepense(kit, mode, id string, cout float64, projet, origine string) {
 	if cout <= 0 || math.IsNaN(cout) || math.IsInf(cout, 0) || kit == "" {
 		return
 	}
@@ -174,7 +187,7 @@ func noterDepense(kit, mode string, cout float64, projet, origine string) {
 		return
 	}
 	defer f.Close()
-	_, _ = fmt.Fprintf(f, "%d\t%s\t%s\t%s\t%s\n", time.Now().Unix(), propre(mode), strconv.FormatFloat(cout, 'f', 4, 64), propre(projet), propre(origine))
+	_, _ = fmt.Fprintf(f, "%d\t%s\t%s\t%s\t%s\t%s\n", time.Now().Unix(), propre(mode), strconv.FormatFloat(cout, 'f', 4, 64), propre(projet), propre(origine), propre(id))
 }
 
 // depenseAPI: the dollars spent in API mode since depuis (Unix seconds), and how many runs.
@@ -284,7 +297,8 @@ func noterDepenseCourte(cout float64, origine string) {
 	if kitConnexion == "" || cout <= 0 {
 		return
 	}
-	noterDepense(kitConnexion, lireConnexionClaude(kitConnexion, nil).Mode, cout, "", origine)
+	c := connexionCourante(kitConnexion)
+	noterDepense(kitConnexion, c.Mode, c.ID, cout, "", origine)
 }
 
 // coutJournalClaude: the total_cost_usd of the last result of a stream-json log (0 when none).
