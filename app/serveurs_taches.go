@@ -665,17 +665,18 @@ func (s *Serveur) arreterTache(id string) bool {
 	tachesEnCours.Unlock()
 	if e != nil {
 		deja := e.arretee() // a second Stop while its session dies says nothing again
-		e.annuler(errTacheArretee)
 		e.mu.Lock()
 		a, dit := e.annexe, e.t.Direct && e.t.Terminal != "" && !deja
 		e.annonce = false
 		e.mu.Unlock()
+		// the token before the session: a call the dying session still makes is refused
+		s.revoquerJetons("tâche arrêtée", func(x SessionHub) bool { return x.Hache == e.hache || x.Hache == a && a != "" })
+		e.annuler(errTacheArretee)
 		e.etat("arretee", errTacheArretee.Error()) // at once: the page and the lock never wait for its session to die
 		if dit {
 			ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("The assistant was stopped: the keyboard is yours.")+"\x1b[0m\n")
 		}
 		s.refuserPlansEnAttente(prefixeTache + id) // a stopped task's plan never waits for a decision
-		s.revoquerJetons("tâche arrêtée", func(x SessionHub) bool { return x.Hache == e.hache || x.Hache == a && a != "" })
 	}
 	return e != nil
 }

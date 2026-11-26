@@ -24,7 +24,7 @@
   <a href="#guides"><b>Guides</b></a> ·
   <a href="#security-in-short"><b>Security</b></a> ·
   <a href="docs/FAQ.md"><b>FAQ</b></a> ·
-  <a href="docs/releases/3.2.1.md"><b>What's new</b></a> ·
+  <a href="docs/releases/3.2.2.md"><b>What's new</b></a> ·
   <a href="README.fr.md"><b>Français</b></a>
 </p>
 

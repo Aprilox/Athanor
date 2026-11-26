@@ -910,7 +910,7 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.n
 async function allerProjet(nom, page) {
   etat.projet = nom; etat.evenements = []; etat.dernierJournal = 0; etat.ouverts.clear();
   await action(api("projets/choisir", "POST", { nom }));
-  await rafraichir();
+  await rafraichir(true); // the page first: the bell's /api/hub comes with the next tick
   if (etat.page !== page) location.hash = "#" + page; else rendrePage();
 }
 function cliqueProjet(ev) {
@@ -4799,9 +4799,14 @@ function rendreJournal() {
 }
 function majBoutonDefil(quoi) { const b = document.querySelector(`[data-defil="${quoi}"]`); if (b) b.outerHTML = boutonDefil(quoi); }
 
-async function lireJournal() {
-  const r = await api("journal?apres=" + etat.dernierJournal).catch(() => null);
-  if (!r) return;
+// the log is read for its page only: a project's first read can weigh megabytes (the server reads on with /api/etat).
+// One read at a time (two would add the same events twice); an answer for a project left meanwhile is dropped.
+let lectureJournal = null;
+function lireJournal() { return lectureJournal ||= lireJournalUneFois().finally(() => { lectureJournal = null; }); }
+async function lireJournalUneFois() {
+  const projet = etat.projet, apres = etat.dernierJournal;
+  const r = await api("journal?apres=" + apres).catch(() => null);
+  if (!r || projet !== etat.projet || apres !== etat.dernierJournal) return;
   if (r.evenements.length) {
     etat.evenements.push(...r.evenements);
     etat.dernierJournal = r.evenements[r.evenements.length - 1].n;
@@ -8779,7 +8784,7 @@ async function rendrePage() {
   if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(saisie[1], saisie[2]); }
   suivrePlan();
   proposerTutoriel();
-  if (etat.page === "journal") rendreJournal();
+  if (etat.page === "journal") { rendreJournal(); lireJournal(); }
   if (etat.page === "sante") rendreSortie();
   if (etat.page === "terminal") { monterTerminal(); chargerIA(); }
 }
@@ -9203,7 +9208,7 @@ $("#btn-urgence").addEventListener("click", async () => {
 });
 
 // --- refresh loop
-async function rafraichir() {
+async function rafraichir(sansHub) {
   if (etat.nonAppaire) return; // a device the computer removed: nothing more to ask
   const depart = etat.rafraichiLe = Date.now();
   try {
@@ -9234,13 +9239,13 @@ async function rafraichir() {
     if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }
     annoncerFins(v);
     if (!v.verrouille) {
-      await lireJournal();
+      if (etat.page === "journal") lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if (!String(window.getSelection() || "") && ((etat.page === "equipe" && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select")))) rendrePage();
       if (etat.page === "missions" && !String(window.getSelection() || "")) suivreMissions();
       // /api/hub every other tick (every tick on Projects): the bell's alerts; Projects and Home are rebuilt only
       // when a module's tile or an element changed (the card or the bar under the keyboard keeps its focus)
-      if (etat.page === "global" || ++etat.hubTic % 2 === 0 || !etat.hub) {
+      if (!sansHub && (etat.page === "global" || ++etat.hubTic % 2 === 0 || !etat.hub)) {
         const d = await api("hub").catch(() => null);
         if (d) {
           const cloche = (x) => JSON.stringify([(x || {}).alertes, (x || {}).ignorees]), change = cloche(d) !== cloche(etat.hub);
